@@ -1,21 +1,33 @@
 from django.contrib import admin
-
-# Register your models here.
-#jajkaasjd 
-from .models import Organization
+from .models import Delegacion, CargoFuncion, Funcionario
 
 
-
-@admin.register(Organization)
-class OrganizationAdmin(admin.ModelAdmin):
+@admin.register(Delegacion)
+class DelegacionAdmin(admin.ModelAdmin):
     list_display = (
-        "name",
-        "tax_id",
-        "is_active",
-        "created_at",
+        "id_delegacion",
+        "nombre",
+        "estado",
+        "ambito",
     )
-    search_fields = ("name", "tax_id")
-    list_filter = ("is_active",)
-    ordering = ("name",)
-    list_per_page = 25
 
+
+@admin.register(CargoFuncion)
+class CargoFuncionAdmin(admin.ModelAdmin):
+    list_display = (
+        "id_cargo",
+        "nombre_cargo",
+        "vigencia_inicio",
+        "vigencia_fin",
+    )
+
+
+@admin.register(Funcionario)
+class FuncionarioAdmin(admin.ModelAdmin):
+    list_display = (
+        "id_funcionario",
+        "nombre",
+        "delegacion",
+        "cargo",
+        "estado",
+    )

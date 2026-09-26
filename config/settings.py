@@ -65,6 +65,7 @@ INSTALLED_APPS = [
     'planning_measurements',
     'registration_validation',
     'core',
+    'accounts',
 ]
 
 MIDDLEWARE = [

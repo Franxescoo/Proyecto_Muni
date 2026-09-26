@@ -1,25 +1,65 @@
 from django.db import models
-
-# Create your models here.
 from core.models import BaseModel
-from django.db import models
 
 
-class Organization(BaseModel):
-    name = models.CharField(max_length=150)
-    tax_id = models.CharField(max_length=20, unique=True)
-    is_active = models.BooleanField(default=True)
+class Delegacion(BaseModel):
+    id_delegacion = models.BigAutoField(primary_key=True)
+    nombre = models.CharField(max_length=150)
+    estado = models.CharField(max_length=50)
+    ambito = models.CharField(max_length=150)
+
+    class Meta:
+        verbose_name = "Delegación"
+        verbose_name_plural = "Delegaciones"
 
     def __str__(self):
-        return self.name
+        return self.nombre
 
-class Department(BaseModel):
-    organization = models.ForeignKey(
-        Organization,
+
+class CargoFuncion(BaseModel):
+    id_cargo = models.BigAutoField(primary_key=True)
+    nombre_cargo = models.CharField(max_length=150)
+    items_medibles = models.TextField()
+    servicios = models.TextField()
+    ponderaciones = models.TextField()
+    vigencia_inicio = models.DateField()
+    vigencia_fin = models.DateField()
+
+    class Meta:
+        verbose_name = "Cargo y Función"
+        verbose_name_plural = "Cargos y Funciones"
+
+    def __str__(self):
+        return self.nombre_cargo
+
+
+class Funcionario(BaseModel):
+    id_funcionario = models.BigAutoField(primary_key=True)
+
+    delegacion = models.ForeignKey(
+        Delegacion,
         on_delete=models.PROTECT,
-        related_name="departments",
+        related_name="funcionarios",
     )
-    name = models.CharField(max_length=100)
+
+    cargo = models.ForeignKey(
+        CargoFuncion,
+        on_delete=models.PROTECT,
+        related_name="funcionarios",
+    )
+
+    identificador_institucional = models.CharField(
+        max_length=50,
+        unique=True,
+    )
+
+    nombre = models.CharField(max_length=150)
+    roles = models.TextField()
+    estado = models.CharField(max_length=50)
+
+    class Meta:
+        verbose_name = "Funcionario"
+        verbose_name_plural = "Funcionarios"
 
     def __str__(self):
-        return self.name
+        return self.nombre
