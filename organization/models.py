@@ -48,11 +48,6 @@ class Funcionario(BaseModel):
         related_name="funcionarios",
     )
 
-    identificador_institucional = models.CharField(
-        max_length=50,
-        unique=True,
-    )
-
     nombre = models.CharField(max_length=150)
     roles = models.TextField()
     estado = models.CharField(max_length=50)
