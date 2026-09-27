@@ -1,6 +1,6 @@
 from django.db import models
 from core.models import BaseModel
-
+from django.core.exceptions import ValidationError
 
 class Delegacion(BaseModel):
     id_delegacion = models.BigAutoField(primary_key=True)
@@ -29,9 +29,14 @@ class CargoFuncion(BaseModel):
         verbose_name = "Cargo y Función"
         verbose_name_plural = "Cargos y Funciones"
 
+    def clean(self):
+        if self.vigencia_inicio > self.vigencia_fin:
+            raise ValidationError(
+                "La fecha de inicio no puede ser posterior a la fecha de fin."
+            )
+
     def __str__(self):
         return self.nombre_cargo
-
 
 class Funcionario(BaseModel):
     id_funcionario = models.BigAutoField(primary_key=True)
