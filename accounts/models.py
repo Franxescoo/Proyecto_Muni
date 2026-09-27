@@ -5,10 +5,7 @@ from core.models import BaseModel
 
 
 class UserProfile(BaseModel):
-    """
-    Perfil de usuario que conecta la cuenta de autenticación de Django 
-    con la estructura organizacional (Organización y Departamento).
-    """
+
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
