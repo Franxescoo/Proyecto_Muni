@@ -1,65 +1,63 @@
 from django.contrib import admin
-from .models import Delegacion, CargoFuncion, Funcionario
+
+from .models import Delegation, PositionFunction, Employee
 
 
-class FuncionarioInline(admin.TabularInline):
-    model = Funcionario
+class EmployeeInline(admin.TabularInline):
+    model = Employee
     extra = 0
 
 
-@admin.register(Delegacion)
-class DelegacionAdmin(admin.ModelAdmin):
+@admin.register(Delegation)
+class DelegationAdmin(admin.ModelAdmin):
     list_display = (
-        "id_delegacion",
-        "nombre",
-        "estado",
-        "ambito",
+        "delegation_id",
+        "name",
+        "status",
+        "scope",
     )
+    inlines = [EmployeeInline]
 
-    inlines = [FuncionarioInline]
 
-
-@admin.register(CargoFuncion)
-class CargoFuncionAdmin(admin.ModelAdmin):
+@admin.register(PositionFunction)
+class PositionFunctionAdmin(admin.ModelAdmin):
     list_display = (
-        "id_cargo",
-        "nombre_cargo",
-        "vigencia_inicio",
-        "vigencia_fin",
+        "position_id",
+        "position_name",
+        "validity_start",
+        "validity_end",
     )
 
 
-@admin.action(description="Marcar funcionarios como inactivos")
-def marcar_inactivos(modeladmin, request, queryset):
-    queryset.update(estado="Inactivo")
+@admin.action(description="Mark employees as inactive")
+def mark_inactive(modeladmin, request, queryset):
+    queryset.update(status="Inactive")
 
 
-@admin.register(Funcionario)
-class FuncionarioAdmin(admin.ModelAdmin):
+@admin.register(Employee)
+class EmployeeAdmin(admin.ModelAdmin):
     list_display = (
-        "id_funcionario",
-        "nombre",
-        "delegacion",
-        "cargo",
-        "estado",
+        "employee_id",
+        "name",
+        "delegation",
+        "position",
+        "status",
     )
 
-    search_fields = (
-        "nombre",
-    )
+    search_fields = ("name",)
 
     list_filter = (
-        "estado",
-        "delegacion",
-        "cargo",
+        "status",
+        "delegation",
+        "position",
     )
 
-    actions = [marcar_inactivos]
+    actions = [mark_inactive]
 
     def get_actions(self, request):
         actions = super().get_actions(request)
 
-        if not request.user.has_perm("organization.change_funcionario"):
-            actions.pop("marcar_inactivos", None)
+        if not request.user.has_perm("organization.change_employee"):
+            actions.pop("mark_inactive", None)
 
         return actions
