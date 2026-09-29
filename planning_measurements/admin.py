@@ -66,6 +66,17 @@ class GoalAdmin(admin.ModelAdmin):
     ordering = ("period", "item")
     actions = [archive_records]
 
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        
+        # Si NO es superusuario, le quitamos la acción de la lista
+        if not request.user.is_superuser:
+            # Usamos el nombre exacto de tu función
+            if 'archive_records' in actions:
+                del actions['archive_records']
+                
+        return actions
+
     def has_delete_permission(self, request, obj=None):
         return False
 
