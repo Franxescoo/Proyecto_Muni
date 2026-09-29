@@ -17,3 +17,10 @@ class UserProfile(BaseModel):
 
     def __str__(self):
         return self.user.username
+
+    delegation = models.ForeignKey(
+       "organization.Delegation",
+       on_delete=models.PROTECT,
+       null=True, blank=True,
+       related_name="user_profiles",
+   )
