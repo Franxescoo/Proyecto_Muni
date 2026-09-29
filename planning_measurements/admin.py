@@ -5,7 +5,7 @@ from .models import Period, Goal
 
 
 @admin.action(
-    description="Archive selected records", permissions=["change"]
+    description="Delete", permissions=["change"]
 )
 def archive_records(modeladmin, request, queryset):
     updated = queryset.filter(deleted_at__isnull=True).update(
@@ -13,7 +13,7 @@ def archive_records(modeladmin, request, queryset):
     )
     modeladmin.message_user(
         request,
-        f"{updated} record(s) archived successfully.",
+        f"{updated} Deleted successfully.",
         level=messages.SUCCESS,
     )
 
