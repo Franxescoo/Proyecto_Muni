@@ -69,12 +69,27 @@ class GoalAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         return False
 
+    def _user_delegation_id(self, request):
+        profile = getattr(request.user, "profile", None)
+        return profile.delegation_id if profile else None
+
     def get_queryset(self, request):
-        return super().get_queryset(request).filter(deleted_at__isnull=True)
+        qs = super().get_queryset(request).filter(deleted_at__isnull=True)
+        if request.user.is_superuser:
+            return qs
+        delegation_id = self._user_delegation_id(request)
+        if delegation_id is None:
+            return qs.none()
+        return qs.filter(employee__delegation_id=delegation_id)
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "employee":
-            kwargs["queryset"] = db_field.related_model.objects.filter(
+            queryset = db_field.related_model.objects.filter(
                 deleted_at__isnull=True
             )
+            if not request.user.is_superuser:
+                queryset = queryset.filter(
+                    delegation_id=self._user_delegation_id(request)
+                )
+            kwargs["queryset"] = queryset
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
