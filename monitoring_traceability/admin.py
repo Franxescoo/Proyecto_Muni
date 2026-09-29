@@ -178,16 +178,7 @@ class AuditAdmin(admin.ModelAdmin):
 		return request.user.is_superuser
 
 	def has_change_permission(self, request, obj=None):
-		if not super().has_change_permission(request, obj):
-			return False
-		if obj is None or request.user.is_superuser:
-			return True
-		profile = getattr(request.user, "profile", None)
-		return bool(
-			profile
-			and profile.delegation_id
-			and obj.user.delegation_id == profile.delegation_id
-		)
+		return request.user.is_superuser
 
 	def has_delete_permission(self, request, obj=None):
 		return request.user.is_superuser

@@ -2,6 +2,7 @@ from django.test import TestCase
 from datetime import date
 
 from django.contrib.auth import get_user_model
+from django.core import management
 from django.core.exceptions import ValidationError
 from django.test import TestCase, RequestFactory
 
@@ -9,8 +10,8 @@ from accounts.models import UserProfile
 from organization.models import Delegation, Employee, PositionFunction
 from planning_measurements.models import Goal, Period
 
-from .admin import CommitmentAdmin, IndicatorAdmin
-from .models import Commitment, Indicator
+from .admin import AuditAdmin, CommitmentAdmin, IndicatorAdmin
+from .models import Audit, Commitment, Indicator
 
 
 class TraceabilityModelsTest(TestCase):
@@ -155,3 +156,20 @@ class TraceabilityModelsTest(TestCase):
 		model_admin = CommitmentAdmin(Commitment, None)
 
 		self.assertEqual(model_admin.get_queryset(request).count(), 0)
+
+	def test_evaluator_can_view_monitoring_but_cannot_change_it(self):
+		management.call_command("seed")
+		evaluator = get_user_model().objects.get(username="evaluator")
+
+		self.assertTrue(
+			evaluator.has_perm("monitoring_traceability.view_indicator")
+		)
+		self.assertFalse(
+			evaluator.has_perm("monitoring_traceability.change_indicator")
+		)
+
+		request = RequestFactory().get("/admin/")
+		request.user = evaluator
+		model_admin = AuditAdmin(Audit, None)
+
+		self.assertFalse(model_admin.has_change_permission(request))

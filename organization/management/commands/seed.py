@@ -108,6 +108,11 @@ class Command(BaseCommand):
                 "view_employee",
                 "view_period",
                 "view_goal",
+                "view_activity",
+                "view_evidence",
+                "view_indicator",
+                "view_commitment",
+                "view_audit",
                 "change_goal",
                 "add_goal",
             ]
