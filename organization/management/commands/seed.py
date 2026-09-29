@@ -8,99 +8,99 @@ from organization.models import Delegacion, CargoFuncion, Funcionario
 
 
 class Command(BaseCommand):
-    help = "Crea datos iniciales de prueba para la organización"
+
+    help = "Creates initial test data for the organization"
 
     def handle(self, *args, **kwargs):
 
-        # Delegaciones
-        delegacion_centro, _ = Delegacion.objects.get_or_create(
-            nombre="Delegación Centro",
+        # Delegations
+        delegation_center, _ = Delegacion.objects.get_or_create(
+            name="Central Delegation",
             defaults={
-                "estado": "Activa",
-                "ambito": "Administrativo",
+                "status": "Active",
+                "scope": "Administrative",
             },
         )
 
-        delegacion_norte, _ = Delegacion.objects.get_or_create(
-            nombre="Delegación Norte",
+        delegation_north, _ = Delegacion.objects.get_or_create(
+            name="Northern Delegation",
             defaults={
-                "estado": "Activa",
-                "ambito": "Administrativo",
+                "status": "Active",
+                "scope": "Administrative",
             },
         )
 
-        delegacion_sur, _ = Delegacion.objects.get_or_create(
-            nombre="Delegación Sur",
+        delegation_south, _ = Delegacion.objects.get_or_create(
+            name="Southern Delegation",
             defaults={
-                "estado": "Activa",
-                "ambito": "Administrativo",
+                "status": "Active",
+                "scope": "Administrative",
             },
         )
 
-        # Cargos y funciones
-        cargo_coordinador, _ = CargoFuncion.objects.get_or_create(
-            nombre_cargo="Coordinador",
+        # Positions and functions
+        coordinator_position, _ = CargoFuncion.objects.get_or_create(
+            position_name="Coordinator",
             defaults={
-                "items_medibles": "Coordinación y seguimiento",
-                "servicios": "Gestión administrativa",
-                "ponderaciones": "100%",
-                "vigencia_inicio": date(2026, 1, 1),
-                "vigencia_fin": date(2026, 12, 31),
+                "measurable_items": "Coordination and monitoring",
+                "services": "Administrative management",
+                "weightings": "100%",
+                "validity_start": date(2026, 1, 1),
+                "validity_end": date(2026, 12, 31),
             },
         )
 
-        cargo_administrativo, _ = CargoFuncion.objects.get_or_create(
-            nombre_cargo="Administrativo",
+        administrative_position, _ = CargoFuncion.objects.get_or_create(
+            position_name="Administrative Assistant",
             defaults={
-                "items_medibles": "Atención y registro",
-                "servicios": "Apoyo administrativo",
-                "ponderaciones": "100%",
-                "vigencia_inicio": date(2026, 1, 1),
-                "vigencia_fin": date(2026, 12, 31),
+                "measurable_items": "Customer service and registration",
+                "services": "Administrative support",
+                "weightings": "100%",
+                "validity_start": date(2026, 1, 1),
+                "validity_end": date(2026, 12, 31),
             },
         )
 
-        cargo_tecnico, _ = CargoFuncion.objects.get_or_create(
-            nombre_cargo="Técnico",
+        technical_position, _ = CargoFuncion.objects.get_or_create(
+            position_name="Technician",
             defaults={
-                "items_medibles": "Soporte y mantenimiento",
-                "servicios": "Soporte técnico",
-                "ponderaciones": "100%",
-                "vigencia_inicio": date(2026, 1, 1),
-                "vigencia_fin": date(2026, 12, 31),
+                "measurable_items": "Support and maintenance",
+                "services": "Technical support",
+                "weightings": "100%",
+                "validity_start": date(2026, 1, 1),
+                "validity_end": date(2026, 12, 31),
             },
         )
 
-        # Funcionarios
-        funcionarios = [
-            ("Juan Pérez", delegacion_centro, cargo_coordinador),
-            ("María González", delegacion_centro, cargo_administrativo),
-            ("Pedro Soto", delegacion_norte, cargo_tecnico),
-            ("Camila Rojas", delegacion_norte, cargo_administrativo),
-            ("Diego Muñoz", delegacion_sur, cargo_coordinador),
-            ("Valentina Silva", delegacion_sur, cargo_tecnico),
+        # Employees
+        employees = [
+            ("John Perez", delegation_center, coordinator_position),
+            ("Maria Gonzalez", delegation_center, administrative_position),
+            ("Peter Soto", delegation_north, technical_position),
+            ("Camila Rojas", delegation_north, administrative_position),
+            ("Diego Munoz", delegation_south, coordinator_position),
+            ("Valentina Silva", delegation_south, technical_position),
         ]
 
-        for nombre, delegacion, cargo in funcionarios:
+        for name, delegation, position in employees:
             Funcionario.objects.get_or_create(
-                nombre=nombre,
+                name=name,
                 defaults={
-                    "delegacion": delegacion,
-                    "cargo": cargo,
-                    "roles": "Usuario",
-                    "estado": "Activo",
+                    "delegation": delegation,
+                    "position": position,
+                    "roles": "User",
+                    "status": "Active",
                 },
             )
 
-
-        # Usuario limitado
+        # Limited user
         User = get_user_model()
 
-        grupo, _ = Group.objects.get_or_create(
-            name="Usuario Limitado"
+        group, _ = Group.objects.get_or_create(
+            name="Limited User"
         )
 
-        permisos = Permission.objects.filter(
+        permissions = Permission.objects.filter(
             codename__in=[
                 "view_delegacion",
                 "view_cargofuncion",
@@ -108,19 +108,20 @@ class Command(BaseCommand):
             ]
         )
 
-        grupo.permissions.set(permisos)
+        group.permissions.set(permissions)
 
-        usuario, creado = User.objects.get_or_create(
-            username="evaluador"
+        user, created = User.objects.get_or_create(
+            username="evaluator"
         )
 
-        if creado:
-            usuario.set_password("User123")
-            usuario.save()
+        if created:
+            user.set_password("User123")
+            user.save()
 
-        usuario.groups.add(grupo)
-        usuario.is_staff = True
-        usuario.save()
+        user.groups.add(group)
+        user.is_staff = True
+        user.save()
+
         self.stdout.write(
-            self.style.SUCCESS("Seed ejecutada correctamente.")
+            self.style.SUCCESS("Seed executed successfully.")
         )

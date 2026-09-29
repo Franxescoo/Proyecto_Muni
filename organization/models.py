@@ -1,65 +1,68 @@
 from django.db import models
-from core.models import BaseModel
 from django.core.exceptions import ValidationError
 
+from core.models import BaseModel
+
+
 class Delegacion(BaseModel):
-    id_delegacion = models.BigAutoField(primary_key=True)
-    nombre = models.CharField(max_length=150)
-    estado = models.CharField(max_length=50)
-    ambito = models.CharField(max_length=150)
+    delegation_id = models.BigAutoField(primary_key=True)
+    name = models.CharField(max_length=150)
+    status = models.CharField(max_length=50)
+    scope = models.CharField(max_length=150)
 
     class Meta:
-        verbose_name = "Delegación"
-        verbose_name_plural = "Delegaciones"
+        verbose_name = "Delegation"
+        verbose_name_plural = "Delegations"
 
     def __str__(self):
-        return self.nombre
+        return self.name
 
 
 class CargoFuncion(BaseModel):
-    id_cargo = models.BigAutoField(primary_key=True)
-    nombre_cargo = models.CharField(max_length=150)
-    items_medibles = models.TextField()
-    servicios = models.TextField()
-    ponderaciones = models.TextField()
-    vigencia_inicio = models.DateField()
-    vigencia_fin = models.DateField()
+    position_id = models.BigAutoField(primary_key=True)
+    position_name = models.CharField(max_length=150)
+    measurable_items = models.TextField()
+    services = models.TextField()
+    weightings = models.TextField()
+    validity_start = models.DateField()
+    validity_end = models.DateField()
 
     class Meta:
-        verbose_name = "Cargo y Función"
-        verbose_name_plural = "Cargos y Funciones"
+        verbose_name = "Position and Role"
+        verbose_name_plural = "Positions and Roles"
 
     def clean(self):
-        if self.vigencia_inicio > self.vigencia_fin:
+        if self.validity_start > self.validity_end:
             raise ValidationError(
                 "La fecha de inicio no puede ser posterior a la fecha de fin."
             )
 
     def __str__(self):
-        return self.nombre_cargo
+        return self.position_name
+
 
 class Funcionario(BaseModel):
-    id_funcionario = models.BigAutoField(primary_key=True)
+    employee_id = models.BigAutoField(primary_key=True)
 
-    delegacion = models.ForeignKey(
+    delegation = models.ForeignKey(
         Delegacion,
         on_delete=models.PROTECT,
-        related_name="funcionarios",
+        related_name="employees",
     )
 
-    cargo = models.ForeignKey(
+    position = models.ForeignKey(
         CargoFuncion,
         on_delete=models.PROTECT,
-        related_name="funcionarios",
+        related_name="employees",
     )
 
-    nombre = models.CharField(max_length=150)
+    name = models.CharField(max_length=150)
     roles = models.TextField()
-    estado = models.CharField(max_length=50)
+    status = models.CharField(max_length=50)
 
     class Meta:
-        verbose_name = "Funcionario"
-        verbose_name_plural = "Funcionarios"
+        verbose_name = "Functionary"
+        verbose_name_plural = "Functionaries"
 
     def __str__(self):
-        return self.nombre
+        return self.name

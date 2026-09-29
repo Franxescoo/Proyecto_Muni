@@ -1,65 +1,72 @@
 from django.contrib import admin
+
 from .models import Delegacion, CargoFuncion, Funcionario
 
 
-class FuncionarioInline(admin.TabularInline):
+class EmployeeInline(admin.TabularInline):
+
     model = Funcionario
     extra = 0
 
 
 @admin.register(Delegacion)
 class DelegacionAdmin(admin.ModelAdmin):
+
     list_display = (
-        "id_delegacion",
-        "nombre",
-        "estado",
-        "ambito",
+        "delegation_id",
+        "name",
+        "status",
+        "scope",
     )
 
-    inlines = [FuncionarioInline]
+    inlines = [EmployeeInline]
 
 
 @admin.register(CargoFuncion)
 class CargoFuncionAdmin(admin.ModelAdmin):
+
     list_display = (
-        "id_cargo",
-        "nombre_cargo",
-        "vigencia_inicio",
-        "vigencia_fin",
+        "position_id",
+        "position_name",
+        "validity_start",
+        "validity_end",
     )
 
 
-@admin.action(description="Marcar funcionarios como inactivos")
-def marcar_inactivos(modeladmin, request, queryset):
-    queryset.update(estado="Inactivo")
+@admin.action(description="Mark employees as inactive")
+def mark_inactive(modeladmin, request, queryset):
+
+    queryset.update(status="Inactive")
 
 
 @admin.register(Funcionario)
 class FuncionarioAdmin(admin.ModelAdmin):
+
     list_display = (
-        "id_funcionario",
-        "nombre",
-        "delegacion",
-        "cargo",
-        "estado",
+        "employee_id",
+        "name",
+        "delegation",
+        "position",
+        "status",
     )
 
     search_fields = (
-        "nombre",
+        "name",
     )
 
     list_filter = (
-        "estado",
-        "delegacion",
-        "cargo",
+        "status",
+        "delegation",
+        "position",
     )
 
-    actions = [marcar_inactivos]
+    actions = [mark_inactive]
 
     def get_actions(self, request):
+
         actions = super().get_actions(request)
 
         if not request.user.has_perm("organization.change_funcionario"):
-            actions.pop("marcar_inactivos", None)
+            actions.pop("mark_inactive", None)
 
         return actions
