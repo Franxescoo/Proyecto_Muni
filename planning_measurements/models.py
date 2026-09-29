@@ -4,83 +4,76 @@ from django.db import models
 from core.models import BaseModel
 
 
-class Periodo(BaseModel):
-    id_periodo = models.BigAutoField(primary_key=True)
-    fecha_inicio = models.DateField(verbose_name="Inicio")
-    fecha_termino = models.DateField(verbose_name="Término")
-    dias_computables = models.IntegerField(verbose_name="Días computables")
-    estado = models.CharField(
-        max_length=50, default="Activo", verbose_name="Estado"
+class Period(BaseModel):
+    period_id = models.BigAutoField(primary_key=True)
+    start_date = models.DateField(verbose_name="Start date")
+    end_date = models.DateField(verbose_name="End date")
+    computable_days = models.IntegerField(verbose_name="Computable days")
+    status = models.CharField(
+        max_length=50, default="Active", verbose_name="Status"
     )
-    umbrales = models.CharField(max_length=255, verbose_name="Umbrales")
-    version_parametros = models.CharField(
-        max_length=50, verbose_name="Versión de parámetros"
+    thresholds = models.CharField(max_length=255, verbose_name="Thresholds")
+    parameters_version = models.CharField(
+        max_length=50, verbose_name="Parameters version"
     )
 
     class Meta:
-        verbose_name = "Período"
-        verbose_name_plural = "Períodos"
+        verbose_name = "Period"
+        verbose_name_plural = "Periods"
 
     def clean(self):
-        if (
-            self.fecha_inicio
-            and self.fecha_termino
-            and self.fecha_inicio > self.fecha_termino
-        ):
+        if self.start_date and self.end_date and self.start_date > self.end_date:
             raise ValidationError(
                 "La fecha de inicio no puede ser posterior a la fecha de término."
             )
 
     def __str__(self):
-        return f"Período {self.fecha_inicio} al {self.fecha_termino}"
+        return f"Period {self.start_date} to {self.end_date}"
 
 
-class MetaDesempeno(BaseModel):
-    """Meta del diagrama MER (se llama MetaDesempeno para no chocar con
-    la clase interna `Meta` de Django)."""
-
-    id_meta = models.BigAutoField(primary_key=True)
-
-    periodo = models.ForeignKey(
-        Periodo,
+class Goal(BaseModel):
+    goal_id = models.BigAutoField(primary_key=True)
+    period = models.ForeignKey(
+        Period,
         on_delete=models.PROTECT,
-        related_name="metas",
+        related_name="goals",
+        verbose_name="Period",
     )
-    funcionario = models.ForeignKey(
-        "organization.Funcionario",
+    employee = models.ForeignKey(
+        "organization.Employee",
         on_delete=models.PROTECT,
-        related_name="metas",
+        related_name="goals",
+        verbose_name="Employee",
     )
-    cargo = models.ForeignKey(
-        "organization.CargoFuncion",
+    position = models.ForeignKey(
+        "organization.PositionFunction",
         on_delete=models.PROTECT,
-        related_name="metas",
-        verbose_name="Cargo",
+        related_name="goals",
+        verbose_name="Position",
     )
-
-    item = models.CharField(max_length=150, verbose_name="Ítem")
-    valor_objetivo = models.DecimalField(
-        max_digits=10, decimal_places=2, verbose_name="Valor objetivo"
+    item = models.CharField(max_length=150, verbose_name="Item")
+    objective_value = models.DecimalField(
+        max_digits=10, decimal_places=2, verbose_name="Objective value"
     )
-    unidad = models.CharField(max_length=50, verbose_name="Unidad")
-    ponderador = models.DecimalField(
-        max_digits=5, decimal_places=2, verbose_name="Ponderador"
+    unit = models.CharField(max_length=50, verbose_name="Unit")
+    weight = models.DecimalField(
+        max_digits=5, decimal_places=2, verbose_name="Weight"
     )
 
     class Meta:
-        verbose_name = "Meta"
-        verbose_name_plural = "Metas"
+        verbose_name = "Goal"
+        verbose_name_plural = "Goals"
 
     def clean(self):
         # El cargo de la meta debe ser el cargo actual del funcionario.
         if (
-            self.funcionario_id
-            and self.cargo_id
-            and self.funcionario.cargo_id != self.cargo_id
+            self.employee_id
+            and self.position_id
+            and self.employee.position_id != self.position_id
         ):
             raise ValidationError(
                 "El cargo asignado a la meta no coincide con el cargo actual del funcionario."
             )
 
     def __str__(self):
-        return f"Meta: {self.item} - {self.funcionario}"
+        return f"Goal: {self.item} - {self.employee}"

@@ -1,50 +1,45 @@
 from django.contrib import admin, messages
 from django.utils import timezone
 
-from .models import Periodo, MetaDesempeno
+from .models import Period, Goal
 
 
 @admin.action(
-    description="Archivar registros seleccionados", permissions=["change"]
+    description="Archive selected records", permissions=["change"]
 )
-def archivar_registros(modeladmin, request, queryset):
-    actualizados = queryset.filter(deleted_at__isnull=True).update(
+def archive_records(modeladmin, request, queryset):
+    updated = queryset.filter(deleted_at__isnull=True).update(
         deleted_at=timezone.now()
     )
     modeladmin.message_user(
         request,
-        f"{actualizados} registro(s) archivado(s) exitosamente.",
+        f"{updated} record(s) archived successfully.",
         level=messages.SUCCESS,
     )
 
 
-class MetaDesempenoInline(admin.TabularInline):
-    model = MetaDesempeno
+class GoalInline(admin.TabularInline):
+    model = Goal
     extra = 0
-    fields = (
-        "funcionario",
-        "cargo",
-        "item",
-        "valor_objetivo",
-        "unidad",
-        "ponderador",
-    )
+    fields = ("employee", "position", "item", "objective_value", "unit", "weight")
     show_change_link = True
 
 
-@admin.register(Periodo)
-class PeriodoAdmin(admin.ModelAdmin):
+@admin.register(Period)
+class PeriodAdmin(admin.ModelAdmin):
     list_display = (
-        "id_periodo",
-        "fecha_inicio",
-        "fecha_termino",
-        "dias_computables",
-        "estado",
-        "version_parametros",
+        "period_id",
+        "start_date",
+        "end_date",
+        "computable_days",
+        "status",
+        "parameters_version",
     )
-    list_filter = ("estado",)
-    inlines = [MetaDesempenoInline]
-    actions = [archivar_registros]
+    search_fields = ("status", "parameters_version")
+    list_filter = ("status",)
+    ordering = ("-start_date",)
+    inlines = [GoalInline]
+    actions = [archive_records]
 
     def has_delete_permission(self, request, obj=None):
         return False
@@ -53,21 +48,23 @@ class PeriodoAdmin(admin.ModelAdmin):
         return super().get_queryset(request).filter(deleted_at__isnull=True)
 
 
-@admin.register(MetaDesempeno)
-class MetaDesempenoAdmin(admin.ModelAdmin):
+@admin.register(Goal)
+class GoalAdmin(admin.ModelAdmin):
     list_display = (
-        "id_meta",
+        "goal_id",
         "item",
-        "periodo",
-        "funcionario",
-        "cargo",
-        "valor_objetivo",
-        "unidad",
-        "ponderador",
+        "period",
+        "employee",
+        "position",
+        "objective_value",
+        "unit",
+        "weight",
     )
-    list_filter = ("periodo", "cargo")
-    search_fields = ("item", "funcionario__nombre")
-    actions = [archivar_registros]
+    list_select_related = ("period", "employee", "position")
+    search_fields = ("item", "employee__name")
+    list_filter = ("period", "position", "unit")
+    ordering = ("period", "item")
+    actions = [archive_records]
 
     def has_delete_permission(self, request, obj=None):
         return False
@@ -76,7 +73,7 @@ class MetaDesempenoAdmin(admin.ModelAdmin):
         return super().get_queryset(request).filter(deleted_at__isnull=True)
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
-        if db_field.name == "funcionario":
+        if db_field.name == "employee":
             kwargs["queryset"] = db_field.related_model.objects.filter(
                 deleted_at__isnull=True
             )
