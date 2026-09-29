@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
 from planning_measurements.models import Period, Goal
 from accounts.models import UserProfile
+from monitoring_traceability.models import Activity, Audit, Commitment, Evidence, Indicator
 
 from organization.models import Delegation, PositionFunction, Employee
 
@@ -164,3 +165,98 @@ class Command(BaseCommand):
                         "weight": weight,
                     },
                 )
+
+        north_employee = Employee.objects.get(name="Peter Soto")
+        south_employee = Employee.objects.get(name="Diego Munoz")
+        north_goal = Goal.objects.get(
+            period=period,
+            employee=north_employee,
+            item="Reports delivered",
+        )
+        south_goal = Goal.objects.get(
+            period=period,
+            employee=south_employee,
+            item="Reports delivered",
+        )
+        activity, _ = Activity.objects.get_or_create(
+            name="Community activity"
+        )
+        evidence, _ = Evidence.objects.get_or_create(
+            name="Administrative evidence"
+        )
+        Indicator.objects.get_or_create(
+            goal=north_goal,
+            employee=north_employee,
+            calculation_date=date(2026, 6, 30),
+            defaults={
+                "expected_value": 100,
+                "actual_progress": 92,
+                "green_progress": 90,
+                "difference": 2,
+                "compliance": 92,
+                "weighting": 50,
+                "traffic_light": "Green",
+            },
+        )
+        Indicator.objects.get_or_create(
+            goal=south_goal,
+            employee=south_employee,
+            calculation_date=date(2026, 6, 30),
+            defaults={
+                "expected_value": 100,
+                "actual_progress": 72,
+                "green_progress": 90,
+                "difference": -18,
+                "compliance": 72,
+                "weighting": 50,
+                "traffic_light": "Yellow",
+            },
+        )
+        north_commitment = Commitment.objects.get_or_create(
+            delegation=delegation_north,
+            responsible=north_employee,
+            territory="Northern territory",
+            commitment_date=date(2026, 7, 15),
+            defaults={
+                "activity": activity,
+                "evidence": evidence,
+                "requester": "Northern office",
+                "support": "Coordination and follow-up",
+                "status": "Pending",
+                "observation": "Scheduled for the next review.",
+            },
+        )[0]
+        south_commitment = Commitment.objects.get_or_create(
+            delegation=delegation_south,
+            responsible=south_employee,
+            territory="Southern territory",
+            commitment_date=date(2026, 8, 15),
+            defaults={
+                "activity": activity,
+                "evidence": evidence,
+                "requester": "Southern office",
+                "support": "Technical support",
+                "status": "In progress",
+                "observation": "Evidence pending.",
+            },
+        )[0]
+        Audit.objects.get_or_create(
+            user=north_employee,
+            event="CREATE",
+            entity="Commitment",
+            object_identifier=str(north_commitment.commitment_id),
+            defaults={
+                "previous_value": None,
+                "new_value": {"status": "Pending"},
+            },
+        )
+        Audit.objects.get_or_create(
+            user=south_employee,
+            event="UPDATE",
+            entity="Commitment",
+            object_identifier=str(south_commitment.commitment_id),
+            defaults={
+                "previous_value": {"status": "Pending"},
+                "new_value": {"status": "In progress"},
+            },
+        )
