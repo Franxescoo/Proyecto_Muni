@@ -108,6 +108,7 @@ class Command(BaseCommand):
                 "view_period",
                 "view_goal",
                 "change_goal",
+                "add_goal",
             ]
         )
 
