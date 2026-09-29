@@ -3,6 +3,8 @@ from datetime import date
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
+from planning_measurements.models import Period, Goal
+from accounts.models import UserProfile
 
 from organization.models import Delegation, PositionFunction, Employee
 
@@ -103,6 +105,9 @@ class Command(BaseCommand):
                 "view_delegation",
                 "view_positionfunction",
                 "view_employee",
+                "view_period",
+                "view_goal",
+                "change_goal",
             ]
         )
 
@@ -120,6 +125,41 @@ class Command(BaseCommand):
         user.is_staff = True
         user.save()
 
+        UserProfile.objects.get_or_create(
+            user=user,
+            defaults={"employee_code": "EVAL-001", "delegation": delegation_north},
+        )
+
         self.stdout.write(
             self.style.SUCCESS("Seed executed successfully.")
         )
+
+        period, _ = Period.objects.get_or_create(
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 6, 30),
+            defaults={
+                "computable_days": 120,
+                "status": "Active",
+                "thresholds": "Low: 60, Medium: 80, High: 100",
+                "parameters_version": "v1.0",
+            },
+        )
+
+        goals = [
+            ("Reports delivered", 40, "units", 50),
+            ("Response time", 24, "hours", 30),
+            ("Citizen satisfaction", 85, "percent", 20),
+        ]
+        for employee in Employee.objects.all():
+            for item, value, unit, weight in goals:
+                Goal.objects.get_or_create(
+                    period=period,
+                    employee=employee,
+                    item=item,
+                    defaults={
+                        "position": employee.position,
+                        "objective_value": value,
+                        "unit": unit,
+                        "weight": weight,
+                    },
+                )
