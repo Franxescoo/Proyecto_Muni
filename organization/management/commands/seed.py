@@ -4,17 +4,17 @@ from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
 
-from organization.models import Delegacion, CargoFuncion, Funcionario
+from organization.models import Delegation, PositionFunction, Employee
 
 
 class Command(BaseCommand):
-
+    
     help = "Creates initial test data for the organization"
 
     def handle(self, *args, **kwargs):
 
         # Delegations
-        delegation_center, _ = Delegacion.objects.get_or_create(
+        delegation_center, _ = Delegation.objects.get_or_create(
             name="Central Delegation",
             defaults={
                 "status": "Active",
@@ -22,7 +22,7 @@ class Command(BaseCommand):
             },
         )
 
-        delegation_north, _ = Delegacion.objects.get_or_create(
+        delegation_north, _ = Delegation.objects.get_or_create(
             name="Northern Delegation",
             defaults={
                 "status": "Active",
@@ -30,7 +30,7 @@ class Command(BaseCommand):
             },
         )
 
-        delegation_south, _ = Delegacion.objects.get_or_create(
+        delegation_south, _ = Delegation.objects.get_or_create(
             name="Southern Delegation",
             defaults={
                 "status": "Active",
@@ -39,7 +39,7 @@ class Command(BaseCommand):
         )
 
         # Positions and functions
-        coordinator_position, _ = CargoFuncion.objects.get_or_create(
+        coordinator_position, _ = PositionFunction.objects.get_or_create(
             position_name="Coordinator",
             defaults={
                 "measurable_items": "Coordination and monitoring",
@@ -50,7 +50,7 @@ class Command(BaseCommand):
             },
         )
 
-        administrative_position, _ = CargoFuncion.objects.get_or_create(
+        administrative_position, _ = PositionFunction.objects.get_or_create(
             position_name="Administrative Assistant",
             defaults={
                 "measurable_items": "Customer service and registration",
@@ -61,7 +61,7 @@ class Command(BaseCommand):
             },
         )
 
-        technical_position, _ = CargoFuncion.objects.get_or_create(
+        technical_position, _ = PositionFunction.objects.get_or_create(
             position_name="Technician",
             defaults={
                 "measurable_items": "Support and maintenance",
@@ -77,13 +77,11 @@ class Command(BaseCommand):
             ("John Perez", delegation_center, coordinator_position),
             ("Maria Gonzalez", delegation_center, administrative_position),
             ("Peter Soto", delegation_north, technical_position),
-            ("Camila Rojas", delegation_north, administrative_position),
             ("Diego Munoz", delegation_south, coordinator_position),
-            ("Valentina Silva", delegation_south, technical_position),
         ]
 
         for name, delegation, position in employees:
-            Funcionario.objects.get_or_create(
+            Employee.objects.get_or_create(
                 name=name,
                 defaults={
                     "delegation": delegation,
@@ -102,9 +100,9 @@ class Command(BaseCommand):
 
         permissions = Permission.objects.filter(
             codename__in=[
-                "view_delegacion",
-                "view_cargofuncion",
-                "view_funcionario",
+                "view_delegation",
+                "view_positionfunction",
+                "view_employee",
             ]
         )
 

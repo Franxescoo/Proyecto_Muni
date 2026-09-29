@@ -4,7 +4,7 @@ from django.core.exceptions import ValidationError
 from core.models import BaseModel
 
 
-class Delegacion(BaseModel):
+class Delegation(BaseModel):
     delegation_id = models.BigAutoField(primary_key=True)
     name = models.CharField(max_length=150)
     status = models.CharField(max_length=50)
@@ -18,7 +18,7 @@ class Delegacion(BaseModel):
         return self.name
 
 
-class CargoFuncion(BaseModel):
+class PositionFunction(BaseModel):
     position_id = models.BigAutoField(primary_key=True)
     position_name = models.CharField(max_length=150)
     measurable_items = models.TextField()
@@ -34,24 +34,24 @@ class CargoFuncion(BaseModel):
     def clean(self):
         if self.validity_start > self.validity_end:
             raise ValidationError(
-                "La fecha de inicio no puede ser posterior a la fecha de fin."
+                "Start date cannot be later than end date."
             )
 
     def __str__(self):
         return self.position_name
 
 
-class Funcionario(BaseModel):
+class Employee(BaseModel):
     employee_id = models.BigAutoField(primary_key=True)
 
     delegation = models.ForeignKey(
-        Delegacion,
+        Delegation,
         on_delete=models.PROTECT,
         related_name="employees",
     )
 
     position = models.ForeignKey(
-        CargoFuncion,
+        PositionFunction,
         on_delete=models.PROTECT,
         related_name="employees",
     )
@@ -61,8 +61,8 @@ class Funcionario(BaseModel):
     status = models.CharField(max_length=50)
 
     class Meta:
-        verbose_name = "Functionary"
-        verbose_name_plural = "Functionaries"
+        verbose_name = "Employee"
+        verbose_name_plural = "Employees"
 
     def __str__(self):
         return self.name
