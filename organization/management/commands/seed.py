@@ -1,17 +1,19 @@
 from datetime import date
 
-from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
-from planning_measurements.models import Period, Goal
-from accounts.models import UserProfile
-from monitoring_traceability.models import Activity, Audit, Commitment, Evidence, Indicator
+from django.core.management.base import BaseCommand
+from django.utils import timezone
 
-from organization.models import Delegation, PositionFunction, Employee
+from accounts.models import UserProfile
+from monitoring_traceability.models import Audit, Commitment, Indicator
+from organization.models import Delegation, Employee, PositionFunction
+from planning_measurements.models import Goal, Period
+from registration_validation.models import Activity, Evidence
 
 
 class Command(BaseCommand):
-    
+
     help = "Creates initial test data for the organization"
 
     def handle(self, *args, **kwargs):
@@ -77,10 +79,26 @@ class Command(BaseCommand):
 
         # Employees
         employees = [
-            ("John Perez", delegation_center, coordinator_position),
-            ("Maria Gonzalez", delegation_center, administrative_position),
-            ("Peter Soto", delegation_north, technical_position),
-            ("Diego Munoz", delegation_south, coordinator_position),
+            (
+                "John Perez",
+                delegation_center,
+                coordinator_position,
+            ),
+            (
+                "Maria Gonzalez",
+                delegation_center,
+                administrative_position,
+            ),
+            (
+                "Peter Soto",
+                delegation_north,
+                technical_position,
+            ),
+            (
+                "Diego Munoz",
+                delegation_south,
+                coordinator_position,
+            ),
         ]
 
         for name, delegation, position in employees:
@@ -110,6 +128,7 @@ class Command(BaseCommand):
                 "view_goal",
                 "view_activity",
                 "view_evidence",
+                "view_validation",
                 "view_indicator",
                 "view_commitment",
                 "view_audit",
@@ -134,13 +153,13 @@ class Command(BaseCommand):
 
         UserProfile.objects.get_or_create(
             user=user,
-            defaults={"employee_code": "EVAL-001", "delegation": delegation_north},
+            defaults={
+                "employee_code": "EVAL-001",
+                "delegation": delegation_north,
+            },
         )
 
-        self.stdout.write(
-            self.style.SUCCESS("Seed executed successfully.")
-        )
-
+        # Period
         period, _ = Period.objects.get_or_create(
             start_date=date(2026, 1, 1),
             end_date=date(2026, 6, 30),
@@ -152,11 +171,28 @@ class Command(BaseCommand):
             },
         )
 
+        # Goals
         goals = [
-            ("Reports delivered", 40, "units", 50),
-            ("Response time", 24, "hours", 30),
-            ("Citizen satisfaction", 85, "percent", 20),
+            (
+                "Reports delivered",
+                40,
+                "units",
+                50,
+            ),
+            (
+                "Response time",
+                24,
+                "hours",
+                30,
+            ),
+            (
+                "Citizen satisfaction",
+                85,
+                "percent",
+                20,
+            ),
         ]
+
         for employee in Employee.objects.all():
             for item, value, unit, weight in goals:
                 Goal.objects.get_or_create(
@@ -171,24 +207,84 @@ class Command(BaseCommand):
                     },
                 )
 
-        north_employee = Employee.objects.get(name="Peter Soto")
-        south_employee = Employee.objects.get(name="Diego Munoz")
+        # Employees and goals used by operational data
+        north_employee = Employee.objects.get(
+            name="Peter Soto"
+        )
+
+        south_employee = Employee.objects.get(
+            name="Diego Munoz"
+        )
+
         north_goal = Goal.objects.get(
             period=period,
             employee=north_employee,
             item="Reports delivered",
         )
+
         south_goal = Goal.objects.get(
             period=period,
             employee=south_employee,
             item="Reports delivered",
         )
-        activity, _ = Activity.objects.get_or_create(
-            name="Community activity"
+
+        # Activities
+        north_activity, _ = Activity.objects.get_or_create(
+            goal=north_goal,
+            author=north_employee,
+            date=date(2026, 6, 30),
+            request_problem="Community request",
+            defaults={
+                "action": "Community follow-up",
+                "contact": "Northern office",
+                "phone": "+56 9 1111 1111",
+                "status": "Completed",
+            },
         )
-        evidence, _ = Evidence.objects.get_or_create(
-            name="Administrative evidence"
+
+        south_activity, _ = Activity.objects.get_or_create(
+            goal=south_goal,
+            author=south_employee,
+            date=date(2026, 6, 30),
+            request_problem="Administrative request",
+            defaults={
+                "action": "Administrative follow-up",
+                "contact": "Southern office",
+                "phone": "+56 9 2222 2222",
+                "status": "In progress",
+            },
         )
+
+        # Evidences
+        Evidence.objects.get_or_create(
+            code="EVID-NORTH-001",
+            defaults={
+                "activity": north_activity,
+                "author": north_employee,
+                "file_link": "evidence/north-001",
+                "date": timezone.now(),
+                "metadata": {
+                    "source": "seed",
+                },
+                "review_status": "Pending",
+            },
+        )
+
+        Evidence.objects.get_or_create(
+            code="EVID-SOUTH-001",
+            defaults={
+                "activity": south_activity,
+                "author": south_employee,
+                "file_link": "evidence/south-001",
+                "date": timezone.now(),
+                "metadata": {
+                    "source": "seed",
+                },
+                "review_status": "Pending",
+            },
+        )
+
+        # Indicators
         Indicator.objects.get_or_create(
             goal=north_goal,
             employee=north_employee,
@@ -203,6 +299,7 @@ class Command(BaseCommand):
                 "traffic_light": "Green",
             },
         )
+
         Indicator.objects.get_or_create(
             goal=south_goal,
             employee=south_employee,
@@ -217,51 +314,73 @@ class Command(BaseCommand):
                 "traffic_light": "Yellow",
             },
         )
-        north_commitment = Commitment.objects.get_or_create(
+
+        # Commitments
+        north_commitment, _ = Commitment.objects.update_or_create(
             delegation=delegation_north,
             responsible=north_employee,
             territory="Northern territory",
             commitment_date=date(2026, 7, 15),
             defaults={
-                "activity": activity,
-                "evidence": evidence,
+                "activity": north_activity,
+                "origin": "Community activity",
                 "requester": "Northern office",
                 "support": "Coordination and follow-up",
                 "status": "Pending",
                 "observation": "Scheduled for the next review.",
             },
-        )[0]
-        south_commitment = Commitment.objects.get_or_create(
+        )
+
+        south_commitment, _ = Commitment.objects.update_or_create(
             delegation=delegation_south,
             responsible=south_employee,
             territory="Southern territory",
             commitment_date=date(2026, 8, 15),
             defaults={
-                "activity": activity,
-                "evidence": evidence,
+                "activity": south_activity,
+                "origin": "Administrative activity",
                 "requester": "Southern office",
                 "support": "Technical support",
                 "status": "In progress",
                 "observation": "Evidence pending.",
             },
-        )[0]
+        )
+
+        # Audit
         Audit.objects.get_or_create(
             user=north_employee,
             event="CREATE",
             entity="Commitment",
-            object_identifier=str(north_commitment.commitment_id),
+            object_identifier=str(
+                north_commitment.commitment_id
+            ),
             defaults={
                 "previous_value": None,
-                "new_value": {"status": "Pending"},
+                "new_value": {
+                    "status": "Pending",
+                },
             },
         )
+
         Audit.objects.get_or_create(
             user=south_employee,
             event="UPDATE",
             entity="Commitment",
-            object_identifier=str(south_commitment.commitment_id),
+            object_identifier=str(
+                south_commitment.commitment_id
+            ),
             defaults={
-                "previous_value": {"status": "Pending"},
-                "new_value": {"status": "In progress"},
+                "previous_value": {
+                    "status": "Pending",
+                },
+                "new_value": {
+                    "status": "In progress",
+                },
             },
+        )
+
+        self.stdout.write(
+            self.style.SUCCESS(
+                "Seed executed successfully."
+            )
         )
