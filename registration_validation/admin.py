@@ -4,7 +4,167 @@ from django.utils import timezone
 from .models import Activity, Evidence, Validation
 
 
-class EvidenceInline(admin.TabularInline):
+class DelegationForeignKeyMixin:
+    """
+    Restricts ForeignKey options according to the delegation
+    assigned to the authenticated user's profile.
+    """
+
+    foreignkey_delegation_filters = {}
+
+    def get_user_delegation_id(self, request):
+        profile = getattr(request.user, "profile", None)
+
+        if profile is None:
+            return None
+
+        return profile.delegation_id
+
+    def formfield_for_foreignkey(
+        self,
+        db_field,
+        request,
+        **kwargs,
+    ):
+        filter_path = self.foreignkey_delegation_filters.get(
+            db_field.name
+        )
+
+        if (
+            not request.user.is_superuser
+            and filter_path is not None
+        ):
+            delegation_id = self.get_user_delegation_id(
+                request
+            )
+
+            if delegation_id is None:
+                kwargs["queryset"] = (
+                    db_field.related_model.objects.none()
+                )
+            else:
+                kwargs["queryset"] = (
+                    db_field.related_model.objects.filter(
+                        **{
+                            filter_path: delegation_id,
+                            "deleted_at__isnull": True,
+                        }
+                    )
+                )
+
+        return super().formfield_for_foreignkey(
+            db_field,
+            request,
+            **kwargs,
+        )
+
+
+class DelegationRestrictedAdminMixin(
+    DelegationForeignKeyMixin
+):
+    """
+    Shared security rules for models restricted by delegation.
+    """
+
+    delegation_filter = None
+    object_delegation_path = None
+
+    readonly_fields = (
+        "created_at",
+        "updated_at",
+        "deleted_at",
+    )
+
+    def get_nested_value(self, obj, path):
+        value = obj
+
+        for attribute in path.split("."):
+            value = getattr(value, attribute)
+
+        return value
+
+    def has_delete_permission(
+        self,
+        request,
+        obj=None,
+    ):
+        return request.user.is_superuser
+
+    def has_add_permission(self, request):
+        if not super().has_add_permission(request):
+            return False
+
+        if request.user.is_superuser:
+            return True
+
+        return (
+            self.get_user_delegation_id(request)
+            is not None
+        )
+
+    def has_change_permission(
+        self,
+        request,
+        obj=None,
+    ):
+        if not super().has_change_permission(
+            request,
+            obj,
+        ):
+            return False
+
+        if obj is None or request.user.is_superuser:
+            return True
+
+        delegation_id = self.get_user_delegation_id(
+            request
+        )
+
+        if (
+            delegation_id is None
+            or self.object_delegation_path is None
+        ):
+            return False
+
+        object_delegation_id = self.get_nested_value(
+            obj,
+            self.object_delegation_path,
+        )
+
+        return object_delegation_id == delegation_id
+
+    def get_queryset(self, request):
+        queryset = (
+            super()
+            .get_queryset(request)
+            .filter(deleted_at__isnull=True)
+        )
+
+        if request.user.is_superuser:
+            return queryset
+
+        delegation_id = self.get_user_delegation_id(
+            request
+        )
+
+        if (
+            delegation_id is None
+            or self.delegation_filter is None
+        ):
+            return queryset.none()
+
+        return queryset.filter(
+            **{
+                self.delegation_filter:
+                    delegation_id
+            }
+        )
+
+
+class EvidenceInline(
+    DelegationForeignKeyMixin,
+    admin.TabularInline,
+):
     model = Evidence
     extra = 0
 
@@ -16,54 +176,34 @@ class EvidenceInline(admin.TabularInline):
         "review_status",
     )
 
-    autocomplete_fields = ("author",)
+    foreignkey_delegation_filters = {
+        "author": "delegation_id",
+    }
 
-    def has_delete_permission(self, request, obj=None):
-        return request.user.is_superuser
-
-    def formfield_for_foreignkey(
+    def has_delete_permission(
         self,
-        db_field,
         request,
-        **kwargs,
+        obj=None,
     ):
-        if (
-            not request.user.is_superuser
-            and db_field.name == "author"
-        ):
-            profile = getattr(
-                request.user,
-                "profile",
-                None,
-            )
-
-            delegation_id = (
-                profile.delegation_id
-                if profile
-                else None
-            )
-
-            if delegation_id is None:
-                kwargs["queryset"] = (
-                    db_field.related_model.objects.none()
-                )
-            else:
-                kwargs["queryset"] = (
-                    db_field.related_model.objects.filter(
-                        delegation_id=delegation_id,
-                        deleted_at__isnull=True,
-                    )
-                )
-
-        return super().formfield_for_foreignkey(
-            db_field,
-            request,
-            **kwargs,
-        )
+        return request.user.is_superuser
 
 
 @admin.register(Activity)
-class ActivityAdmin(admin.ModelAdmin):
+class ActivityAdmin(
+    DelegationRestrictedAdminMixin,
+    admin.ModelAdmin,
+):
+    delegation_filter = "author__delegation_id"
+
+    object_delegation_path = (
+        "author.delegation_id"
+    )
+
+    foreignkey_delegation_filters = {
+        "author": "delegation_id",
+        "goal": "employee__delegation_id",
+    }
+
     list_display = (
         "activity_id",
         "goal",
@@ -98,145 +238,21 @@ class ActivityAdmin(admin.ModelAdmin):
 
     date_hierarchy = "date"
     list_per_page = 25
-    inlines = [EvidenceInline]
 
-    readonly_fields = (
-        "created_at",
-        "updated_at",
-        "deleted_at",
-    )
-
-    def has_delete_permission(self, request, obj=None):
-        return request.user.is_superuser
-
-    def get_queryset(self, request):
-        queryset = (
-            super()
-            .get_queryset(request)
-            .filter(deleted_at__isnull=True)
-        )
-
-        if request.user.is_superuser:
-            return queryset
-
-        profile = getattr(
-            request.user,
-            "profile",
-            None,
-        )
-
-        if (
-            profile is None
-            or profile.delegation_id is None
-        ):
-            return queryset.none()
-
-        return queryset.filter(
-            author__delegation_id=profile.delegation_id
-        )
-
-    def has_change_permission(
-        self,
-        request,
-        obj=None,
-    ):
-        if not super().has_change_permission(
-            request,
-            obj,
-        ):
-            return False
-
-        if obj is None or request.user.is_superuser:
-            return True
-
-        profile = getattr(
-            request.user,
-            "profile",
-            None,
-        )
-
-        return bool(
-            profile
-            and profile.delegation_id
-            and obj.author.delegation_id
-            == profile.delegation_id
-        )
-
-    def has_add_permission(self, request):
-        if not super().has_add_permission(request):
-            return False
-
-        if request.user.is_superuser:
-            return True
-
-        profile = getattr(
-            request.user,
-            "profile",
-            None,
-        )
-
-        return bool(
-            profile
-            and profile.delegation_id
-        )
-
-    def formfield_for_foreignkey(
-        self,
-        db_field,
-        request,
-        **kwargs,
-    ):
-        if not request.user.is_superuser:
-            profile = getattr(
-                request.user,
-                "profile",
-                None,
-            )
-
-            delegation_id = (
-                profile.delegation_id
-                if profile
-                else None
-            )
-
-            if db_field.name == "author":
-                if delegation_id is None:
-                    kwargs["queryset"] = (
-                        db_field.related_model.objects.none()
-                    )
-                else:
-                    kwargs["queryset"] = (
-                        db_field.related_model.objects.filter(
-                            delegation_id=delegation_id,
-                            deleted_at__isnull=True,
-                        )
-                    )
-
-            elif db_field.name == "goal":
-                if delegation_id is None:
-                    kwargs["queryset"] = (
-                        db_field.related_model.objects.none()
-                    )
-                else:
-                    kwargs["queryset"] = (
-                        db_field.related_model.objects.filter(
-                            employee__delegation_id=delegation_id,
-                            deleted_at__isnull=True,
-                        )
-                    )
-
-        return super().formfield_for_foreignkey(
-            db_field,
-            request,
-            **kwargs,
-        )
+    inlines = [
+        EvidenceInline,
+    ]
 
 
 @admin.action(
     description="Archive selected evidence",
     permissions=["change"],
 )
-def archive_evidences(modeladmin, request, queryset):
+def archive_evidences(
+    modeladmin,
+    request,
+    queryset,
+):
     now = timezone.now()
 
     queryset.update(
@@ -246,7 +262,23 @@ def archive_evidences(modeladmin, request, queryset):
 
 
 @admin.register(Evidence)
-class EvidenceAdmin(admin.ModelAdmin):
+class EvidenceAdmin(
+    DelegationRestrictedAdminMixin,
+    admin.ModelAdmin,
+):
+    delegation_filter = (
+        "activity__author__delegation_id"
+    )
+
+    object_delegation_path = (
+        "activity.author.delegation_id"
+    )
+
+    foreignkey_delegation_filters = {
+        "author": "delegation_id",
+        "activity": "author__delegation_id",
+    }
+
     list_display = (
         "evidence_id",
         "code",
@@ -280,143 +312,31 @@ class EvidenceAdmin(admin.ModelAdmin):
     date_hierarchy = "date"
     list_per_page = 25
 
-    readonly_fields = (
-        "created_at",
-        "updated_at",
-        "deleted_at",
-    )
-
-    actions = [archive_evidences]
-
-    def has_delete_permission(self, request, obj=None):
-        return request.user.is_superuser
-
-    def get_queryset(self, request):
-        queryset = (
-            super()
-            .get_queryset(request)
-            .filter(deleted_at__isnull=True)
-        )
-
-        if request.user.is_superuser:
-            return queryset
-
-        profile = getattr(
-            request.user,
-            "profile",
-            None,
-        )
-
-        if (
-            profile is None
-            or profile.delegation_id is None
-        ):
-            return queryset.none()
-
-        return queryset.filter(
-            activity__author__delegation_id=
-            profile.delegation_id
-        )
-
-    def has_change_permission(
-        self,
-        request,
-        obj=None,
-    ):
-        if not super().has_change_permission(
-            request,
-            obj,
-        ):
-            return False
-
-        if obj is None or request.user.is_superuser:
-            return True
-
-        profile = getattr(
-            request.user,
-            "profile",
-            None,
-        )
-
-        return bool(
-            profile
-            and profile.delegation_id
-            and obj.activity.author.delegation_id
-            == profile.delegation_id
-        )
-
-    def has_add_permission(self, request):
-        if not super().has_add_permission(request):
-            return False
-
-        if request.user.is_superuser:
-            return True
-
-        profile = getattr(
-            request.user,
-            "profile",
-            None,
-        )
-
-        return bool(
-            profile
-            and profile.delegation_id
-        )
-
-    def formfield_for_foreignkey(
-        self,
-        db_field,
-        request,
-        **kwargs,
-    ):
-        if not request.user.is_superuser:
-            profile = getattr(
-                request.user,
-                "profile",
-                None,
-            )
-
-            delegation_id = (
-                profile.delegation_id
-                if profile
-                else None
-            )
-
-            if db_field.name == "author":
-                if delegation_id is None:
-                    kwargs["queryset"] = (
-                        db_field.related_model.objects.none()
-                    )
-                else:
-                    kwargs["queryset"] = (
-                        db_field.related_model.objects.filter(
-                            delegation_id=delegation_id,
-                            deleted_at__isnull=True,
-                        )
-                    )
-
-            elif db_field.name == "activity":
-                if delegation_id is None:
-                    kwargs["queryset"] = (
-                        db_field.related_model.objects.none()
-                    )
-                else:
-                    kwargs["queryset"] = (
-                        db_field.related_model.objects.filter(
-                            author__delegation_id=delegation_id,
-                            deleted_at__isnull=True,
-                        )
-                    )
-
-        return super().formfield_for_foreignkey(
-            db_field,
-            request,
-            **kwargs,
-        )
+    actions = [
+        archive_evidences,
+    ]
 
 
 @admin.register(Validation)
-class ValidationAdmin(admin.ModelAdmin):
+class ValidationAdmin(
+    DelegationRestrictedAdminMixin,
+    admin.ModelAdmin,
+):
+    delegation_filter = (
+        "evidence__activity__author__delegation_id"
+    )
+
+    object_delegation_path = (
+        "evidence.activity.author.delegation_id"
+    )
+
+    foreignkey_delegation_filters = {
+        "verifier": "delegation_id",
+        "evidence": (
+            "activity__author__delegation_id"
+        ),
+    }
+
     list_display = (
         "validation_id",
         "evidence",
@@ -451,136 +371,3 @@ class ValidationAdmin(admin.ModelAdmin):
 
     date_hierarchy = "date"
     list_per_page = 25
-
-    readonly_fields = (
-        "created_at",
-        "updated_at",
-        "deleted_at",
-    )
-
-    def has_delete_permission(self, request, obj=None):
-        return request.user.is_superuser
-
-    def get_queryset(self, request):
-        queryset = (
-            super()
-            .get_queryset(request)
-            .filter(deleted_at__isnull=True)
-        )
-
-        if request.user.is_superuser:
-            return queryset
-
-        profile = getattr(
-            request.user,
-            "profile",
-            None,
-        )
-
-        if (
-            profile is None
-            or profile.delegation_id is None
-        ):
-            return queryset.none()
-
-        return queryset.filter(
-            evidence__activity__author__delegation_id=
-            profile.delegation_id
-        )
-
-    def has_change_permission(
-        self,
-        request,
-        obj=None,
-    ):
-        if not super().has_change_permission(
-            request,
-            obj,
-        ):
-            return False
-
-        if obj is None or request.user.is_superuser:
-            return True
-
-        profile = getattr(
-            request.user,
-            "profile",
-            None,
-        )
-
-        return bool(
-            profile
-            and profile.delegation_id
-            and obj.evidence.activity.author.delegation_id
-            == profile.delegation_id
-        )
-
-    def has_add_permission(self, request):
-        if not super().has_add_permission(request):
-            return False
-
-        if request.user.is_superuser:
-            return True
-
-        profile = getattr(
-            request.user,
-            "profile",
-            None,
-        )
-
-        return bool(
-            profile
-            and profile.delegation_id
-        )
-
-    def formfield_for_foreignkey(
-        self,
-        db_field,
-        request,
-        **kwargs,
-    ):
-        if not request.user.is_superuser:
-            profile = getattr(
-                request.user,
-                "profile",
-                None,
-            )
-
-            delegation_id = (
-                profile.delegation_id
-                if profile
-                else None
-            )
-
-            if db_field.name == "verifier":
-                if delegation_id is None:
-                    kwargs["queryset"] = (
-                        db_field.related_model.objects.none()
-                    )
-                else:
-                    kwargs["queryset"] = (
-                        db_field.related_model.objects.filter(
-                            delegation_id=delegation_id,
-                            deleted_at__isnull=True,
-                        )
-                    )
-
-            elif db_field.name == "evidence":
-                if delegation_id is None:
-                    kwargs["queryset"] = (
-                        db_field.related_model.objects.none()
-                    )
-                else:
-                    kwargs["queryset"] = (
-                        db_field.related_model.objects.filter(
-                            activity__author__delegation_id=
-                            delegation_id,
-                            deleted_at__isnull=True,
-                        )
-                    )
-
-        return super().formfield_for_foreignkey(
-            db_field,
-            request,
-            **kwargs,
-        )
