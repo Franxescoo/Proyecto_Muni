@@ -24,6 +24,18 @@ class GoalInline(admin.TabularInline):
     fields = ("employee", "position", "item", "objective_value", "unit", "weight")
     show_change_link = True
 
+    def has_delete_permission(self, request, obj=None):
+          return False
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request).filter(deleted_at__isnull=True)
+        if request.user.is_superuser:
+            return qs
+        profile = getattr(request.user, "profile", None)
+        if profile is None or profile.delegation_id is None:
+            return qs.none()
+        return qs.filter(employee__delegation_id=profile.delegation_id)
+
 
 @admin.register(Period)
 class PeriodAdmin(admin.ModelAdmin):
