@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block titulo %}Proyecto Muni{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <style>
+        /* Estilos base de tu proyecto */
+        body { background: #f8f9fb; }
+        
+        /* Navbar institucional La Serena */
+        .topbar { background-color: #a60a17; border-bottom: 3px solid #800711; }
+        .topbar .navbar-brand, .topbar .nav-link, .topbar .navbar-text { color: #fff; }
+        .topbar .nav-link:hover { color: #ffcccc; }
+        .topbar .navbar-brand { font-weight: bold; font-size: 1.2rem; }
+    </style>
+    {% block estilos %}{% endblock %}
+</head>
+<body>
+<nav class="navbar navbar-expand-lg topbar mb-4 shadow-sm">
+    <div class="container-fluid px-4">
+        <a class="navbar-brand py-0" href="{% url 'home' %}">
+            <img src="{% static 'img/horizontal-blanco.png' %}" alt="Logo La Serena" height="45">
+        </a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarMain" style="filter: invert(1);">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="navbarMain">
+            {% if user.is_authenticated %}
+            <ul class="navbar-nav me-auto">
+                <li class="nav-item"><a class="nav-link" href="{% url 'home' %}">Inicio</a></li>
+            </ul>
+            <span class="navbar-text me-3"><i class="bi bi-person-circle"></i> {{ user.username }}</span>
+            <form method="post" action="{% url 'logout' %}" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline-light btn-sm">Cerrar sesión</button>
+            </form>
+            {% else %}
+            <a class="btn btn-light btn-sm ms-auto fw-semibold" href="{% url 'login' %}">Ingresar</a>
+            {% endif %}
+        </div>
+    </div>
+</nav>
+
+<div class="container-fluid px-4">
+    <!-- Aquí cargará tu submenu de planning -->
+    {% block submenu %}{% endblock %}
+
+    <main>
+        {% if messages %}
+            {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} alert-dismissible fade show shadow-sm" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            {% endfor %}
+        {% endif %}
+
+        <!-- Aquí se insertará el contenido de tus páginas (como la tabla de metas) -->
+        {% block contenido %}{% endblock %}
+    </main>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,26 @@
+<script>
+(function () {
+    function updatePosition(employee) {
+        const position = document.getElementById(
+            employee.id.replace(/employee$/, 'position')
+        );
+
+        if (!position) return;
+
+        const positions = JSON.parse(
+            employee.dataset.goalPositions
+        );
+
+        position.value = positions[employee.value] || '';
+    }
+
+    document.querySelectorAll('[data-goal-positions]')
+        .forEach(updatePosition);
+
+    document.addEventListener('change', function (event) {
+        if (event.target.matches('[data-goal-positions]')) {
+            updatePosition(event.target);
+        }
+    });
+})();
+</script>

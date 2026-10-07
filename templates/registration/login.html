@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block titulo %}Ingreso al sistema{% endblock %}
+
+{% block contenido %}
+<div class="row">
+    <div class="col-md-4 offset-md-4">
+        <div class="card shadow-sm">
+            <div class="card-body p-4">
+                <h1 class="h3 mb-3">Ingreso al sistema</h1>
+
+                {% if form.errors %}
+                <div class="alert alert-danger">Usuario o contraseña incorrectos.</div>
+                {% endif %}
+
+                <form method="post" id="login-form">
+                    {% csrf_token %}
+                    {{ form.as_p }}
+                    <input type="hidden" name="next" value="{{ next }}">
+                    <button class="btn btn-primary w-100" type="submit">Ingresar</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+<style>
+    #login-form input[type=text], #login-form input[type=password] {
+        width: 100%; padding: .4rem .6rem; border-radius: .375rem; border: 1px solid #ced4da;
+    }
+    #login-form p { margin-bottom: 1rem; }
+</style>
+{% endblock %}

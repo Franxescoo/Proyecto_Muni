@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block titulo %}Planificación{% endblock %}
+
+{% block submenu %}
+<ul class="nav nav-pills mb-3">
+    <li class="nav-item"><a class="nav-link" href="{% url 'planning:index' %}">Resumen</a></li>
+    {% if perms.planning_measurements.view_period %}
+    <li class="nav-item"><a class="nav-link" href="{% url 'planning:period_list' %}">Períodos</a></li>
+    {% endif %}
+    {% if perms.planning_measurements.view_goal %}
+    <li class="nav-item"><a class="nav-link" href="{% url 'planning:goal_list' %}">Metas</a></li>
+    {% endif %}
+</ul>
+{% endblock %}

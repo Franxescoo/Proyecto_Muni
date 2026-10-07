@@ -1,0 +1,168 @@
+{% extends "planning/base.html" %}
+
+{% block titulo %}{{ title }} - La Serena{% endblock %}
+
+
+{% block estilos %}
+<style>
+    /* Colores institucionales */
+    :root {
+        --color-rojo-brand: #a60a17;
+        --color-verde-btn: #138d56;
+    }
+
+    .titulo-seccion {
+        color: #000;
+        font-weight: bold;
+        border-left: 6px solid var(--color-rojo-brand);
+        padding-left: 12px;
+        margin-top: 5px;
+        font-size: 1.8rem;
+    }
+
+    .btn-primary { background-color: var(--color-rojo-brand); border-color: var(--color-rojo-brand); color: white; }
+    .btn-primary:hover { background-color: #800711; border-color: #800711; color: white; }
+    
+    .btn-success { background-color: var(--color-verde-btn); border-color: var(--color-verde-btn); color: white; }
+    .btn-success:hover { background-color: #0e7044; border-color: #0e7044; color: white; }
+
+    /* El CUADRO del encabezado de la tabla es ROJO */
+    .table-dark-brand { 
+        background-color: var(--color-rojo-brand) !important; 
+    }
+    
+    /* Las LETRAS del encabezado son NEGRAS */
+    .table-dark-brand th { 
+        color: #000000 !important; 
+        font-weight: bold; 
+    }
+</style>
+{% endblock %}
+
+{% block contenido %}
+<div class="row mb-4">
+    <div class="col-md-10 offset-md-1">
+        <h1 class="titulo-seccion">{{ title }}</h1>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-10 offset-md-1">
+        <div class="bg-white p-4 rounded border shadow-sm mb-5">
+            <form method="post">
+                {% csrf_token %}
+                
+                {% if form.non_field_errors %}
+                <div class="alert alert-danger shadow-sm">
+                    {{ form.non_field_errors }}
+                </div>
+                {% endif %}
+
+                <!-- Campos principales del formulario -->
+                <div class="row g-3 mb-4">
+                    {% for field in form %}
+                    <div class="col-md-4">
+                        <label class="fw-bold mb-1 text-secondary small">{{ field.label_tag }}</label>
+                        {{ field }}
+                        {% if field.errors %}
+                        <div class="text-danger small mt-1">{{ field.errors }}</div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+
+                {% if period %}
+                <p class="text-muted small border-top pt-2">
+                    <i class="bi bi-clock-history"></i> Creado: {{ period.created_at|date:"d-m-Y H:i" }} &nbsp;|&nbsp; Última modificación: {{ period.updated_at|date:"d-m-Y H:i" }}
+                </p>
+                {% endif %}
+
+                <!-- Subsección de Metas (Formset) -->
+                <h4 class="mt-5 mb-3 fw-bold text-secondary border-bottom pb-2">Metas Asociadas</h4>
+                
+                {{ formset.management_form }}
+                {% if formset.non_form_errors %}
+                <div class="text-danger mb-2">{{ formset.non_form_errors }}</div>
+                {% endif %}
+                
+                <div class="table-responsive border rounded mb-3">
+                    <table class="table table-hover table-striped align-middle mb-0">
+                        <thead class="table-dark-brand">
+                            <tr>
+                                <th>Funcionario</th>
+                                <th>Cargo</th>
+                                <th>Ítem</th>
+                                <th>Valor objetivo</th>
+                                <th>Unidad</th>
+                                <th>Ponderador</th>
+                            </tr>
+                        </thead>
+                        <tbody id="goals-body">
+                            {% for f in formset %}
+                            <tr>
+                                {% for hidden in f.hidden_fields %}{{ hidden }}{% endfor %}
+                                {% for field in f.visible_fields %}
+                                <td>
+                                    {{ field }}
+                                    {% if field.errors %}
+                                    <div class="text-danger small mt-1">{{ field.errors }}</div>
+                                    {% endif %}
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            {% if f.non_field_errors %}
+                            <tr>
+                                <td colspan="6" class="text-danger bg-light">{{ f.non_field_errors }}</td>
+                            </tr>
+                            {% endif %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                {% if can_add_goal %}
+                <button type="button" id="add-goal" class="btn btn-outline-success btn-sm mb-4 fw-semibold">
+                    <i class="bi bi-plus-lg"></i> Agregar otra meta
+                </button>
+                <template id="empty-row">
+                    <tr>
+                        {% for hidden in formset.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
+                        {% for field in formset.empty_form.visible_fields %}<td>{{ field }}</td>{% endfor %}
+                    </tr>
+                </template>
+                {% endif %}
+
+                <!-- Botonera de acciones (Guardar / Volver) -->
+                <div class="d-flex justify-content-between align-items-center mt-4 border-top pt-4">
+                    <div>
+                        <a class="btn btn-outline-secondary fw-semibold" href="{% url 'planning:period_list' %}">Volver al listado</a>
+                    </div>
+                    {% if not readonly %}
+                    <div class="d-flex gap-2">
+                        <button type="submit" name="_addanother" class="btn btn-secondary fw-semibold">Guardar y añadir otro</button>
+                        <button type="submit" name="_continue" class="btn btn-secondary fw-semibold">Guardar y continuar</button>
+                        <button type="submit" name="_save" class="btn btn-primary fw-semibold px-4">Guardar</button>
+                    </div>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% include "planning/goal_position_script.html" %}
+
+{% if can_add_goal %}
+<script>
+document.getElementById('add-goal').addEventListener('click', function () {
+    const total = document.getElementById('id_{{ formset.prefix }}-TOTAL_FORMS');
+    const index = parseInt(total.value);
+    const html = document.getElementById('empty-row').innerHTML.replaceAll('__prefix__', index);
+    document.getElementById('goals-body').insertAdjacentHTML('beforeend', html);
+    total.value = index + 1;
+});
+</script>
+{% endif %}
+{% endblock %}

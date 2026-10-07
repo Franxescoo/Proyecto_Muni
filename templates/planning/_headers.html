@@ -1,0 +1,7 @@
+{% for h in headers %}
+<th>
+    {% if h.url %}
+    <a href="{{ h.url }}" class="text-decoration-none text-reset">{{ h.label }}{% if h.asc %} ▲{% elif h.desc %} ▼{% endif %}</a>
+    {% else %}{{ h.label }}{% endif %}
+</th>
+{% endfor %}

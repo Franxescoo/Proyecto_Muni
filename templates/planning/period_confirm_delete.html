@@ -1,0 +1,23 @@
+{% extends "planning/base.html" %}
+
+{% block titulo %}Eliminar período{% endblock %}
+
+{% block contenido %}
+<div class="row">
+    <div class="col-10 offset-1">
+        <h3>Confirmar Eliminación de Período</h3>
+        <div class="alert alert-danger h5">
+            ¿Estás seguro de que deseas eliminar el período
+            {{ period.start_date|date:"d-m-Y" }} al {{ period.end_date|date:"d-m-Y" }}?
+            {% if goals_count %}<br><small>Tiene {{ goals_count }} meta(s) asociada(s).</small>{% endif %}
+        </div>
+        <form method="post">
+            {% csrf_token %}
+            <div class="row">
+                <div class="col"><a class="btn btn-dark" href="{% url 'planning:period_list' %}">Cancelar</a></div>
+                <div class="col"><button class="btn btn-danger" type="submit">Confirmar Eliminación</button></div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

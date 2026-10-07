@@ -1,0 +1,54 @@
+{% extends "planning/base.html" %}
+
+{% block titulo %}Planificación{% endblock %}
+
+{% block contenido %}
+<h2 class="mb-1">Planificación del desempeño</h2>
+<p class="text-muted">
+    Usuario: {{ user.username }} ·
+    {% if delegation %}Delegación: {{ delegation }}{% else %}Acceso global (superusuario){% endif %}
+    · Visitas a este panel en la sesión: {{ visits }}
+</p>
+<form method="post" action="{% url 'planning:set_page_size' %}" class="row g-2 mb-4">
+    {% csrf_token %}
+    <div class="col-auto"><label class="col-form-label">Registros por página</label></div>
+    <div class="col-auto">
+        <select name="page_size" class="form-select form-select-sm">
+            {% for size in page_size_options %}
+            <option value="{{ size }}" {% if size == page_size %}selected{% endif %}>{{ size }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-auto"><button type="submit" class="btn btn-secondary btn-sm">Guardar preferencia</button></div>
+</form>
+<div class="row">
+    {% if perms.planning_measurements.view_period %}
+    <div class="col-md-4">
+        <div class="card mb-3">
+            <div class="card-body">
+                <h5 class="card-title">Períodos</h5>
+                <p class="card-text">{{ periods_count }} registrado(s)</p>
+                <a class="btn btn-primary btn-sm" href="{% url 'planning:period_list' %}">Ver períodos</a>
+                {% if perms.planning_measurements.add_period %}
+                <a class="btn btn-success btn-sm" href="{% url 'planning:period_create' %}">Agregar</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    {% if perms.planning_measurements.view_goal %}
+    <div class="col-md-4">
+        <div class="card mb-3">
+            <div class="card-body">
+                <h5 class="card-title">Metas</h5>
+                <p class="card-text">{{ goals_count }} visible(s) para usted</p>
+                <a class="btn btn-primary btn-sm" href="{% url 'planning:goal_list' %}">Ver metas</a>
+                {% if perms.planning_measurements.add_goal %}
+                <a class="btn btn-success btn-sm" href="{% url 'planning:goal_create' %}">Agregar</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

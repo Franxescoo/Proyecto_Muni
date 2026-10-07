@@ -1,0 +1,164 @@
+{% extends "planning/base.html" %}
+
+{% block titulo %}Metas{% endblock %}
+
+{% block contenido %}
+<style>
+    /* Colores institucionales */
+    :root {
+        --color-rojo-brand: #a60a17;
+        --color-verde-btn: #138d56;
+    }
+
+    .titulo-seccion {
+        color: #000;
+        font-weight: bold;
+        border-left: 6px solid var(--color-rojo-brand);
+        padding-left: 12px;
+        margin-top: 5px;
+        font-size: 1.8rem;
+    }
+
+    .btn-primary { background-color: var(--color-rojo-brand); border-color: var(--color-rojo-brand); color: white; }
+    .btn-primary:hover { background-color: #800711; border-color: #800711; color: white; }
+    
+    .btn-success { background-color: var(--color-verde-btn); border-color: var(--color-verde-btn); color: white; }
+    .btn-success:hover { background-color: #0e7044; border-color: #0e7044; color: white; }
+
+    .card-header-brand { background-color: var(--color-rojo-brand); color: white; font-weight: 600; }
+    
+    /* 1. El CUADRO del encabezado ahora es ROJO */
+    .table-dark-brand { 
+        background-color: var(--color-rojo-brand) !important; 
+    }
+    
+    /* 2. Las LETRAS ahora son NEGRAS y NO cambian al apretarlas */
+    .table-dark-brand th,
+    .table-dark-brand th a,
+    .table-dark-brand th span { 
+        color: #000000 !important; /* Fuerza el color negro */
+        font-weight: bold; 
+        text-decoration: none;
+    }
+</style>
+
+<div class="row mb-4">
+    <div class="col-9">
+        <h2 class="titulo-seccion">Listado de Metas</h2>
+    </div>
+    <div class="col-3 text-end align-self-center">
+        {% if perms.planning_measurements.add_goal %}
+        <a class="btn btn-success btn-sm px-3 fw-semibold" href="{% url 'planning:goal_create' %}">Agregar Meta</a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-9">
+        <form method="get" class="row g-2 mb-3">
+            <div class="col-md-8">
+                <input type="text" name="q" value="{{ query }}" class="form-control" placeholder="Buscar por ítem o funcionario">
+            </div>
+            <div class="col-md-4">
+                {% if selected_period %}<input type="hidden" name="period" value="{{ selected_period }}">{% endif %}
+                {% if selected_position %}<input type="hidden" name="position" value="{{ selected_position }}">{% endif %}
+                {% if selected_unit %}<input type="hidden" name="unit" value="{{ selected_unit }}">{% endif %}
+                <button type="submit" class="btn btn-primary px-4 fw-semibold">Buscar</button>
+            </div>
+        </form>
+
+        <form method="post">
+            {% csrf_token %}
+            {% if user.is_superuser %}
+            <div class="row g-2 mb-2">
+                <div class="col-auto">
+                    <select name="action" class="form-select form-select-sm">
+                        <option value="">- Acción -</option>
+                        <option value="delete_selected">Delete</option>
+                    </select>
+                </div>
+                <div class="col-auto"><button type="submit" class="btn btn-secondary btn-sm">Ejecutar</button></div>
+            </div>
+            {% endif %}
+
+            <div class="table-responsive">
+                <table class="table table-hover table-striped border">
+                    <thead class="table-dark-brand">
+                        <tr>
+                            {% if user.is_superuser %}<th><input type="checkbox" class="form-check-input" onclick="document.querySelectorAll('.sel').forEach(c => c.checked = this.checked)"></th>{% endif %}
+                            {% include "planning/_headers.html" %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for goal in page %}
+                        <tr>
+                            {% if user.is_superuser %}<td><input type="checkbox" class="form-check-input sel" name="_selected_action" value="{{ goal.pk }}"></td>{% endif %}
+                            <td><a href="{% url 'planning:goal_edit' goal.goal_id %}">{{ goal.goal_id }}</a></td>
+                            <td>{{ goal.item }}</td>
+                            <td>{{ goal.period.start_date|date:"d-m-Y" }} al {{ goal.period.end_date|date:"d-m-Y" }}</td>
+                            <td>{{ goal.employee }}</td>
+                            <td>{{ goal.position }}</td>
+                            <td>{{ goal.objective_value }}</td>
+                            <td>{{ goal.unit }}</td>
+                            <td>{{ goal.weight }}</td>
+                            <td>{{ goal.created_at|date:"d-m-Y H:i" }}</td>
+                            <td>
+                                <a class="btn btn-warning btn-sm" href="{% url 'planning:goal_edit' goal.goal_id %}">{% if perms.planning_measurements.change_goal %}Modificar{% else %}Ver{% endif %}</a>
+                                {% if user.is_superuser %}
+                                <a class="btn btn-danger btn-sm" href="{% url 'planning:goal_delete' goal.goal_id %}">Eliminar</a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="11" class="text-center py-4">No hay metas para mostrar.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </form>
+        <p class="text-muted">{{ page.paginator.count }} meta(s)</p>
+        {% include "planning/_pagination.html" %}
+    </div>
+
+    <div class="col-md-3">
+        <form method="get" class="card shadow-sm border-0">
+            <div class="card-header card-header-brand">
+                Filtros
+            </div>
+            <div class="card-body bg-light">
+                {% if query %}<input type="hidden" name="q" value="{{ query }}">{% endif %}
+                <label class="fw-bold mb-1 text-secondary">Por período</label>
+                <select name="period" class="form-select form-select-sm mb-3">
+                    <option value="">Todos</option>
+                    {% for period in periods %}
+                    <option value="{{ period.period_id }}" {% if selected_period == period.period_id|stringformat:"s" %}selected{% endif %}>
+                        {{ period.start_date|date:"d-m-Y" }} al {{ period.end_date|date:"d-m-Y" }}
+                    </option>
+                    {% endfor %}
+                </select>
+                
+                <label class="fw-bold mb-1 text-secondary">Por cargo</label>
+                <select name="position" class="form-select form-select-sm mb-3">
+                    <option value="">Todos</option>
+                    {% for position in positions %}
+                    <option value="{{ position.position_id }}" {% if selected_position == position.position_id|stringformat:"s" %}selected{% endif %}>{{ position }}</option>
+                    {% endfor %}
+                </select>
+                
+                <label class="fw-bold mb-1 text-secondary">Por unidad</label>
+                <select name="unit" class="form-select form-select-sm mb-3">
+                    <option value="">Todas</option>
+                    {% for unit in units %}
+                    <option value="{{ unit }}" {% if selected_unit == unit %}selected{% endif %}>{{ unit }}</option>
+                    {% endfor %}
+                </select>
+                
+                <div class="d-grid gap-2 mt-4">
+                    <button type="submit" class="btn btn-primary btn-sm fw-semibold">Filtrar</button>
+                    <a class="btn btn-outline-secondary btn-sm" href="{% url 'planning:goal_list' %}">Limpiar</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
