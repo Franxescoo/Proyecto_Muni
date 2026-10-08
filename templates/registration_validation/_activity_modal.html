@@ -1,0 +1,188 @@
+{% if open_modal %}
+
+<div class="modal fade"
+     id="activityModal"
+     tabindex="-1"
+     aria-labelledby="activityModalLabel"
+     aria-hidden="true">
+
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+
+        <div class="modal-content">
+
+            <form method="post" novalidate>
+                {% csrf_token %}
+
+                <div class="modal-header">
+
+                    <h5 class="modal-title"
+                        id="activityModalLabel">
+
+                        {% if object %}
+                            Modificar actividad
+                        {% else %}
+                            Nueva actividad
+                        {% endif %}
+
+                    </h5>
+
+                    <a href="{% url 'registration:activity_list' %}"
+                       class="btn-close"
+                       aria-label="Cerrar">
+                    </a>
+
+                </div>
+
+                <div class="modal-body">
+
+                    {% if form.non_field_errors %}
+                    <div class="alert alert-danger">
+
+                        {% for error in form.non_field_errors %}
+                            <div>{{ error }}</div>
+                        {% endfor %}
+
+                    </div>
+                    {% endif %}
+
+                    <div class="row">
+
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold">
+                                {{ form.goal.label }}
+                            </label>
+
+                            {{ form.goal }}
+
+                            {% for error in form.goal.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold">
+                                {{ form.author.label }}
+                            </label>
+
+                            {{ form.author }}
+
+                            {% for error in form.author.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold">
+                                {{ form.date.label }}
+                            </label>
+
+                            {{ form.date }}
+
+                            {% for error in form.date.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold">
+                                {{ form.status.label }}
+                            </label>
+
+                            {{ form.status }}
+
+                            {% for error in form.status.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="col-12 mb-3">
+                            <label class="form-label fw-semibold">
+                                {{ form.request_problem.label }}
+                            </label>
+
+                            {{ form.request_problem }}
+
+                            {% for error in form.request_problem.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="col-12 mb-3">
+                            <label class="form-label fw-semibold">
+                                {{ form.action.label }}
+                            </label>
+
+                            {{ form.action }}
+
+                            {% for error in form.action.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold">
+                                {{ form.contact.label }}
+                            </label>
+
+                            {{ form.contact }}
+
+                            {% for error in form.contact.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label fw-semibold">
+                                {{ form.phone.label }}
+                            </label>
+
+                            {{ form.phone }}
+
+                            {% for error in form.phone.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                            {% endfor %}
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <div class="modal-footer">
+
+                    <a href="{% url 'registration:activity_list' %}"
+                       class="btn btn-secondary">
+                        Cancelar
+                    </a>
+
+                    <button type="submit"
+                            class="btn btn-primary">
+                        Guardar
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endif %}
