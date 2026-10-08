@@ -7,6 +7,7 @@ from django.forms import inlineformset_factory
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
+from django.db import transaction
 
 from organization.models import PositionFunction
 
@@ -35,30 +36,96 @@ def only_superuser(user):
     if not user.is_superuser:
         raise PermissionDenied("Solo el superusuario puede eliminar.")
 
+def ensure_open_period(period):
+    """Impide operaciones sobre períodos archivados o cerrados."""
+
+    if period.deleted_at is not None:
+        raise PermissionDenied(
+            "No puedes modificar un período archivado."
+        )
+
+    if period.status == Period.Status.CLOSED:
+        raise PermissionDenied(
+            "El período está cerrado. "
+            "Debe reabrirse mediante el procedimiento autorizado."
+        )
+
 
 def scoped_goals(user):
-    """Metas activas visibles para el usuario (scoping por delegación)."""
-    goals = Goal.objects.filter(deleted_at__isnull=True).select_related(
-        "period", "employee", "position"
+    """Metas activas pertenecientes a períodos no archivados."""
+
+    goals = Goal.objects.filter(
+        deleted_at__isnull=True,
+        period__deleted_at__isnull=True,
+    ).select_related(
+        "period",
+        "employee",
+        "position",
     )
+
     if user.is_superuser:
         return goals
+
     profile = getattr(user, "profile", None)
+
     if profile is None or profile.delegation_id is None:
         return goals.none()
-    return goals.filter(employee__delegation_id=profile.delegation_id)
+
+    return goals.filter(
+        employee__delegation_id=profile.delegation_id
+    )
 
 
 def run_bulk_delete(request, queryset):
-    """Acción 'Delete': eliminación lógica de los registros seleccionados."""
+    """Archiva registros únicamente de períodos abiertos."""
+
     only_superuser(request.user)
-    ids = [i for i in request.POST.getlist("_selected_action") if i.isdigit()]
-    if request.POST.get("action") != "delete_selected" or not ids:
-        messages.warning(request, "Seleccione al menos un registro y una acción.")
+
+    ids = [
+        value
+        for value in request.POST.getlist("_selected_action")
+        if value.isdigit()
+    ]
+
+    if (
+        request.POST.get("action") != "delete_selected"
+        or not ids
+    ):
+        messages.warning(
+            request,
+            "Seleccione al menos un registro y una acción."
+        )
         return
-    now = timezone.now()
-    updated = queryset.filter(pk__in=ids).update(deleted_at=now, updated_at=now)
-    messages.success(request, f"{updated} Deleted successfully.")
+
+    with transaction.atomic():
+        selected = queryset.filter(
+            pk__in=ids
+        ).select_for_update()
+
+        if queryset.model is Period:
+            for period in selected:
+                ensure_open_period(period)
+
+        elif queryset.model is Goal:
+            for goal in selected.select_related("period"):
+                ensure_open_period(goal.period)
+
+        else:
+            raise PermissionDenied(
+                "Esta operación no está habilitada para este módulo."
+            )
+
+        now = timezone.now()
+
+        updated = selected.update(
+            deleted_at=now,
+            updated_at=now,
+        )
+
+    messages.success(
+        request,
+        f"{updated} registro(s) archivado(s) correctamente."
+    )
 
 
 def build_headers(request, columns, order):
@@ -186,122 +253,268 @@ def disable_formset(formset, only_existing=False):
             field.disabled = True
 
 
+def get_period_list_context(request):
+    periods = Period.objects.filter(
+        deleted_at__isnull=True
+    )
+
+    query = request.GET.get("q", "").strip()
+
+    if query:
+        periods = periods.filter(
+            Q(status__icontains=query)
+            | Q(parameters_version__icontains=query)
+        )
+
+    selected_status = request.GET.get("status", "")
+
+    if selected_status:
+        periods = periods.filter(
+            status=selected_status
+        )
+
+    order = resolve_order(
+        request,
+        PERIOD_COLUMNS,
+        "-start_date"
+    )
+
+    page, querystring = paginate(
+        request,
+        periods.order_by(order)
+    )
+
+    return {
+        "page": page,
+        "headers": build_headers(
+            request,
+            PERIOD_COLUMNS,
+            order
+        ),
+        "query": query,
+        "selected_status": selected_status,
+        "statuses": (
+            Period.objects.filter(
+                deleted_at__isnull=True
+            )
+            .order_by("status")
+            .values_list("status", flat=True)
+            .distinct()
+        ),
+        "querystring": querystring,
+    }
+
+
+
+
 @access("planning_measurements.view_period")
 def period_list(request):
-    periods = Period.objects.filter(deleted_at__isnull=True)
+    periods = Period.objects.filter(
+        deleted_at__isnull=True
+    )
 
     if request.method == "POST":
         run_bulk_delete(request, periods)
         return redirect(request.get_full_path())
 
-    query = request.GET.get("q", "").strip()
-    if query:
-        periods = periods.filter(
-            Q(status__icontains=query) | Q(parameters_version__icontains=query)
-        )
-    selected_status = request.GET.get("status", "")
-    if selected_status:
-        periods = periods.filter(status=selected_status)
+    context = get_period_list_context(request)
 
-    order = resolve_order(request, PERIOD_COLUMNS, "-start_date")
-    page, querystring = paginate(request, periods.order_by(order))
-
-    context = {
-        "page": page,
-        "headers": build_headers(request, PERIOD_COLUMNS, order),
-        "query": query,
-        "selected_status": selected_status,
-        "statuses": Period.objects.filter(deleted_at__isnull=True)
-        .order_by("status")
-        .values_list("status", flat=True)
-        .distinct(),
-        "querystring": querystring,
-    }
-    return render(request, "planning/period_list.html", context)
-
-
-def render_period_form(request, form, formset, title, period, readonly, can_add_goal):
     return render(
         request,
-        "planning/period_form.html",
-        {
-            "form": form,
-            "formset": formset,
-            "title": title,
-            "period": period,
-            "readonly": readonly,
-            "can_add_goal": can_add_goal and not readonly,
-        },
+        "planning/period_list.html",
+        context
     )
+
+
+
+def render_period_form(
+    request,
+    form,
+    formset,
+    title,
+    period,
+    readonly,
+    can_add_goal,
+):
+    context = get_period_list_context(request)
+
+    context.update({
+        "form": form,
+        "formset": formset,
+        "title": title,
+        "period": period,
+        "readonly": readonly,
+        "can_add_goal": can_add_goal and not readonly,
+        "can_view_goals": request.user.has_perm(
+            "planning_measurements.view_goal"
+        ),
+        "open_modal": True,
+        "modal_action": request.path,
+    })
+
+    return render(
+        request,
+        "planning/period_list.html",
+        context,
+    )
+
 
 
 @access("planning_measurements.add_period")
 def period_create(request):
-    can_add_goal = request.user.has_perm("planning_measurements.add_goal")
+    can_add_goal = (
+        request.user.has_perm(
+            "planning_measurements.add_goal"
+        )
+        and request.user.has_perm(
+            "planning_measurements.view_goal"
+        )
+    )
+
     period = Period()
-    form = PeriodForm(request.POST or None, instance=period)
+
+    form = PeriodForm(
+        request.POST or None,
+        instance=period,
+    )
+
     formset = goal_formset(can_add_goal, 0)(
         request.POST or None,
         instance=period,
         queryset=Goal.objects.none(),
         form_kwargs={"user": request.user},
     )
-    if request.method == "POST" and form.is_valid() and formset.is_valid():
-        form.save()
-        formset.save()
-        messages.success(request, "Período creado correctamente.")
+
+    if (
+        request.method == "POST"
+        and form.is_valid()
+        and formset.is_valid()
+    ):
+        with transaction.atomic():
+            form.save()
+            formset.save()
+
+        messages.success(
+            request,
+            "Período creado correctamente."
+        )
+
         return after_save(
             request,
             "planning:period_list",
             "planning:period_create",
             ("planning:period_edit", period.pk),
         )
+
     return render_period_form(
-        request, form, formset, "Nuevo período", None, False, can_add_goal
+        request,
+        form,
+        formset,
+        "Nuevo período",
+        None,
+        False,
+        can_add_goal,
     )
 
 
 @access("planning_measurements.view_period")
 def period_edit(request, period_id):
-    period = get_object_or_404(Period, pk=period_id, deleted_at__isnull=True)
+    period = get_object_or_404(
+        Period,
+        pk=period_id,
+        deleted_at__isnull=True,
+    )
+
     user = request.user
-    can_change = user.has_perm("planning_measurements.change_period")
-    can_change_goal = user.has_perm("planning_measurements.change_goal")
-    can_add_goal = user.has_perm("planning_measurements.add_goal")
+
+    can_change = (
+        user.has_perm(
+            "planning_measurements.change_period"
+        )
+        and period.status != Period.Status.CLOSED
+    )
+
+    can_view_goals = user.has_perm(
+        "planning_measurements.view_goal"
+    )
+
+    can_change_goal = (
+        can_view_goals
+        and user.has_perm(
+            "planning_measurements.change_goal"
+        )
+    )
+
+    can_add_goal = (
+        can_view_goals
+        and user.has_perm(
+            "planning_measurements.add_goal"
+        )
+    )
 
     if request.method == "POST" and not can_change:
         raise PermissionDenied
 
-    goals = scoped_goals(user).filter(period=period)
-    form = PeriodForm(request.POST or None, instance=period)
-    formset = goal_formset(can_add_goal, goals.count())(
+    goals = (
+        scoped_goals(user).filter(period=period)
+        if can_view_goals
+        else Goal.objects.none()
+    )
+
+    form = PeriodForm(
+        request.POST or None,
+        instance=period,
+    )
+
+    formset = goal_formset(
+        can_add_goal,
+        goals.count(),
+    )(
         request.POST or None,
         instance=period,
         queryset=goals,
         form_kwargs={"user": user},
     )
 
-    # Sin permiso de modificación se muestra en modo solo lectura
     readonly = not can_change
+
     if readonly:
         for field in form.fields.values():
             field.disabled = True
-    if readonly:
-        disable_formset(formset)
-    elif not can_change_goal:
-        disable_formset(formset, only_existing=True)
 
-    if request.method == "POST" and form.is_valid() and formset.is_valid():
-        form.save()
-        if can_change_goal or can_add_goal:
-            formset.save()
-        messages.success(request, "Período modificado correctamente.")
+        disable_formset(formset)
+
+    elif not can_change_goal:
+        disable_formset(
+            formset,
+            only_existing=True,
+        )
+
+    if (
+        request.method == "POST"
+        and formset.is_valid()
+        and form.is_valid()
+    ):
+        with transaction.atomic():
+            # Guarda las metas mientras el período sigue activo.
+            if can_change_goal or can_add_goal:
+                formset.save()
+
+            # Guarda el período al final, incluido su cierre.
+            form.save()
+
+        messages.success(
+            request,
+            "Período modificado correctamente."
+        )
+
         return after_save(
             request,
             "planning:period_list",
             "planning:period_create",
             ("planning:period_edit", period.pk),
         )
+
     return render_period_form(
         request,
         form,
@@ -313,10 +526,12 @@ def period_edit(request, period_id):
     )
 
 
+
 @access("planning_measurements.view_period")
 def period_delete(request, period_id):
     only_superuser(request.user)
     period = get_object_or_404(Period, pk=period_id, deleted_at__isnull=True)
+    ensure_open_period(period)
     if request.method == "POST":
         now = timezone.now()
         period.deleted_at = now  # eliminación lógica
@@ -415,7 +630,12 @@ def goal_create(request):
 def goal_edit(request, goal_id):
     # Una meta de otra delegación no está en el queryset: responde 404
     goal = get_object_or_404(scoped_goals(request.user), pk=goal_id)
-    can_change = request.user.has_perm("planning_measurements.change_goal")
+    can_change = (
+        request.user.has_perm(
+            "planning_measurements.change_goal"
+        )
+        and goal.period.status != Period.Status.CLOSED
+    )
     if request.method == "POST" and not can_change:
         raise PermissionDenied
 
@@ -450,6 +670,7 @@ def goal_edit(request, goal_id):
 def goal_delete(request, goal_id):
     only_superuser(request.user)
     goal = get_object_or_404(scoped_goals(request.user), pk=goal_id)
+    ensure_open_period(goal.period)
     if request.method == "POST":
         goal.deleted_at = timezone.now()  # eliminación lógica
         goal.save(update_fields=["deleted_at", "updated_at"])

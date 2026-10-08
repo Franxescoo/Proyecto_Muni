@@ -161,4 +161,25 @@
         </form>
     </div>
 </div>
+{% include "planning/_goal_modal.html" %}
+
+{% endblock %}
+{% block scripts %}
+
+
+{% if open_modal %}
+{% include "planning/goal_position_script.html" %}
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const el = document.getElementById("goalModal");
+
+    if (el && window.bootstrap) {
+        new bootstrap.Modal(el).show();
+    }
+});
+</script>
+{% endif %}
+
+
 {% endblock %}

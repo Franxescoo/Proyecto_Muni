@@ -115,7 +115,7 @@ class Command(BaseCommand):
         # Limited user
         User = get_user_model()
 
-        group, _ = Group.objects.get_or_create(
+        group, group_created = Group.objects.get_or_create(
             name="Limited User"
         )
 
@@ -137,7 +137,8 @@ class Command(BaseCommand):
             ]
         )
 
-        group.permissions.set(permissions)
+        if group_created:
+            group.permissions.set(permissions)
 
         user, created = User.objects.get_or_create(
             username="evaluator"
@@ -147,7 +148,8 @@ class Command(BaseCommand):
             user.set_password("User123")
             user.save()
 
-        user.groups.add(group)
+        if created:
+            user.groups.add(group)
         user.is_staff = True
         user.save()
 

@@ -21,6 +21,10 @@ class BootstrapMixin:
 
 
 class PeriodForm(BootstrapMixin, forms.ModelForm):
+    status = forms.ChoiceField(
+        label="Estado",
+        choices=Period.Status.choices,
+    )
     class Meta:
         model = Period
         fields = [
@@ -136,9 +140,19 @@ class GoalForm(GoalScopeMixin, forms.ModelForm):
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.fields["period"].queryset = Period.objects.filter(
+        periods = Period.objects.filter(
             deleted_at__isnull=True
         )
+
+        if self.instance.pk:
+            # Al consultar o editar una meta existente,
+            # permite mostrar su período.
+            self.fields["period"].queryset = periods
+        else:
+            # Al crear una meta, muestra solo períodos activos.
+            self.fields["period"].queryset = periods.filter(
+                status=Period.Status.ACTIVE
+            )
 
         self._apply_scope(user)
 

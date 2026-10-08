@@ -77,14 +77,26 @@
                 </p>
                 {% endif %}
 
-                <!-- Subsección de Metas (Formset) -->
-                <h4 class="mt-5 mb-3 fw-bold text-secondary border-bottom pb-2">Metas Asociadas</h4>
-                
                 {{ formset.management_form }}
-                {% if formset.non_form_errors %}
-                <div class="text-danger mb-2">{{ formset.non_form_errors }}</div>
+
+                {% if not can_view_goals and formset.non_form_errors %}
+                <div class="alert alert-danger">
+                    {{ formset.non_form_errors }}
+                </div>
                 {% endif %}
-                
+
+                {% if can_view_goals %}
+                <!-- Subsección de Metas -->
+                <h4 class="mt-5 mb-3 fw-bold text-secondary border-bottom pb-2">
+                    Metas Asociadas
+                </h4>
+
+                {% if formset.non_form_errors %}
+                <div class="alert alert-danger">
+                    {{ formset.non_form_errors }}
+                </div>
+                {% endif %}
+
                 <div class="table-responsive border rounded mb-3">
                     <table class="table table-hover table-striped align-middle mb-0">
                         <thead class="table-dark-brand">
@@ -97,22 +109,34 @@
                                 <th>Ponderador</th>
                             </tr>
                         </thead>
+
                         <tbody id="goals-body">
                             {% for f in formset %}
                             <tr>
-                                {% for hidden in f.hidden_fields %}{{ hidden }}{% endfor %}
                                 {% for field in f.visible_fields %}
                                 <td>
+                                    {% if forloop.first %}
+                                        {% for hidden in f.hidden_fields %}
+                                            {{ hidden }}
+                                        {% endfor %}
+                                    {% endif %}
+
                                     {{ field }}
+
                                     {% if field.errors %}
-                                    <div class="text-danger small mt-1">{{ field.errors }}</div>
+                                    <div class="text-danger small mt-1">
+                                        {{ field.errors }}
+                                    </div>
                                     {% endif %}
                                 </td>
                                 {% endfor %}
                             </tr>
+
                             {% if f.non_field_errors %}
                             <tr>
-                                <td colspan="6" class="text-danger bg-light">{{ f.non_field_errors }}</td>
+                                <td colspan="6" class="text-danger bg-light">
+                                    {{ f.non_field_errors }}
+                                </td>
                             </tr>
                             {% endif %}
                             {% endfor %}
@@ -121,15 +145,30 @@
                 </div>
 
                 {% if can_add_goal %}
-                <button type="button" id="add-goal" class="btn btn-outline-success btn-sm mb-4 fw-semibold">
-                    <i class="bi bi-plus-lg"></i> Agregar otra meta
+                <button type="button"
+                        id="add-goal"
+                        class="btn btn-outline-success btn-sm mb-4 fw-semibold">
+                    <i class="bi bi-plus-lg"></i>
+                    Agregar otra meta
                 </button>
+
                 <template id="empty-row">
                     <tr>
-                        {% for hidden in formset.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
-                        {% for field in formset.empty_form.visible_fields %}<td>{{ field }}</td>{% endfor %}
+                        {% for field in formset.empty_form.visible_fields %}
+                        <td>
+                            {% if forloop.first %}
+                                {% for hidden in formset.empty_form.hidden_fields %}
+                                    {{ hidden }}
+                                {% endfor %}
+                            {% endif %}
+
+                            {{ field }}
+                        </td>
+                        {% endfor %}
                     </tr>
                 </template>
+                {% endif %}
+
                 {% endif %}
 
                 <!-- Botonera de acciones (Guardar / Volver) -->
@@ -157,10 +196,20 @@
 {% if can_add_goal %}
 <script>
 document.getElementById('add-goal').addEventListener('click', function () {
-    const total = document.getElementById('id_{{ formset.prefix }}-TOTAL_FORMS');
-    const index = parseInt(total.value);
-    const html = document.getElementById('empty-row').innerHTML.replaceAll('__prefix__', index);
-    document.getElementById('goals-body').insertAdjacentHTML('beforeend', html);
+    const total = document.getElementById(
+        'id_{{ formset.prefix }}-TOTAL_FORMS'
+    );
+
+    const index = parseInt(total.value, 10);
+
+    const html = document.getElementById(
+        'empty-row'
+    ).innerHTML.replaceAll('__prefix__', index);
+
+    document.getElementById(
+        'goals-body'
+    ).insertAdjacentHTML('beforeend', html);
+
     total.value = index + 1;
 });
 </script>

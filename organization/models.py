@@ -27,6 +27,15 @@ class PositionFunction(BaseModel):
     validity_start = models.DateField()
     validity_end = models.DateField()
 
+    group = models.ForeignKey(
+    "auth.Group",
+    on_delete=models.PROTECT,
+    null=True,
+    blank=True,
+    related_name="positions",
+    verbose_name="Grupo de permisos",
+)
+
     class Meta:
         verbose_name = "Position and Role"
         verbose_name_plural = "Positions and Roles"
@@ -66,3 +75,5 @@ class Employee(BaseModel):
 
     def __str__(self):
         return self.name
+
+    

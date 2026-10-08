@@ -11,6 +11,10 @@
             {{ period.start_date|date:"d-m-Y" }} al {{ period.end_date|date:"d-m-Y" }}?
             {% if goals_count %}<br><small>Tiene {{ goals_count }} meta(s) asociada(s).</small>{% endif %}
         </div>
+        <p class="text-muted">
+            Las metas asociadas se conservarán en la base de datos,
+            pero dejarán de aparecer y de estar disponibles para edición.
+        </p>
         <form method="post">
             {% csrf_token %}
             <div class="row">

@@ -1,83 +1,160 @@
+
 {% extends "planning/base.html" %}
 
 {% block titulo %}{{ title }}{% endblock %}
 
 {% block contenido %}
-<div class="row">
-    <div class="col-10 offset-1">
+
+<div class="container py-4">
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
         <h2>{{ title }}</h2>
 
-        <form method="post">
-            {% csrf_token %}
-
-            {% if form.non_field_errors %}
-            <div class="alert alert-danger">
-                {{ form.non_field_errors }}
-            </div>
-            {% endif %}
-
-            <div class="row">
-                {% for field in form %}
-                <div class="col-md-4 mb-3">
-                    {{ field.label_tag }}
-                    {{ field }}
-
-                    {% if field.help_text %}
-                    <div class="form-text">
-                        {{ field.help_text }}
-                    </div>
-                    {% endif %}
-
-                    <div class="text-danger">
-                        {{ field.errors }}
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-
-            {% if goal %}
-            <p class="text-muted small">
-                Creado: {{ goal.created_at|date:"d-m-Y H:i" }}
-                · Última modificación:
-                {{ goal.updated_at|date:"d-m-Y H:i" }}
-            </p>
-            {% endif %}
-
-            <div class="row mt-3">
-                <div class="col">
-                    <a class="btn btn-dark"
-                       href="{% url 'planning:goal_list' %}">
-                        Volver al listado
-                    </a>
-                </div>
-
-                {% if not readonly %}
-                <div class="col text-end">
-                    <button type="submit"
-                            name="_addanother"
-                            class="btn btn-secondary">
-                        Guardar y añadir otro
-                    </button>
-
-                    <button type="submit"
-                            name="_continue"
-                            class="btn btn-secondary">
-                        Guardar y continuar editando
-                    </button>
-
-                    <button type="submit"
-                            name="_save"
-                            class="btn btn-primary">
-                        Guardar
-                    </button>
-                </div>
-                {% endif %}
-            </div>
-        </form>
+        <a href="{% url 'planning:goal_list' %}"
+           class="btn btn-outline-secondary">
+            Volver al listado
+        </a>
     </div>
+
+    <!-- MODAL BOOTSTRAP -->
+    <div class="modal fade"
+         id="goalModal"
+         tabindex="-1"
+         aria-labelledby="goalModalLabel"
+         aria-hidden="true">
+
+        <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+
+            <div class="modal-content">
+
+                <form method="post" novalidate>
+                    {% csrf_token %}
+
+                    <!-- ENCABEZADO -->
+                    <div class="modal-header">
+
+                        <h5 class="modal-title" id="goalModalLabel">
+                            {{ title }}
+                        </h5>
+
+                        <a href="{% url 'planning:goal_list' %}"
+                           class="btn-close"
+                           aria-label="Cerrar">
+                        </a>
+
+                    </div>
+
+                    <!-- CUERPO DEL FORMULARIO -->
+                    <div class="modal-body">
+
+                        {% if form.non_field_errors %}
+                        <div class="alert alert-danger">
+                            {{ form.non_field_errors }}
+                        </div>
+                        {% endif %}
+
+                        <div class="row">
+
+                            {% for field in form %}
+
+                            <div class="col-md-4 mb-3">
+
+                                {{ field.label_tag }}
+
+                                {{ field }}
+
+                                {% if field.help_text %}
+                                <div class="form-text">
+                                    {{ field.help_text }}
+                                </div>
+                                {% endif %}
+
+                                <div class="text-danger">
+                                    {{ field.errors }}
+                                </div>
+
+                            </div>
+
+                            {% endfor %}
+
+                        </div>
+
+                        <!-- INFORMACIÓN DE LA META -->
+                        {% if goal %}
+                        <p class="text-muted small">
+                            Creado:
+                            {{ goal.created_at|date:"d-m-Y H:i" }}
+                            · Última modificación:
+                            {{ goal.updated_at|date:"d-m-Y H:i" }}
+                        </p>
+                        {% endif %}
+
+                    </div>
+
+                    <!-- BOTONES -->
+                    <div class="modal-footer">
+
+                        <a href="{% url 'planning:goal_list' %}"
+                           class="btn btn-dark">
+                            Volver al listado
+                        </a>
+
+                        {% if not readonly %}
+
+                        <button type="submit"
+                                name="_addanother"
+                                class="btn btn-secondary">
+                            Guardar y añadir otro
+                        </button>
+
+                        <button type="submit"
+                                name="_continue"
+                                class="btn btn-secondary">
+                            Guardar y continuar editando
+                        </button>
+
+                        <button type="submit"
+                                name="_save"
+                                class="btn btn-primary">
+                            Guardar
+                        </button>
+
+                        {% endif %}
+
+                    </div>
+
+                </form>
+
+            </div>
+        </div>
+    </div>
+
 </div>
+
 {% endblock %}
 
 {% block scripts %}
+
+<!-- SCRIPT ORIGINAL: CARGA AUTOMÁTICA DEL CARGO -->
 {% include "planning/goal_position_script.html" %}
+
+<!-- ABRIR MODAL AUTOMÁTICAMENTE -->
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+
+    const element = document.getElementById("goalModal");
+
+    if (element && window.bootstrap) {
+
+        const modal = new bootstrap.Modal(element, {
+            backdrop: "static",
+            keyboard: false
+        });
+
+        modal.show();
+    }
+
+});
+</script>
+
 {% endblock %}

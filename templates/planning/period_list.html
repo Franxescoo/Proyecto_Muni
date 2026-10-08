@@ -1,3 +1,4 @@
+
 {% extends "planning/base.html" %}
 
 {% block titulo %}Períodos - La Serena{% endblock %}
@@ -19,29 +20,50 @@
         font-size: 1.8rem;
     }
 
-    .btn-primary { background-color: var(--color-rojo-brand); border-color: var(--color-rojo-brand); color: white; }
-    .btn-primary:hover { background-color: #800711; border-color: #800711; color: white; }
-    
-    .btn-success { background-color: var(--color-verde-btn); border-color: var(--color-verde-btn); color: white; }
-    .btn-success:hover { background-color: #0e7044; border-color: #0e7044; color: white; }
-
-    .card-header-brand { background-color: var(--color-rojo-brand); color: white; font-weight: 600; }
-    
-    /* El CUADRO del encabezado es ROJO */
-    .table-dark-brand { 
-        background-color: var(--color-rojo-brand) !important; 
+    .btn-primary {
+        background-color: var(--color-rojo-brand);
+        border-color: var(--color-rojo-brand);
+        color: white;
     }
-    
-    /* Las LETRAS son NEGRAS y NO cambian al apretarlas */
+
+    .btn-primary:hover {
+        background-color: #800711;
+        border-color: #800711;
+        color: white;
+    }
+
+    .btn-success {
+        background-color: var(--color-verde-btn);
+        border-color: var(--color-verde-btn);
+        color: white;
+    }
+
+    .btn-success:hover {
+        background-color: #0e7044;
+        border-color: #0e7044;
+        color: white;
+    }
+
+    .card-header-brand {
+        background-color: var(--color-rojo-brand);
+        color: white;
+        font-weight: 600;
+    }
+
+    /* Encabezado de tabla */
+    .table-dark-brand {
+        background-color: var(--color-rojo-brand) !important;
+    }
+
     .table-dark-brand th,
     .table-dark-brand th a,
-    .table-dark-brand th span { 
-        color: #000000 !important; 
-        font-weight: bold; 
+    .table-dark-brand th span {
+        color: #000000 !important;
+        font-weight: bold;
         text-decoration: none;
     }
 
-    /* Estilos para la lista de filtros laterales */
+    /* Filtros laterales */
     .filtro-lista a {
         color: #495057;
         text-decoration: none;
@@ -50,25 +72,82 @@
         border-radius: 4px;
         transition: background-color 0.2s;
     }
+
     .filtro-lista a:hover {
         background-color: #e9ecef;
     }
+
     .filtro-lista a.fw-bold {
         background-color: var(--color-rojo-brand);
         color: white;
     }
+    
+    /* Ajustar el modal de períodos a la pantalla */
+    #periodModal .modal-dialog {
+        max-height: calc(100dvh - 2rem);
+        margin-top: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    #periodModal .modal-content {
+        max-height: calc(100dvh - 2rem);
+        overflow: hidden;
+    }
+
+    #periodModal .modal-body {
+        overflow-y: auto;
+        min-height: 0;
+        overscroll-behavior: contain;
+    }
+    
+    /* Modal de períodos: altura y desplazamiento */
+    #periodModal .period-dialog {
+        margin: 1rem auto;
+        height: calc(100dvh - 2rem);
+        max-height: calc(100dvh - 2rem);
+    }
+
+    #periodModal .modal-content {
+        height: 100%;
+        max-height: 100%;
+        overflow: hidden;
+    }
+
+    #periodModal .period-modal-form {
+        display: flex;
+        flex-direction: column;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    #periodModal .modal-header,
+    #periodModal .modal-footer {
+        flex-shrink: 0;
+    }
+
+    #periodModal .modal-body {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+
 </style>
 {% endblock %}
 
 {% block contenido %}
-<!-- TÍTULO DE LA SECCIÓN Y BOTÓN AGREGAR -->
+
+<!-- TÍTULO Y BOTÓN AGREGAR -->
 <div class="row mb-4 align-items-center">
     <div class="col-8">
         <h1 class="titulo-seccion">Listado de Períodos</h1>
     </div>
+
     <div class="col-4 text-end">
         {% if perms.planning_measurements.add_period %}
-        <a class="btn btn-success px-4 fw-semibold shadow-sm" href="{% url 'planning:period_create' %}">
+        <a class="btn btn-success px-4 fw-semibold shadow-sm"
+           href="{% url 'planning:period_create' %}">
             <i class="bi bi-plus-lg"></i> Agregar Período
         </a>
         {% endif %}
@@ -76,100 +155,266 @@
 </div>
 
 <div class="row">
-    <!-- COLUMNA PRINCIPAL: BUSCADOR Y TABLA -->
+
+    <!-- COLUMNA PRINCIPAL -->
     <div class="col-md-9">
         <div class="bg-white p-3 rounded border shadow-sm mb-4">
-            
-            <!-- Buscador -->
+
+            <!-- BUSCADOR -->
             <form method="get" class="row g-2 mb-4">
                 <div class="col-md-9">
-                    <input type="text" name="q" value="{{ query }}" class="form-control bg-light" placeholder="Buscar por estado o versión de parámetros">
+                    <input type="text"
+                           name="q"
+                           value="{{ query }}"
+                           class="form-control bg-light"
+                           placeholder="Buscar por estado o versión de parámetros">
                 </div>
+
                 <div class="col-md-3">
-                    {% if selected_status %}<input type="hidden" name="status" value="{{ selected_status }}">{% endif %}
-                    <button type="submit" class="btn btn-primary w-100 fw-semibold">Buscar</button>
+                    {% if selected_status %}
+                    <input type="hidden"
+                           name="status"
+                           value="{{ selected_status }}">
+                    {% endif %}
+
+                    <button type="submit"
+                            class="btn btn-primary w-100 fw-semibold">
+                        Buscar
+                    </button>
                 </div>
             </form>
 
-            <!-- Tabla de Datos -->
+            <!-- TABLA DE PERÍODOS -->
             <form method="post">
                 {% csrf_token %}
+
                 {% if user.is_superuser %}
                 <div class="row g-2 mb-3 align-items-center">
                     <div class="col-auto">
-                        <select name="action" class="form-select form-select-sm">
+                        <select name="action"
+                                class="form-select form-select-sm">
                             <option value="">- Acción -</option>
-                            <option value="delete_selected">Eliminar seleccionados</option>
+                            <option value="delete_selected">
+                                Eliminar seleccionados
+                            </option>
                         </select>
                     </div>
-                    <div class="col-auto"><button type="submit" class="btn btn-outline-secondary btn-sm">Ejecutar</button></div>
+
+                    <div class="col-auto">
+                        <button type="submit"
+                                class="btn btn-outline-secondary btn-sm">
+                            Ejecutar
+                        </button>
+                    </div>
                 </div>
                 {% endif %}
 
                 <div class="table-responsive">
                     <table class="table table-hover table-striped border mb-0">
+
                         <thead class="table-dark-brand">
                             <tr>
-                                {% if user.is_superuser %}<th width="40"><input type="checkbox" class="form-check-input" onclick="document.querySelectorAll('.sel').forEach(c => c.checked = this.checked)"></th>{% endif %}
+                                {% if user.is_superuser %}
+                                <th width="40">
+                                    <input type="checkbox"
+                                           class="form-check-input"
+                                           onclick="document.querySelectorAll('.sel').forEach(c => c.checked = this.checked)">
+                                </th>
+                                {% endif %}
+
                                 {% include "planning/_headers.html" %}
                             </tr>
                         </thead>
+
                         <tbody>
                             {% for period in page %}
                             <tr>
-                                {% if user.is_superuser %}<td><input type="checkbox" class="form-check-input sel" name="_selected_action" value="{{ period.pk }}"></td>{% endif %}
-                                <td><a href="{% url 'planning:period_edit' period.period_id %}" class="fw-bold text-decoration-none">{{ period.period_id }}</a></td>
+
+                                <!-- SELECCIÓN PARA ELIMINACIÓN MÚLTIPLE -->
+                                {% if user.is_superuser %}
+                                <td>
+                                    {% if period.status != "Closed" %}
+                                    <input type="checkbox"
+                                           class="form-check-input sel"
+                                           name="_selected_action"
+                                           value="{{ period.pk }}">
+                                    {% endif %}
+                                </td>
+                                {% endif %}
+
+                                <td>
+                                    <a href="{% url 'planning:period_edit' period.period_id %}"
+                                       class="fw-bold text-decoration-none">
+                                        {{ period.period_id }}
+                                    </a>
+                                </td>
+
                                 <td>{{ period.start_date|date:"d-m-Y" }}</td>
                                 <td>{{ period.end_date|date:"d-m-Y" }}</td>
                                 <td>{{ period.computable_days }}</td>
-                                <td><span class="badge bg-secondary">{{ period.status }}</span></td>
+
+                                <td>
+                                    <span class="badge bg-secondary">
+                                        {{ period.status }}
+                                    </span>
+                                </td>
+
                                 <td>{{ period.parameters_version }}</td>
                                 <td>{{ period.created_at|date:"d-m-Y H:i" }}</td>
+
+                                <!-- ACCIONES -->
                                 <td>
                                     <div class="btn-group btn-group-sm">
-                                        <a class="btn btn-outline-info fw-semibold" href="{% url 'planning:goal_list' %}?period={{ period.period_id }}">Ver metas</a>
-                                        <a class="btn btn-outline-warning text-dark fw-semibold" href="{% url 'planning:period_edit' period.period_id %}">{% if perms.planning_measurements.change_period %}Modificar{% else %}Ver{% endif %}</a>
-                                        {% if user.is_superuser %}
-                                        <a class="btn btn-outline-danger" href="{% url 'planning:period_delete' period.period_id %}">Eliminar</a>
+
+                                        <a class="btn btn-outline-info fw-semibold"
+                                           href="{% url 'planning:goal_list' %}?period={{ period.period_id }}">
+                                            Ver metas
+                                        </a>
+
+                                        {% if period.status == "Closed" %}
+
+                                        <!-- PERÍODO CERRADO: SOLO LECTURA -->
+                                        <a class="btn btn-outline-secondary"
+                                           href="{% url 'planning:period_edit' period.period_id %}">
+                                            Ver
+                                        </a>
+
+                                        {% else %}
+
+                                        <!-- PERÍODO ABIERTO -->
+                                        {% if perms.planning_measurements.change_period %}
+
+                                        <a class="btn btn-outline-warning text-dark fw-semibold"
+                                           href="{% url 'planning:period_edit' period.period_id %}">
+                                            Modificar
+                                        </a>
+
+                                        {% else %}
+
+                                        <a class="btn btn-outline-secondary"
+                                           href="{% url 'planning:period_edit' period.period_id %}">
+                                            Ver
+                                        </a>
+
                                         {% endif %}
+
+                                        {% if user.is_superuser %}
+                                        <a class="btn btn-outline-danger"
+                                           href="{% url 'planning:period_delete' period.period_id %}">
+                                            Eliminar
+                                        </a>
+                                        {% endif %}
+
+                                        {% endif %}
+
                                     </div>
                                 </td>
                             </tr>
+
                             {% empty %}
-                            <tr><td colspan="9" class="text-center py-5 text-muted">No hay períodos para mostrar.</td></tr>
+                            <tr>
+                                <td colspan="9"
+                                    class="text-center py-5 text-muted">
+                                    No hay períodos para mostrar.
+                                </td>
+                            </tr>
                             {% endfor %}
                         </tbody>
+
                     </table>
                 </div>
             </form>
-            
+
+            <!-- PAGINACIÓN -->
             <div class="d-flex justify-content-between align-items-center mt-3">
-                <p class="text-muted mb-0 small">{{ page.paginator.count }} período(s) encontrado(s)</p>
+                <p class="text-muted mb-0 small">
+                    {{ page.paginator.count }} período(s) encontrado(s)
+                </p>
+
                 {% include "planning/_pagination.html" %}
             </div>
+
         </div>
     </div>
 
     <!-- COLUMNA LATERAL: FILTROS -->
     <div class="col-md-3">
         <div class="card shadow-sm border-0">
+
             <div class="card-header card-header-brand">
                 <i class="bi bi-funnel"></i> Filtro Avanzado
             </div>
+
             <div class="card-body bg-light">
-                <div class="fw-bold mb-2 text-secondary small text-uppercase">Por estado</div>
+
+                <div class="fw-bold mb-2 text-secondary small text-uppercase">
+                    Por estado
+                </div>
+
                 <ul class="list-unstyled filtro-lista">
+
                     <li>
-                        <a href="?{% if query %}q={{ query }}{% endif %}" class="{% if not selected_status %}fw-bold{% endif %}">Todos</a>
+                        <a href="?{% if query %}q={{ query }}{% endif %}"
+                           class="{% if not selected_status %}fw-bold{% endif %}">
+                            Todos
+                        </a>
                     </li>
+
                     {% for status in statuses %}
                     <li>
-                        <a href="?status={{ status|urlencode }}{% if query %}&q={{ query }}{% endif %}" class="{% if status == selected_status %}fw-bold{% endif %}">{{ status }}</a>
+                        <a href="?status={{ status|urlencode }}{% if query %}&q={{ query }}{% endif %}"
+                           class="{% if status == selected_status %}fw-bold{% endif %}">
+                            {{ status }}
+                        </a>
                     </li>
                     {% endfor %}
+
                 </ul>
             </div>
         </div>
     </div>
+
 </div>
+{% include "planning/_period_modal.html" %}
+
+{% endblock %}
+
+{% block scripts %}
+
+{% if open_modal %}
+{% include "planning/goal_position_script.html" %}
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+
+    const el = document.getElementById("periodModal");
+
+    if (el && window.bootstrap) {
+        new bootstrap.Modal(el).show();
+    }
+
+    const add = document.getElementById("add-goal");
+
+    if (add) {
+        add.addEventListener("click", function () {
+
+            const total = document.getElementById(
+                "id_{{ formset.prefix }}-TOTAL_FORMS"
+            );
+
+            const index = parseInt(total.value, 10);
+
+            const html = document.getElementById("empty-row")
+                .innerHTML.replaceAll("__prefix__", index);
+
+            document.getElementById("goals-body")
+                .insertAdjacentHTML("beforeend", html);
+
+            total.value = index + 1;
+        });
+    }
+});
+</script>
+{% endif %}
+
 {% endblock %}

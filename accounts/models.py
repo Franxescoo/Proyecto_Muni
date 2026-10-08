@@ -15,6 +15,15 @@ class UserProfile(BaseModel):
     employee_code = models.CharField(max_length=30, unique=True)
     phone = models.CharField(max_length=20, blank=True)
 
+    employee = models.OneToOneField(
+    "organization.Employee",
+    on_delete=models.PROTECT,
+    null=True,
+    blank=True,
+    related_name="user_profile",
+    verbose_name="Funcionario",
+)
+
     def __str__(self):
         return self.user.username
 

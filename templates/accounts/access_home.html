@@ -1,0 +1,110 @@
+{% extends "planning/base.html" %}
+
+{% block titulo %}Gestión de accesos{% endblock %}
+
+{% block contenido %}
+<h2 class="mb-4">Gestión de accesos</h2>
+
+<div class="d-flex flex-wrap gap-2 mb-4">
+    <a class="btn btn-primary"
+       href="{% url 'accounts:group_create' %}">
+        Crear grupo
+    </a>
+    <a class="btn btn-primary"
+       href="{% url 'accounts:position_create' %}">
+        Crear cargo
+    </a>
+    <a class="btn btn-primary"
+       href="{% url 'accounts:employee_create' %}">
+        Crear funcionario
+    </a>
+    <a class="btn btn-success"
+       href="{% url 'accounts:account_create' %}">
+        Crear cuenta
+    </a>
+</div>
+
+<h4>Grupos</h4>
+<ul class="list-group mb-4">
+    {% for group in groups %}
+    <li class="list-group-item d-flex justify-content-between">
+        {{ group.name }}
+        <a href="{% url 'accounts:group_edit' group.pk %}">
+            Editar permisos
+        </a>
+    </li>
+    {% empty %}
+    <li class="list-group-item">No hay grupos.</li>
+    {% endfor %}
+</ul>
+
+<h4>Cargos</h4>
+<ul class="list-group mb-4">
+    {% for position in positions %}
+    <li class="list-group-item d-flex justify-content-between">
+        <span>{{ position.position_name }}</span>
+        <a href="{% url 'accounts:position_edit' position.pk %}">
+            Editar
+        </a>
+    </li>
+    {% empty %}
+    <li class="list-group-item">No hay cargos.</li>
+    {% endfor %}
+</ul>
+
+<h4>Funcionarios</h4>
+<ul class="list-group mb-4">
+    {% for employee in employees %}
+    <li class="list-group-item d-flex justify-content-between">
+        <span>
+            {{ employee.name }} — {{ employee.position }}
+        </span>
+        <a href="{% url 'accounts:employee_edit' employee.pk %}">
+            Editar
+        </a>
+    </li>
+    {% empty %}
+    <li class="list-group-item">No hay funcionarios.</li>
+    {% endfor %}
+</ul>
+
+<h4>Cuentas de usuario</h4>
+
+<ul class="list-group mb-4">
+    {% for account in users %}
+    <li class="list-group-item d-flex justify-content-between">
+        <span>
+            {{ account.username }}
+            {% if not account.is_active %}
+                — Inactiva
+            {% endif %}
+        </span>
+
+        <a href="{% url 'accounts:account_edit' account.pk %}">
+            Editar cuenta y grupos
+        </a>
+    </li>
+    {% empty %}
+    <li class="list-group-item">
+        No hay cuentas de trabajadores.
+    </li>
+    {% endfor %}
+</ul>
+
+<h4>Cuentas con perfil</h4>
+<ul class="list-group mb-4">
+    {% for profile in profiles %}
+    <li class="list-group-item d-flex justify-content-between">
+        <span>
+            {{ profile.user.username }}
+            — {{ profile.employee|default:"Sin funcionario" }}
+        </span>
+        <a href="{% url 'accounts:profile_link' profile.pk %}">
+            Vincular funcionario
+        </a>
+    </li>
+    {% empty %}
+    <li class="list-group-item">No hay perfiles.</li>
+    {% endfor %}
+</ul>
+{% endblock %}

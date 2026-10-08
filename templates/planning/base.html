@@ -11,5 +11,11 @@
     {% if perms.planning_measurements.view_goal %}
     <li class="nav-item"><a class="nav-link" href="{% url 'planning:goal_list' %}">Metas</a></li>
     {% endif %}
+    {% if user.is_superuser %}
+    <a class="nav-link"
+    href="{% url 'accounts:access_home' %}">
+        Gestión de accesos
+    </a>
+    {% endif %}
 </ul>
 {% endblock %}
