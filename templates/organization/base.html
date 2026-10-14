@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block titulo %}Organización · Proyecto Muni{% endblock %}
+
+{% block estilos %}
+<style>
+    :root {
+        --organization-brand: #a60a17;
+        --organization-brand-dark: #800711;
+        --organization-success: #138d56;
+    }
+
+    .organization-title {
+        border-left: 6px solid var(--organization-brand);
+        color: #202124;
+        font-size: 1.75rem;
+        font-weight: 700;
+        padding-left: .75rem;
+    }
+
+    .organization-card {
+        background: #fff;
+        border: 1px solid #e2e6ea;
+        border-radius: .5rem;
+        box-shadow: 0 .125rem .25rem rgba(0, 0, 0, .06);
+    }
+
+    .organization-card .card-header {
+        background: var(--organization-brand);
+        color: #fff;
+        font-weight: 600;
+    }
+
+    .btn-organization {
+        background: var(--organization-brand);
+        border-color: var(--organization-brand);
+        color: #fff;
+    }
+
+    .btn-organization:hover,
+    .btn-organization:focus {
+        background: var(--organization-brand-dark);
+        border-color: var(--organization-brand-dark);
+        color: #fff;
+    }
+
+    .btn-organization-success {
+        background: var(--organization-success);
+        border-color: var(--organization-success);
+        color: #fff;
+    }
+
+    .btn-organization-success:hover,
+    .btn-organization-success:focus {
+        background: #0e7044;
+        border-color: #0e7044;
+        color: #fff;
+    }
+
+    .organization-table thead th {
+        background: var(--organization-brand);
+        color: #fff;
+        font-weight: 600;
+        vertical-align: middle;
+        white-space: nowrap;
+    }
+
+    .organization-empty {
+        color: #6c757d;
+        padding: 3rem 1rem;
+        text-align: center;
+    }
+</style>
+{% endblock %}
+
+{% block submenu %}
+<ul class="nav nav-pills mb-4 gap-1">
+    {% if perms.organization.view_employee %}
+    <li class="nav-item"><a class="nav-link" href="{% url 'organization:employee_list' %}">Funcionarios</a></li>
+    {% endif %}
+    {% if perms.organization.view_delegation %}
+    <li class="nav-item"><a class="nav-link" href="{% url 'organization:delegation_list' %}">Delegaciones</a></li>
+    {% endif %}
+    {% if perms.organization.view_positionfunction %}
+    <li class="nav-item"><a class="nav-link" href="{% url 'organization:position_list' %}">Cargos y funciones</a></li>
+    {% endif %}
+</ul>
+{% endblock %}

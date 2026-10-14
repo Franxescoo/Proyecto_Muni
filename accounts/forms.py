@@ -11,6 +11,7 @@ from organization.models import (
 )
 
 from .models import UserProfile
+from .models import RoleScope
 
 
 class BootstrapMixin:
@@ -68,6 +69,73 @@ class GroupForm(BootstrapMixin, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.apply_bootstrap()
+
+
+class RoleForm(BootstrapMixin, forms.ModelForm):
+    """Edita un rol, sus permisos y su alcance por delegación."""
+
+    permissions = GroupForm.base_fields["permissions"]
+    all_delegations = forms.BooleanField(
+        label="Acceso a todas las delegaciones",
+        required=False,
+        help_text=(
+            "Usa esta opción solo para el rol Administrador General."
+        ),
+    )
+    delegations = forms.ModelMultipleChoiceField(
+        label="Delegaciones autorizadas",
+        queryset=Delegation.objects.none(),
+        widget=forms.CheckboxSelectMultiple,
+        required=False,
+        help_text=(
+            "Si no seleccionas una, la cuenta queda limitada a la "
+            "delegación de su funcionario."
+        ),
+    )
+
+    class Meta:
+        model = Group
+        fields = ["name", "permissions"]
+        labels = {"name": "Nombre del rol"}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["delegations"].queryset = Delegation.objects.filter(
+            deleted_at__isnull=True
+        ).order_by("name")
+
+        if self.instance and self.instance.pk:
+            try:
+                scope = self.instance.role_scope
+            except RoleScope.DoesNotExist:
+                scope = None
+
+            if scope is not None:
+                self.fields["all_delegations"].initial = scope.all_delegations
+                self.fields["delegations"].initial = scope.delegations.all()
+
+        self.apply_bootstrap()
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if (
+            not cleaned_data.get("all_delegations")
+            and not cleaned_data.get("delegations")
+        ):
+            # No es un error: se usa la delegación del funcionario.
+            return cleaned_data
+        return cleaned_data
+
+    def save(self, commit=True):
+        group = super().save(commit=commit)
+        if not commit:
+            return group
+
+        scope, _ = RoleScope.objects.get_or_create(group=group)
+        scope.all_delegations = self.cleaned_data["all_delegations"]
+        scope.save(update_fields=["all_delegations", "updated_at"])
+        scope.delegations.set(self.cleaned_data["delegations"])
+        return group
 
 
 class PositionForm(BootstrapMixin, forms.ModelForm):
@@ -159,11 +227,11 @@ class AccountCreateForm(BootstrapMixin, UserCreationForm):
     )
 
     groups = forms.ModelMultipleChoiceField(
-        label="Grupos",
+        label="Roles",
         queryset=Group.objects.order_by("name"),
         widget=forms.CheckboxSelectMultiple,
         required=True,
-        help_text="Puedes seleccionar uno o varios grupos.",
+        help_text="Selecciona el rol que definirá sus permisos y alcance.",
     )
 
     class Meta:
@@ -218,13 +286,12 @@ class AccountEditForm(BootstrapMixin, forms.ModelForm):
     """Edita una cuenta y los grupos asignados."""
 
     groups = forms.ModelMultipleChoiceField(
-        label="Grupos",
+        label="Roles",
         queryset=Group.objects.order_by("name"),
         widget=forms.CheckboxSelectMultiple,
         required=False,
         help_text=(
-            "Puedes seleccionar varios grupos. Sin grupos, "
-            "la cuenta no recibe permisos mediante grupos."
+            "Sin roles, la cuenta no recibe permisos."
         ),
     )
 

@@ -17,8 +17,10 @@ from .forms import (
     GroupForm,
     PositionForm,
     ProfileLinkForm,
+    RoleForm,
 )
 from .models import UserProfile
+from .access import is_general_administrator
 from .services import sync_employee, sync_position, sync_profile
 
 
@@ -27,7 +29,7 @@ def administrator_required(view):
 
     @wraps(view)
     def wrapped(request, *args, **kwargs):
-        if not request.user.is_superuser:
+        if not is_general_administrator(request.user):
             raise PermissionDenied(
                 "Solo el administrador puede gestionar accesos."
             )
@@ -39,30 +41,15 @@ def administrator_required(view):
 
 @administrator_required
 def access_home(request):
-    """Muestra grupos, cargos, funcionarios y cuentas."""
+    """Muestra roles y cuentas para gestión de acceso."""
 
     return render(
         request,
         "accounts/access_home.html",
         {
-            "groups": Group.objects.order_by("name"),
-            "positions": PositionFunction.objects.filter(
-                deleted_at__isnull=True
-            ).order_by("position_name"),
-            "employees": (
-                Employee.objects.filter(
-                    deleted_at__isnull=True
-                )
-                .select_related("position", "delegation")
-                .order_by("name")
-            ),
-            "profiles": (
-                UserProfile.objects.filter(
-                    deleted_at__isnull=True
-                )
-                .select_related("user", "employee")
-                .order_by("user__username")
-            ),
+            "roles": Group.objects.order_by("name").select_related(
+                "role_scope"
+            ).prefetch_related("role_scope__delegations"),
             "users": get_user_model().objects.filter(
                 is_superuser=False
             ).order_by("username"),
@@ -70,7 +57,13 @@ def access_home(request):
     )
 
 
-def save_model_form(request, form, title, on_save=None):
+def save_model_form(
+    request,
+    form,
+    title,
+    on_save=None,
+    template_name="accounts/manage_form.html",
+):
     """Guarda el formulario y sus relaciones en una transacción."""
 
     if request.method == "POST" and form.is_valid():
@@ -96,7 +89,7 @@ def save_model_form(request, form, title, on_save=None):
 
     return render(
         request,
-        "accounts/manage_form.html",
+        template_name,
         {
             "form": form,
             "title": title,
@@ -106,7 +99,7 @@ def save_model_form(request, form, title, on_save=None):
 
 @administrator_required
 def group_form(request, pk=None):
-    """Crea o edita un grupo y sus permisos."""
+    """Crea o edita un rol y sus permisos."""
 
     group = (
         get_object_or_404(Group, pk=pk)
@@ -114,7 +107,7 @@ def group_form(request, pk=None):
         else None
     )
 
-    form = GroupForm(
+    form = RoleForm(
         request.POST if request.method == "POST" else None,
         instance=group,
     )
@@ -122,7 +115,8 @@ def group_form(request, pk=None):
     return save_model_form(
         request,
         form,
-        "Editar grupo" if pk is not None else "Crear grupo",
+        "Editar rol" if pk is not None else "Crear rol",
+        template_name="accounts/role_form.html",
     )
 
 

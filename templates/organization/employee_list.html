@@ -1,0 +1,61 @@
+{% extends "organization/base.html" %}
+
+{% block titulo %}Funcionarios · Organización{% endblock %}
+
+{% block contenido %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <h1 class="organization-title mb-0">Funcionarios</h1>
+    {% if perms.organization.add_employee %}
+    <a class="btn btn-organization-success fw-semibold" href="{% url 'organization:employee_create' %}">
+        <i class="bi bi-plus-lg"></i> Agregar funcionario
+    </a>
+    {% endif %}
+</div>
+
+<section class="organization-card p-3 p-md-4">
+    <form method="get" class="row g-2 mb-4">
+        <div class="col-md-9">
+            <label class="visually-hidden" for="employee-search">Buscar funcionario</label>
+            <input id="employee-search" class="form-control bg-light" name="q" value="{{ query }}" placeholder="Buscar por nombre, delegación o cargo">
+        </div>
+        <div class="col-md-3">
+            <button class="btn btn-organization w-100 fw-semibold" type="submit"><i class="bi bi-search"></i> Buscar</button>
+        </div>
+    </form>
+
+    <div class="table-responsive">
+        <table class="table table-hover align-middle organization-table mb-0">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Nombre</th>
+                    <th>Delegación</th>
+                    <th>Cargo</th>
+                    <th>Estado</th>
+                    <th class="text-end">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for employee in employees %}
+                <tr>
+                    <td>{{ employee.employee_id }}</td>
+                    <td class="fw-semibold">{{ employee.name }}</td>
+                    <td>{{ employee.delegation }}</td>
+                    <td>{{ employee.position }}</td>
+                    <td><span class="badge text-bg-secondary">{{ employee.status }}</span></td>
+                    <td class="text-end">
+                        {% if perms.organization.change_employee %}
+                        <a class="btn btn-sm btn-outline-warning" href="{% url 'organization:employee_edit' employee.pk %}">Editar</a>
+                        {% else %}
+                        <span class="text-muted small">Sin acciones disponibles</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6" class="organization-empty"><i class="bi bi-people fs-3 d-block mb-2"></i>No hay funcionarios para mostrar.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}
