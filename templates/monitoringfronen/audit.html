@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block titulo %}Auditoría · Monitoreo y trazabilidad{% endblock %}
+
+{% block estilos %}
+<style>
+    .monitor-shell { max-width: 1480px; margin: 0 auto; }
+    .monitor-hero { background: linear-gradient(135deg, #a60a17, #760710); color: #fff; border-radius: .65rem; padding: 1.5rem 1.75rem; box-shadow: 0 6px 18px rgba(166, 10, 23, .18); }
+    .monitor-hero h1 { font-size: clamp(1.35rem, 2vw, 1.85rem); }
+    .monitor-hero p { color: rgba(255,255,255,.78); }
+    .section-card { background: #fff; border: 1px solid #e5e7eb; border-radius: .65rem; box-shadow: 0 3px 12px rgba(24, 33, 44, .04); }
+    .metric { border-left: 4px solid #a60a17; padding: 1rem 1.1rem; }
+    .metric .value { font-size: 1.55rem; font-weight: 700; color: #23272b; }
+    .metric .label { color: #6c757d; font-size: .82rem; }
+    .table thead th { color: #6c757d; font-size: .72rem; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
+    .table tbody td { vertical-align: middle; }
+    .event-icon { width: 2.25rem; height: 2.25rem; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: #fbe1e3; color: #a60a17; }
+    .filter-label { color: #56616b; font-size: .78rem; font-weight: 600; margin-bottom: .35rem; }
+</style>
+{% endblock %}
+
+{% block submenu %}
+<ul class="nav nav-pills mb-3">
+    <li class="nav-item"><a class="nav-link" href="{% url 'monitoring:indicator_list' %}">Indicadores</a></li>
+    <li class="nav-item"><a class="nav-link" href="{% url 'monitoring:commitment_list' %}">Compromisos</a></li>
+    <li class="nav-item"><a class="nav-link active" href="{% url 'monitoring:audit_list' %}">Auditoría</a></li>
+</ul>
+{% endblock %}
+
+{% block contenido %}
+<div class="monitor-shell pb-4" id="auditoria">
+    <section class="monitor-hero mb-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
+        <div><div class="small text-uppercase fw-semibold opacity-75 mb-2">Monitoreo y trazabilidad</div><h1 class="mb-2 fw-bold">Registro de auditoría</h1><p class="mb-0">Consulta el historial de eventos y cambios del sistema.</p></div>
+        <i class="bi bi-shield-check display-5 opacity-75" aria-hidden="true"></i>
+    </section>
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-md-6"><div class="section-card metric h-100"><div class="value">{{ total_audits|default:"0" }}</div><div class="label">Eventos registrados</div></div></div>
+        <div class="col-12 col-md-6"><div class="section-card metric h-100"><div class="value text-muted">{{ last_audit_date|date:"d/m/Y H:i"|default:"—" }}</div><div class="label">Última actualización</div></div></div>
+    </div>
+    <section class="section-card p-3 p-lg-4">
+        <div class="mb-3"><h2 class="h5 mb-1 fw-bold">Historial de actividad</h2><p class="text-muted small mb-0">Cada evento conserva quién realizó la acción y sobre qué entidad.</p></div>
+        <form class="row g-3 align-items-end mb-3" method="get">
+            <div class="col-12 col-md-4"><label class="filter-label" for="audit-search">Buscar evento o entidad</label><input id="audit-search" name="q" value="{{ request.GET.q }}" class="form-control" placeholder="Ej. actualización, meta..." type="search"></div>
+            <div class="col-12 col-md-3"><label class="filter-label" for="audit-date">Desde</label><input id="audit-date" name="date_from" value="{{ request.GET.date_from }}" class="form-control" type="date"></div>
+            <div class="col-12 col-md-2"><button class="btn btn-dark w-100" type="submit"><i class="bi bi-funnel me-1"></i>Filtrar</button></div>
+        </form>
+        <div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr><th>Evento</th><th>Usuario</th><th>Entidad</th><th>Identificador</th><th>Fecha</th><th class="text-end">Detalle</th></tr></thead><tbody>
+            {% for audit in audits %}
+            <tr><td><span class="event-icon me-2"><i class="bi bi-clock-history" aria-hidden="true"></i></span><span class="fw-semibold">{{ audit.event|default:"Evento" }}</span></td><td>{{ audit.user|default:"—" }}</td><td>{{ audit.entity|default:"—" }}</td><td><code>{{ audit.object_identifier|default:"—" }}</code></td><td class="text-muted small">{{ audit.event_date|date:"d/m/Y H:i"|default:"—" }}</td><td class="text-end"><button type="button" class="btn btn-sm btn-light border" title="Ver cambios"><i class="bi bi-eye"></i><span class="visually-hidden">Ver cambios</span></button></td></tr>
+            {% empty %}<tr><td colspan="6" class="text-center py-5"><i class="bi bi-journal-check fs-2 text-muted d-block mb-2"></i><span class="text-muted">No hay eventos de auditoría para mostrar.</span></td></tr>
+            {% endfor %}
+        </tbody></table></div>
+    </section>
+</div>
+{% endblock %}

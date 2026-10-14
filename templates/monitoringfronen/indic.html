@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block titulo %}Indicadores · Monitoreo y trazabilidad{% endblock %}
+
+{% block estilos %}
+<style>
+    .monitor-shell { max-width: 1480px; margin: 0 auto; }
+    .monitor-hero { background: linear-gradient(135deg, #a60a17, #760710); color: #fff; border-radius: .65rem; padding: 1.5rem 1.75rem; box-shadow: 0 6px 18px rgba(166, 10, 23, .18); }
+    .monitor-hero h1 { font-size: clamp(1.35rem, 2vw, 1.85rem); }
+    .monitor-hero p { color: rgba(255,255,255,.78); }
+    .section-card { background: #fff; border: 1px solid #e5e7eb; border-radius: .65rem; box-shadow: 0 3px 12px rgba(24, 33, 44, .04); }
+    .metric { border-left: 4px solid #a60a17; padding: 1rem 1.1rem; }
+    .metric .value { font-size: 1.55rem; font-weight: 700; color: #23272b; }
+    .metric .label { color: #6c757d; font-size: .82rem; }
+    .table thead th { color: #6c757d; font-size: .72rem; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
+    .table tbody td { vertical-align: middle; }
+    .status { border-radius: 999px; font-size: .75rem; font-weight: 600; padding: .35rem .65rem; }
+    .status-green { background: #dff5e9; color: #147a49; }
+    .status-yellow { background: #fff3cd; color: #936b00; }
+    .status-red { background: #fbe1e3; color: #a60a17; }
+    .status-muted { background: #eef0f2; color: #5f6870; }
+    .filter-label { color: #56616b; font-size: .78rem; font-weight: 600; margin-bottom: .35rem; }
+</style>
+{% endblock %}
+
+{% block submenu %}
+<ul class="nav nav-pills mb-3">
+    <li class="nav-item"><a class="nav-link active" href="{% url 'monitoring:indicator_list' %}">Indicadores</a></li>
+    <li class="nav-item"><a class="nav-link" href="{% url 'monitoring:commitment_list' %}">Compromisos</a></li>
+    <li class="nav-item"><a class="nav-link" href="{% url 'monitoring:audit_list' %}">Auditoría</a></li>
+</ul>
+{% endblock %}
+
+{% block contenido %}
+<div class="monitor-shell pb-4" id="indicadores">
+    <section class="monitor-hero mb-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
+        <div>
+            <div class="small text-uppercase fw-semibold opacity-75 mb-2">Monitoreo y trazabilidad</div>
+            <h1 class="mb-2 fw-bold">Indicadores de desempeño</h1>
+            <p class="mb-0">Seguimiento del avance de las metas y sus resultados.</p>
+        </div>
+        <div class="text-end">
+            <i class="bi bi-graph-up-arrow display-5 opacity-75" aria-hidden="true"></i>
+        </div>
+    </section>
+
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-md-4"><div class="section-card metric h-100"><div class="value">{{ total_indicators|default:"0" }}</div><div class="label">Indicadores registrados</div></div></div>
+        <div class="col-12 col-md-4"><div class="section-card metric h-100"><div class="value text-success">{{ compliant_indicators|default:"0" }}</div><div class="label">En cumplimiento</div></div></div>
+        <div class="col-12 col-md-4"><div class="section-card metric h-100"><div class="value text-danger">{{ attention_indicators|default:"0" }}</div><div class="label">Requieren atención</div></div></div>
+    </div>
+
+    <section class="section-card p-3 p-lg-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <div><h2 class="h5 mb-1 fw-bold">Registro de indicadores</h2><p class="text-muted small mb-0">Consulta el resultado más reciente de cada meta.</p></div>
+            <button type="button" class="btn btn-outline-secondary btn-sm"><i class="bi bi-download me-1"></i>Exportar</button>
+        </div>
+        <form class="row g-3 align-items-end mb-3" method="get">
+            <div class="col-12 col-md-5"><label class="filter-label" for="indicator-search">Buscar meta o funcionario</label><input id="indicator-search" name="q" value="{{ request.GET.q }}" class="form-control" placeholder="Escribe para buscar..." type="search"></div>
+            <div class="col-12 col-md-3"><label class="filter-label" for="indicator-status">Semáforo</label><select id="indicator-status" name="traffic_light" class="form-select"><option value="">Todos los estados</option><option value="green">Verde</option><option value="yellow">Amarillo</option><option value="red">Rojo</option></select></div>
+            <div class="col-12 col-md-2"><button class="btn btn-dark w-100" type="submit"><i class="bi bi-funnel me-1"></i>Filtrar</button></div>
+        </form>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Meta</th><th>Responsable</th><th class="text-end">Esperado</th><th class="text-end">Avance</th><th class="text-end">Cumplimiento</th><th>Estado</th><th>Fecha</th></tr></thead>
+                <tbody>
+                {% for indicator in indicators %}
+                <tr>
+                    <td class="fw-semibold">{{ indicator.goal.item|default:"Sin meta" }}</td>
+                    <td>{{ indicator.employee|default:"Sin responsable" }}</td>
+                    <td class="text-end">{{ indicator.expected_value|default:"—" }}</td>
+                    <td class="text-end">{{ indicator.actual_progress|default:"—" }}</td>
+                    <td class="text-end fw-semibold">{{ indicator.compliance|default:"—" }}%</td>
+                    <td><span class="status {% if indicator.traffic_light|lower == 'green' or indicator.traffic_light|lower == 'verde' %}status-green{% elif indicator.traffic_light|lower == 'yellow' or indicator.traffic_light|lower == 'amarillo' %}status-yellow{% elif indicator.traffic_light|lower == 'red' or indicator.traffic_light|lower == 'rojo' %}status-red{% else %}status-muted{% endif %}">{{ indicator.traffic_light|default:"Pendiente" }}</span></td>
+                    <td class="text-muted small">{{ indicator.calculation_date|date:"d/m/Y"|default:"—" }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7" class="text-center py-5"><i class="bi bi-bar-chart-line fs-2 text-muted d-block mb-2"></i><span class="text-muted">No hay indicadores para mostrar.</span></td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+{% endblock %}
