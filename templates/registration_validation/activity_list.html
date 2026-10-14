@@ -58,8 +58,10 @@
 
         {% if perms.registration_validation.add_activity %}
 
-        <a class="btn btn-success px-4 fw-semibold shadow-sm"
-           href="{% url 'registration:activity_create' %}">
+        <a
+            class="btn btn-success px-4 fw-semibold shadow-sm"
+            href="{% url 'registration:activity_create' %}"
+        >
             Agregar Actividad
         </a>
 
@@ -75,29 +77,39 @@
 
         <div class="bg-white p-3 rounded border shadow-sm">
 
-            <form method="get"
-                  class="row g-2 mb-4">
+            <form
+                method="get"
+                class="row g-2 mb-4"
+            >
 
                 <div class="col-md-8">
 
-                    <input type="text"
-                           name="q"
-                           value="{{ query }}"
-                           class="form-control bg-light"
-                           placeholder="Buscar por problema, acción, contacto, funcionario o meta">
+                    <input
+                        type="text"
+                        name="q"
+                        value="{{ query }}"
+                        class="form-control bg-light"
+                        placeholder="Buscar por problema, acción, contacto, funcionario o meta"
+                    >
 
                 </div>
 
                 <div class="col-md-4">
 
                     {% if selected_status %}
-                    <input type="hidden"
-                           name="status"
-                           value="{{ selected_status }}">
+
+                    <input
+                        type="hidden"
+                        name="status"
+                        value="{{ selected_status }}"
+                    >
+
                     {% endif %}
 
-                    <button type="submit"
-                            class="btn btn-primary w-100 fw-semibold">
+                    <button
+                        type="submit"
+                        class="btn btn-primary w-100 fw-semibold"
+                    >
                         Buscar
                     </button>
 
@@ -191,16 +203,18 @@
 
                                 {% if activity.goal.period.status == "Closed" %}
 
-                                    <span class="badge bg-secondary">
-                                        Solo lectura
-                                    </span>
+                                <span class="badge bg-secondary">
+                                    Solo lectura
+                                </span>
 
                                 {% else %}
 
                                     {% if perms.registration_validation.change_activity %}
 
-                                    <a href="{% url 'registration:activity_update' activity.activity_id %}"
-                                       class="btn btn-warning btn-sm">
+                                    <a
+                                        href="{% url 'registration:activity_update' activity.activity_id %}"
+                                        class="btn btn-warning btn-sm"
+                                    >
                                         Modificar
                                     </a>
 
@@ -208,21 +222,23 @@
 
                                     {% if perms.registration_validation.delete_activity %}
 
-                                    <form id="delete-form-{{ activity.activity_id }}"
-                                          method="post"
-                                          action="{% url 'registration:activity_delete' activity.activity_id %}"
-                                          class="d-none">
-
+                                    <form
+                                        id="delete-form-{{ activity.activity_id }}"
+                                        method="post"
+                                        action="{% url 'registration:activity_delete' activity.activity_id %}"
+                                        class="d-none"
+                                    >
                                         {% csrf_token %}
-
                                     </form>
 
-                                    <button type="button"
-                                            class="btn btn-danger btn-sm"
-                                            onclick="confirmDelete(
-                                                '{{ activity.activity_id }}',
-                                                '{{ activity.goal.item|escapejs }}'
-                                            )">
+                                    <button
+                                        type="button"
+                                        class="btn btn-danger btn-sm"
+                                        onclick="confirmDelete(
+                                            '{{ activity.activity_id }}',
+                                            '{{ activity.goal.item|escapejs }}'
+                                        )"
+                                    >
                                         Eliminar
                                     </button>
 
@@ -237,10 +253,14 @@
                         {% empty %}
 
                         <tr>
-                            <td colspan="7"
-                                class="text-center py-4 text-muted">
+
+                            <td
+                                colspan="7"
+                                class="text-center py-4 text-muted"
+                            >
                                 No hay actividades para mostrar.
                             </td>
+
                         </tr>
 
                         {% endfor %}
@@ -261,8 +281,10 @@
 
                     <li class="page-item">
 
-                        <a class="page-link"
-                           href="?page={{ page_obj.previous_page_number }}&q={{ query }}&status={{ selected_status }}">
+                        <a
+                            class="page-link"
+                            href="?page={{ page_obj.previous_page_number }}&q={{ query }}&status={{ selected_status }}"
+                        >
                             Anterior
                         </a>
 
@@ -284,8 +306,10 @@
 
                     <li class="page-item">
 
-                        <a class="page-link"
-                           href="?page={{ page_obj.next_page_number }}&q={{ query }}&status={{ selected_status }}">
+                        <a
+                            class="page-link"
+                            href="?page={{ page_obj.next_page_number }}&q={{ query }}&status={{ selected_status }}"
+                        >
                             Siguiente
                         </a>
 
@@ -305,28 +329,38 @@
 
     <div class="col-md-3">
 
-        <form method="get"
-              class="card shadow-sm border-0">
+        <form
+            method="get"
+            class="card shadow-sm border-0"
+        >
 
-            <div class="card-header text-white fw-semibold"
-                 style="background-color: #a60a17;">
+            <div
+                class="card-header text-white fw-semibold"
+                style="background-color: #a60a17;"
+            >
                 Filtros
             </div>
 
             <div class="card-body bg-light">
 
                 {% if query %}
-                <input type="hidden"
-                       name="q"
-                       value="{{ query }}">
+
+                <input
+                    type="hidden"
+                    name="q"
+                    value="{{ query }}"
+                >
+
                 {% endif %}
 
                 <label class="fw-bold mb-1 text-secondary">
                     Estado
                 </label>
 
-                <select name="status"
-                        class="form-select form-select-sm mb-3">
+                <select
+                    name="status"
+                    class="form-select form-select-sm mb-3"
+                >
 
                     <option value="">
                         Todos
@@ -334,10 +368,12 @@
 
                     {% for value, label in status_options %}
 
-                    <option value="{{ value }}"
-                            {% if selected_status == value %}
-                            selected
-                            {% endif %}>
+                    <option
+                        value="{{ value }}"
+                        {% if selected_status == value %}
+                        selected
+                        {% endif %}
+                    >
                         {{ label }}
                     </option>
 
@@ -347,13 +383,17 @@
 
                 <div class="d-grid gap-2 mt-4">
 
-                    <button type="submit"
-                            class="btn btn-primary btn-sm fw-semibold">
+                    <button
+                        type="submit"
+                        class="btn btn-primary btn-sm fw-semibold"
+                    >
                         Filtrar
                     </button>
 
-                    <a href="{% url 'registration:activity_list' %}"
-                       class="btn btn-outline-secondary btn-sm">
+                    <a
+                        href="{% url 'registration:activity_list' %}"
+                        class="btn btn-outline-secondary btn-sm"
+                    >
                         Limpiar
                     </a>
 
@@ -371,6 +411,7 @@
 
 {% endblock %}
 
+
 {% block scripts %}
 
 {{ block.super }}
@@ -378,66 +419,63 @@
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 <script>
+    function confirmDelete(id, name) {
 
-function confirmDelete(id, name) {
+        Swal.fire({
+            title: "¿Eliminar actividad?",
+            text: name,
+            icon: "warning",
+            showCancelButton: true,
+            confirmButtonText: "Sí, eliminar",
+            cancelButtonText: "Cancelar",
+            confirmButtonColor: "#a60a17"
 
-    Swal.fire({
-        title: "¿Archivar actividad?",
-        text: name,
-        icon: "warning",
-        showCancelButton: true,
-        confirmButtonText: "Sí, archivar",
-        cancelButtonText: "Cancelar",
-        confirmButtonColor: "#a60a17"
+        }).then((result) => {
 
-    }).then((result) => {
+            if (result.isConfirmed) {
 
-        if (result.isConfirmed) {
+                document
+                    .getElementById(
+                        "delete-form-" + id
+                    )
+                    .submit();
 
-            document
-                .getElementById(
-                    "delete-form-" + id
-                )
-                .submit();
+            }
 
-        }
+        });
 
-    });
-
-}
-
+    }
 </script>
+
 
 {% if open_modal %}
 
 <script>
+    document.addEventListener(
+        "DOMContentLoaded",
+        function () {
 
-document.addEventListener(
-    "DOMContentLoaded",
-    function () {
-
-        const modalElement =
-            document.getElementById(
-                "activityModal"
-            );
-
-        if (
-            modalElement &&
-            window.bootstrap
-        ) {
-
-            const modal =
-                new bootstrap.Modal(
-                    modalElement
+            const modalElement =
+                document.getElementById(
+                    "activityModal"
                 );
 
-            modal.show();
+            if (
+                modalElement &&
+                window.bootstrap
+            ) {
+
+                const modal =
+                    new bootstrap.Modal(
+                        modalElement
+                    );
+
+                modal.show();
+
+            }
 
         }
-
-    }
-);
-
+    );
 </script>
 
 {% endif %}
