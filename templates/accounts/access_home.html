@@ -32,6 +32,14 @@
 </script>
 {% endblock %}
 
+{% block estilos %}
+<style>
+.account-avatar{width:38px;height:38px;border-radius:50%;overflow:hidden;background:#f7e6e8;color:#a60a17;display:flex;align-items:center;justify-content:center;border:1px solid #ead0d3}
+.account-avatar img{width:100%;height:100%;object-fit:cover}
+.account-avatar .bi{font-size:1.25rem}
+</style>
+{% endblock %}
+
 {% block contenido %}
 <div class="organization-shell">
     <section class="organization-hero mb-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
@@ -90,10 +98,11 @@
     <section class="organization-card p-3 p-md-4">
         <div class="table-responsive">
             <table class="table table-hover align-middle organization-table mb-0">
-                <thead><tr><th>Cuenta</th><th>Funcionario</th><th>Delegación</th><th>Roles</th><th>Estado</th><th class="text-end">Acciones</th></tr></thead>
+                <thead><tr><th>Foto</th><th>Cuenta</th><th>Funcionario</th><th>Delegación</th><th>Roles</th><th>Estado</th><th class="text-end">Acciones</th></tr></thead>
                 <tbody>
                     {% for account in users %}
                     <tr>
+                        <td><div class="account-avatar">{% if account.profile.avatar %}<img src="{{ account.profile.avatar.url }}" alt="Foto de {{ account.username }}">{% else %}<i class="bi bi-person-fill" aria-label="Sin foto de perfil"></i>{% endif %}</div></td>
                         <td class="fw-semibold">{{ account.username }}</td>
                         <td>{{ account.profile.employee|default:"Sin funcionario" }}</td>
                         <td>{{ account.profile.delegation|default:"Sin delegación" }}</td>
@@ -102,7 +111,7 @@
                         <td class="text-end"><a class="btn btn-sm btn-outline-danger" href="{% url 'accounts:account_edit' account.pk %}" data-account-modal><i class="bi bi-pencil me-1"></i>Editar</a></td>
                     </tr>
                     {% empty %}
-                    <tr><td colspan="6" class="organization-empty"><i class="bi bi-person-x fs-3 d-block mb-2"></i>No hay cuentas de trabajadores.</td></tr>
+                    <tr><td colspan="7" class="organization-empty"><i class="bi bi-person-x fs-3 d-block mb-2"></i>No hay cuentas de trabajadores.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
