@@ -55,7 +55,7 @@
                         <td class="text-muted small">{{ delegation.delegation_id }}</td>
                         <td class="fw-semibold">{{ delegation.name }}</td>
                         <td>{{ delegation.scope|default:"—" }}</td>
-                        <td><span class="status-pill {% if delegation.status == 'Activo' %}status-active{% elif delegation.status == 'Inactivo' %}status-inactive{% elif delegation.status == 'Licencia' and 'delegation' == 'employee' %}status-leave{% else %}status-muted{% endif %}">{{ delegation.status|default:"Sin estado" }}</span></td>
+                        <td><span class="status-pill {% if delegation.status == 'Activo' %}status-active{% elif delegation.status == 'Inactivo' %}status-inactive{% else %}status-muted{% endif %}">{{ delegation.status|default:"Sin estado" }}</span></td>
                         <td class="text-end">
  {% if perms.organization.change_delegation %}<a class="btn btn-sm btn-outline-danger" href="{% url 'organization:delegation_edit' delegation.pk %}" data-organization-modal><i class="bi bi-pencil me-1"></i>Editar</a>{% endif %}
  {% if perms.organization.delete_delegation %}<form method="post" action="{% url 'organization:delegation_delete' delegation.pk %}" class="d-inline">{% csrf_token %}<button type="submit" class="btn btn-sm btn-outline-dark" data-organization-delete data-item-label="delegación {{ delegation.name|escape }}"><i class="bi bi-trash me-1"></i>Borrar</button></form>{% endif %}
