@@ -1,0 +1,565 @@
+{% extends "registration_validation/base.html" %}
+
+{% block titulo %}Evidencias{% endblock %}
+
+{% block contenido %}
+
+<style>
+    :root {
+        --color-rojo-brand: #a60a17;
+        --color-verde-btn: #138d56;
+    }
+
+    .titulo-seccion {
+        color: #000;
+        font-weight: bold;
+        border-left: 6px solid var(--color-rojo-brand);
+        padding-left: 12px;
+        margin-top: 5px;
+        font-size: 1.8rem;
+    }
+
+    .btn-primary {
+        background-color: var(--color-rojo-brand);
+        border-color: var(--color-rojo-brand);
+    }
+
+    .btn-primary:hover {
+        background-color: #800711;
+        border-color: #800711;
+    }
+
+    .btn-success {
+        background-color: var(--color-verde-btn);
+        border-color: var(--color-verde-btn);
+    }
+
+    .btn-success:hover {
+        background-color: #0e7044;
+        border-color: #0e7044;
+    }
+
+    .table-dark-brand th {
+        background-color: var(--color-rojo-brand) !important;
+        color: white !important;
+        font-weight: 600;
+    }
+</style>
+
+
+<div class="row mb-4 align-items-center">
+
+    <div class="col-8">
+
+        <h1 class="titulo-seccion">
+            Listado de Evidencias
+        </h1>
+
+    </div>
+
+    <div class="col-4 text-end">
+
+        {% if perms.registration_validation.add_evidence %}
+
+        <a class="btn btn-success px-4 fw-semibold shadow-sm"
+           href="{% url 'registration:evidence_create' %}">
+            Agregar Evidencia
+        </a>
+
+        {% endif %}
+
+    </div>
+
+</div>
+
+
+<div class="row">
+
+    <div class="col-md-9">
+
+        <div class="bg-white p-3 rounded border shadow-sm">
+
+            <form method="get"
+                  class="row g-2 mb-4">
+
+                <div class="col-md-8">
+
+                    <input type="text"
+                           name="q"
+                           value="{{ query }}"
+                           class="form-control bg-light"
+                           placeholder="Buscar por código, actividad, meta, funcionario o enlace">
+
+                </div>
+
+                <div class="col-md-4">
+
+                    {% if selected_review_status %}
+
+                    <input type="hidden"
+                           name="review_status"
+                           value="{{ selected_review_status }}">
+
+                    {% endif %}
+
+                    <button type="submit"
+                            class="btn btn-primary w-100 fw-semibold">
+                        Buscar
+                    </button>
+
+                </div>
+
+            </form>
+
+
+            <div class="table-responsive">
+
+                <table class="table table-hover table-striped border mb-0">
+
+                    <thead class="table-dark-brand">
+
+                        <tr>
+                            <th>ID</th>
+                            <th>Código</th>
+                            <th>Actividad</th>
+                            <th>Funcionario</th>
+                            <th>Fecha</th>
+                            <th>Estado</th>
+                            <th>Archivo / Enlace</th>
+                            <th>Período</th>
+                            <th>Acciones</th>
+                        </tr>
+
+                    </thead>
+
+                    <tbody>
+
+                        {% for evidence in evidences %}
+
+                        <tr>
+
+                            <td>
+                                {{ evidence.evidence_id }}
+                            </td>
+
+                            <td>
+                                {{ evidence.code }}
+                            </td>
+
+                            <td>
+                                {{ evidence.activity }}
+                            </td>
+
+                            <td>
+                                {{ evidence.author }}
+                            </td>
+
+                            <td>
+                                {{ evidence.date|date:"d-m-Y H:i" }}
+                            </td>
+
+                            <td>
+
+                                <span class="badge bg-secondary">
+                                    {{ evidence.review_status }}
+                                </span>
+
+                            </td>
+
+                            <td>
+
+                                {% if evidence.file %}
+
+                                <div class="mb-1">
+
+                                    <a href="{{ evidence.file.url }}"
+                                       target="_blank"
+                                       rel="noopener noreferrer"
+                                       class="btn btn-outline-primary btn-sm">
+                                        Ver archivo
+                                    </a>
+
+                                </div>
+
+                                {% endif %}
+
+
+                                {% if evidence.file_link %}
+
+                                <div>
+
+                                    <a href="{{ evidence.file_link }}"
+                                       target="_blank"
+                                       rel="noopener noreferrer"
+                                       class="btn btn-outline-secondary btn-sm">
+                                        Ver enlace
+                                    </a>
+
+                                </div>
+
+                                {% endif %}
+
+
+                                {% if not evidence.file and not evidence.file_link %}
+
+                                <span class="text-muted">
+                                    Sin archivo
+                                </span>
+
+                                {% endif %}
+
+                            </td>
+
+                            <td>
+
+                                {{ evidence.activity.goal.period.start_date|date:"d-m-Y" }}
+                                al
+                                {{ evidence.activity.goal.period.end_date|date:"d-m-Y" }}
+
+                                {% if evidence.activity.goal.period.status == "Closed" %}
+
+                                <div class="mt-1">
+
+                                    <span class="badge bg-dark">
+                                        Cerrado
+                                    </span>
+
+                                </div>
+
+                                {% endif %}
+
+                            </td>
+
+                            <td>
+
+                                {% if evidence.activity.goal.period.status == "Closed" %}
+
+                                <span class="badge bg-secondary">
+                                    Solo lectura
+                                </span>
+
+                                {% else %}
+
+                                    {% if perms.registration_validation.change_evidence %}
+
+                                    <a href="{% url 'registration:evidence_update' evidence.evidence_id %}"
+                                       class="btn btn-warning btn-sm mb-1">
+                                        Modificar
+                                    </a>
+
+                                    {% endif %}
+
+
+                                    {% if perms.registration_validation.delete_evidence %}
+
+                                    <form id="delete-form-{{ evidence.evidence_id }}"
+                                          method="post"
+                                          action="{% url 'registration:evidence_delete' evidence.evidence_id %}"
+                                          class="d-none">
+
+                                        {% csrf_token %}
+
+                                    </form>
+
+                                    <button type="button"
+                                            class="btn btn-danger btn-sm mb-1"
+                                            onclick="confirmDeleteEvidence(
+                                                '{{ evidence.evidence_id }}',
+                                                '{{ evidence.code|escapejs }}'
+                                            )">
+                                        Eliminar
+                                    </button>
+
+                                    {% endif %}
+
+                                {% endif %}
+
+                            </td>
+
+                        </tr>
+
+
+                        {% empty %}
+
+                        <tr>
+
+                            <td colspan="9"
+                                class="text-center py-4 text-muted">
+                                No hay evidencias para mostrar.
+                            </td>
+
+                        </tr>
+
+                        {% endfor %}
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+
+            {% if is_paginated %}
+
+            <nav class="mt-3">
+
+                <ul class="pagination justify-content-center">
+
+                    {% if page_obj.has_previous %}
+
+                    <li class="page-item">
+
+                        <a class="page-link"
+                           href="?page={{ page_obj.previous_page_number }}&q={{ query }}&review_status={{ selected_review_status }}">
+                            Anterior
+                        </a>
+
+                    </li>
+
+                    {% endif %}
+
+
+                    <li class="page-item active">
+
+                        <span class="page-link">
+                            {{ page_obj.number }}
+                            de
+                            {{ page_obj.paginator.num_pages }}
+                        </span>
+
+                    </li>
+
+
+                    {% if page_obj.has_next %}
+
+                    <li class="page-item">
+
+                        <a class="page-link"
+                           href="?page={{ page_obj.next_page_number }}&q={{ query }}&review_status={{ selected_review_status }}">
+                            Siguiente
+                        </a>
+
+                    </li>
+
+                    {% endif %}
+
+                </ul>
+
+            </nav>
+
+            {% endif %}
+
+        </div>
+
+    </div>
+
+
+    <div class="col-md-3">
+
+        <form method="get"
+              class="card shadow-sm border-0">
+
+            <div class="card-header text-white fw-semibold"
+                 style="background-color: #a60a17;">
+                Filtros
+            </div>
+
+            <div class="card-body bg-light">
+
+                {% if query %}
+
+                <input type="hidden"
+                       name="q"
+                       value="{{ query }}">
+
+                {% endif %}
+
+
+                <label class="fw-bold mb-1 text-secondary">
+                    Estado de revisión
+                </label>
+
+                <select name="review_status"
+                        class="form-select form-select-sm mb-3">
+
+                    <option value="">
+                        Todos
+                    </option>
+
+                    {% for status in review_status_options %}
+
+                    <option value="{{ status }}"
+                            {% if selected_review_status == status %}
+                            selected
+                            {% endif %}>
+                        {{ status }}
+                    </option>
+
+                    {% endfor %}
+
+                </select>
+
+
+                <div class="d-grid gap-2 mt-4">
+
+                    <button type="submit"
+                            class="btn btn-primary btn-sm fw-semibold">
+                        Filtrar
+                    </button>
+
+                    <a href="{% url 'registration:evidence_list' %}"
+                       class="btn btn-outline-secondary btn-sm">
+                        Limpiar
+                    </a>
+
+                </div>
+
+            </div>
+
+        </form>
+
+    </div>
+
+</div>
+
+
+{% include "registration_validation/_evidence_modal.html" %}
+
+{% endblock %}
+
+
+{% block scripts %}
+
+{{ block.super }}
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+
+<script>
+    function confirmDeleteEvidence(id, code) {
+
+        Swal.fire({
+            title: "¿Eliminar evidencia?",
+            text: code,
+            icon: "warning",
+            showCancelButton: true,
+            confirmButtonText: "Sí, eliminar",
+            cancelButtonText: "Cancelar",
+            confirmButtonColor: "#a60a17"
+
+        }).then((result) => {
+
+            if (result.isConfirmed) {
+
+                document
+                    .getElementById(
+                        "delete-form-" + id
+                    )
+                    .submit();
+
+            }
+
+        });
+
+    }
+</script>
+
+
+{% if messages %}
+
+<script>
+    document.addEventListener(
+        "DOMContentLoaded",
+        function () {
+
+            /*
+             * El base.html muestra mensajes de Django
+             * mediante Bootstrap.
+             * En este módulo los quitamos para mostrarlos
+             * exclusivamente mediante SweetAlert2.
+             */
+            document
+                .querySelectorAll(
+                    ".alert-dismissible"
+                )
+                .forEach(
+                    function (alertElement) {
+                        alertElement.remove();
+                    }
+                );
+
+            {% for message in messages %}
+
+            Swal.fire({
+                title: (
+                    "{% if message.tags == 'success' %}"
+                    + "Operación exitosa"
+                    + "{% elif message.tags == 'error' %}"
+                    + "Error"
+                    + "{% elif message.tags == 'warning' %}"
+                    + "Advertencia"
+                    + "{% else %}"
+                    + "Información"
+                    + "{% endif %}"
+                ),
+
+                text: "{{ message|escapejs }}",
+
+                icon: (
+                    "{% if message.tags == 'success' %}"
+                    + "success"
+                    + "{% elif message.tags == 'error' %}"
+                    + "error"
+                    + "{% elif message.tags == 'warning' %}"
+                    + "warning"
+                    + "{% else %}"
+                    + "info"
+                    + "{% endif %}"
+                ),
+
+                confirmButtonText: "Aceptar",
+                confirmButtonColor: "#a60a17"
+            });
+
+            {% endfor %}
+
+        }
+    );
+</script>
+
+{% endif %}
+
+
+{% if open_modal %}
+
+<script>
+    document.addEventListener(
+        "DOMContentLoaded",
+        function () {
+
+            const modalElement =
+                document.getElementById(
+                    "evidenceModal"
+                );
+
+            if (
+                modalElement &&
+                window.bootstrap
+            ) {
+
+                const modal =
+                    new bootstrap.Modal(
+                        modalElement
+                    );
+
+                modal.show();
+
+            }
+
+        }
+    );
+</script>
+
+{% endif %}
+
+{% endblock %}

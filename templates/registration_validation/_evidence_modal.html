@@ -1,0 +1,222 @@
+{% if open_modal %}
+
+<div class="modal fade"
+     id="evidenceModal"
+     tabindex="-1"
+     aria-labelledby="evidenceModalLabel"
+     aria-hidden="true">
+
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+
+        <div class="modal-content">
+
+            <form method="post"
+                  enctype="multipart/form-data"
+                  novalidate>
+
+                {% csrf_token %}
+
+                <div class="modal-header">
+
+                    <h5 class="modal-title"
+                        id="evidenceModalLabel">
+
+                        {% if object %}
+                            Modificar evidencia
+                        {% else %}
+                            Nueva evidencia
+                        {% endif %}
+
+                    </h5>
+
+                    <a href="{% url 'registration:evidence_list' %}"
+                       class="btn-close"
+                       aria-label="Cerrar">
+                    </a>
+
+                </div>
+
+                <div class="modal-body">
+
+                    {% if form.non_field_errors %}
+                    <div class="alert alert-danger">
+
+                        {% for error in form.non_field_errors %}
+                            <div>{{ error }}</div>
+                        {% endfor %}
+
+                    </div>
+                    {% endif %}
+
+
+                    <div class="row">
+
+                        <div class="col-md-6 mb-3">
+
+                            <label class="form-label fw-semibold">
+                                {{ form.code.label }}
+                            </label>
+
+                            {{ form.code }}
+
+                            {% for error in form.code.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                            {% endfor %}
+
+                        </div>
+
+
+                        <div class="col-md-6 mb-3">
+
+                            <label class="form-label fw-semibold">
+                                {{ form.date.label }}
+                            </label>
+
+                            {{ form.date }}
+
+                            {% for error in form.date.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                            {% endfor %}
+
+                        </div>
+
+
+                        <div class="col-md-6 mb-3">
+
+                            <label class="form-label fw-semibold">
+                                {{ form.activity.label }}
+                            </label>
+
+                            {{ form.activity }}
+
+                            {% for error in form.activity.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                            {% endfor %}
+
+                        </div>
+
+
+                        <div class="col-md-6 mb-3">
+
+                            <label class="form-label fw-semibold">
+                                {{ form.author.label }}
+                            </label>
+
+                            {{ form.author }}
+
+                            {% for error in form.author.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                            {% endfor %}
+
+                        </div>
+
+
+                        <div class="col-md-6 mb-3">
+
+                            <label class="form-label fw-semibold">
+                                {{ form.file.label }}
+                            </label>
+
+                            {{ form.file }}
+
+                            {% if form.file.help_text %}
+                            <div class="form-text">
+                                {{ form.file.help_text }}
+                            </div>
+                            {% endif %}
+
+                            {% if object and object.file %}
+                            <div class="mt-2">
+
+                                <span class="small text-muted">
+                                    Archivo actual:
+                                </span>
+
+                                <a href="{{ object.file.url }}"
+                                   target="_blank"
+                                   rel="noopener noreferrer"
+                                   class="small">
+                                    {{ object.file.name }}
+                                </a>
+
+                            </div>
+                            {% endif %}
+
+                            {% for error in form.file.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                            {% endfor %}
+
+                        </div>
+
+
+                        <div class="col-md-6 mb-3">
+
+                            <label class="form-label fw-semibold">
+                                {{ form.file_link.label }}
+                            </label>
+
+                            {{ form.file_link }}
+
+                            {% for error in form.file_link.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                            {% endfor %}
+
+                        </div>
+
+
+                        <div class="col-12 mb-3">
+
+                            <label class="form-label fw-semibold">
+                                {{ form.review_status.label }}
+                            </label>
+
+                            {{ form.review_status }}
+
+                            {% for error in form.review_status.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                            {% endfor %}
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <div class="modal-footer">
+
+                    <a href="{% url 'registration:evidence_list' %}"
+                       class="btn btn-secondary">
+                        Cancelar
+                    </a>
+
+                    <button type="submit"
+                            class="btn btn-primary">
+                        Guardar
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endif %}

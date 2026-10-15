@@ -14,5 +14,14 @@
     </li>
     {% endif %}
 
+    {% if perms.registration_validation.view_evidence %}
+    <li class="nav-item">
+        <a class="nav-link"
+           href="{% url 'registration:evidence_list' %}">
+            Evidencias
+        </a>
+    </li>
+    {% endif %}
+
 </ul>
 {% endblock %}
