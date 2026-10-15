@@ -1,7 +1,21 @@
 from django.core.exceptions import ValidationError
+from django.core.validators import FileExtensionValidator
 from django.db import models
 
 from core.models import BaseModel
+
+
+MAX_EVIDENCE_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
+
+
+def validate_evidence_file_size(file):
+    """
+    Limita el tamaño máximo de los archivos de evidencia a 5 MB.
+    """
+    if file.size > MAX_EVIDENCE_FILE_SIZE:
+        raise ValidationError(
+            "El archivo no puede superar los 5 MB."
+        )
 
 
 class Activity(BaseModel):
@@ -106,7 +120,28 @@ class Evidence(BaseModel):
 
     file_link = models.CharField(
         max_length=500,
+        blank=True,
         verbose_name="File or link",
+    )
+
+    file = models.FileField(
+        upload_to="evidences/%Y/%m/",
+        blank=True,
+        null=True,
+        validators=[
+            FileExtensionValidator(
+                allowed_extensions=[
+                    "pdf",
+                    "jpg",
+                    "jpeg",
+                    "png",
+                    "doc",
+                    "docx",
+                ]
+            ),
+            validate_evidence_file_size,
+        ],
+        verbose_name="Evidence file",
     )
 
     date = models.DateTimeField(
@@ -129,6 +164,14 @@ class Evidence(BaseModel):
         verbose_name = "Evidence"
         verbose_name_plural = "Evidences"
         ordering = ("-date", "evidence_id")
+
+    def clean(self):
+        super().clean()
+
+        if not self.file and not self.file_link:
+            raise ValidationError(
+                "La evidencia debe incluir un archivo o un enlace."
+            )
 
     def __str__(self):
         return self.code
