@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Audit, Commitment, Indicator
+from .models import Audit, Commitment, CommitmentComment, Indicator
 
 
 @admin.register(Indicator)
@@ -10,8 +10,12 @@ class IndicatorAdmin(admin.ModelAdmin):
         "goal",
         "employee",
         "actual_progress",
+        "expected_progress",
         "compliance",
         "weighting",
+        "weighted_result",
+        "approved_activities",
+        "approved_evidences",
         "traffic_light",
         "calculation_date",
     )
@@ -140,6 +144,13 @@ class IndicatorAdmin(admin.ModelAdmin):
         )
 
 
+class CommitmentCommentInline(admin.TabularInline):
+    model = CommitmentComment
+    extra = 0
+    fields = ("author", "text", "created_at")
+    readonly_fields = ("created_at",)
+
+
 @admin.register(Commitment)
 class CommitmentAdmin(admin.ModelAdmin):
     list_display = (
@@ -178,6 +189,8 @@ class CommitmentAdmin(admin.ModelAdmin):
         "-commitment_date",
         "commitment_id",
     )
+
+    inlines = [CommitmentCommentInline]
 
     def has_delete_permission(self, request, obj=None):
         return request.user.is_superuser
@@ -320,6 +333,33 @@ class CommitmentAdmin(admin.ModelAdmin):
             obj,
             form,
             change,
+        )
+
+
+@admin.register(CommitmentComment)
+class CommitmentCommentAdmin(admin.ModelAdmin):
+    list_display = (
+        "comment_id",
+        "commitment",
+        "author",
+        "created_by",
+        "created_at",
+    )
+    list_select_related = ("commitment", "author", "created_by")
+    search_fields = ("text", "commitment__origin", "commitment__requester")
+    ordering = ("-created_at", "comment_id")
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request).filter(
+            deleted_at__isnull=True
+        )
+        if request.user.is_superuser:
+            return queryset
+        profile = getattr(request.user, "profile", None)
+        if not profile or not profile.delegation_id:
+            return queryset.none()
+        return queryset.filter(
+            commitment__delegation_id=profile.delegation_id
         )
 
 

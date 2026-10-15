@@ -1,5 +1,6 @@
 from django.db import models
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 
 from core.models import BaseModel
 
@@ -39,6 +40,13 @@ class Indicator(BaseModel):
         verbose_name="Green progress",
     )
 
+    expected_progress = models.DecimalField(
+        max_digits=7,
+        decimal_places=2,
+        default=0,
+        verbose_name="Expected progress",
+    )
+
     difference = models.DecimalField(
         max_digits=12,
         decimal_places=2,
@@ -55,6 +63,23 @@ class Indicator(BaseModel):
         max_digits=7,
         decimal_places=2,
         verbose_name="Weighting",
+    )
+
+    weighted_result = models.DecimalField(
+        max_digits=7,
+        decimal_places=2,
+        default=0,
+        verbose_name="Weighted result",
+    )
+
+    approved_activities = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Approved activities",
+    )
+
+    approved_evidences = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Approved evidences",
     )
 
     adjustment = models.DecimalField(
@@ -99,6 +124,11 @@ class Indicator(BaseModel):
                         "Compliance cannot be negative."
                     )
                 }
+            )
+
+        if self.expected_progress is not None and self.expected_progress < 0:
+            raise ValidationError(
+                {"expected_progress": "Expected progress cannot be negative."}
             )
 
         if (
@@ -213,6 +243,64 @@ class Commitment(BaseModel):
             f"Commitment {self.commitment_id} - "
             f"{self.territory}"
         )
+
+    @property
+    def is_completed(self):
+        return self.status.lower() in {"completed", "completado", "realizado"}
+
+    @property
+    def is_overdue(self):
+        return not self.is_completed and self.commitment_date < timezone.localdate()
+
+
+class CommitmentComment(BaseModel):
+    comment_id = models.BigAutoField(primary_key=True)
+
+    commitment = models.ForeignKey(
+        Commitment,
+        on_delete=models.PROTECT,
+        related_name="comments",
+        verbose_name="Commitment",
+    )
+
+    author = models.ForeignKey(
+        "organization.Employee",
+        on_delete=models.PROTECT,
+        related_name="commitment_comments",
+        null=True,
+        blank=True,
+        verbose_name="Author",
+    )
+
+    created_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.PROTECT,
+        related_name="commitment_comments",
+        null=True,
+        blank=True,
+        verbose_name="User",
+    )
+
+    text = models.TextField(verbose_name="Comment")
+
+    class Meta:
+        verbose_name = "Commitment comment"
+        verbose_name_plural = "Commitment comments"
+        ordering = ("-created_at", "comment_id")
+
+    def clean(self):
+        super().clean()
+        if (
+            self.author_id
+            and self.commitment_id
+            and self.author.delegation_id != self.commitment.delegation_id
+        ):
+            raise ValidationError(
+                {"author": "The author must belong to the commitment delegation."}
+            )
+
+    def __str__(self):
+        return f"Comment {self.comment_id} - {self.commitment}"
 
 
 class Audit(BaseModel):

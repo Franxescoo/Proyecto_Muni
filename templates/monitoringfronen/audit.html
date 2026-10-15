@@ -19,12 +19,22 @@
 </style>
 {% endblock %}
 
-{% block submenu %}
-<ul class="nav nav-pills mb-3">
-    <li class="nav-item"><a class="nav-link" href="{% url 'monitoring:indicator_list' %}">Indicadores</a></li>
-    <li class="nav-item"><a class="nav-link" href="{% url 'monitoring:commitment_list' %}">Compromisos</a></li>
-    <li class="nav-item"><a class="nav-link active" href="{% url 'monitoring:audit_list' %}">Auditoría</a></li>
-</ul>
+{% block top_links %}{% endblock %}
+
+{% block sidebar %}
+<aside class="workspace-sidebar" aria-label="Navegación de monitoreo y trazabilidad">
+    <div class="workspace-sidebar-header">
+        <i class="bi bi-list" aria-hidden="true"></i>
+        <strong>Monitoreo y<br>trazabilidad</strong>
+        <i class="bi bi-chevron-down" aria-hidden="true"></i>
+    </div>
+    <nav class="nav flex-column">
+        <a class="nav-link" href="{% url 'home' %}"><i class="bi bi-house-door"></i><span>Inicio</span></a>
+        <a class="nav-link" href="{% url 'monitoring:indicator_list' %}"><i class="bi bi-bar-chart-line"></i><span>Indicadores</span></a>
+        <a class="nav-link" href="{% url 'monitoring:commitment_list' %}"><i class="bi bi-handshake"></i><span>Compromisos</span></a>
+        <a class="nav-link active" href="{% url 'monitoring:audit_list' %}"><i class="bi bi-shield-check"></i><span>Auditoría</span></a>
+    </nav>
+</aside>
 {% endblock %}
 
 {% block contenido %}

@@ -23,12 +23,22 @@
 </style>
 {% endblock %}
 
-{% block submenu %}
-<ul class="nav nav-pills mb-3">
-    <li class="nav-item"><a class="nav-link" href="{% url 'monitoring:indicator_list' %}">Indicadores</a></li>
-    <li class="nav-item"><a class="nav-link active" href="{% url 'monitoring:commitment_list' %}">Compromisos</a></li>
-    <li class="nav-item"><a class="nav-link" href="{% url 'monitoring:audit_list' %}">Auditoría</a></li>
-</ul>
+{% block top_links %}{% endblock %}
+
+{% block sidebar %}
+<aside class="workspace-sidebar" aria-label="Navegación de monitoreo y trazabilidad">
+    <div class="workspace-sidebar-header">
+        <i class="bi bi-list" aria-hidden="true"></i>
+        <strong>Monitoreo y<br>trazabilidad</strong>
+        <i class="bi bi-chevron-down" aria-hidden="true"></i>
+    </div>
+    <nav class="nav flex-column">
+        <a class="nav-link" href="{% url 'home' %}"><i class="bi bi-house-door"></i><span>Inicio</span></a>
+        <a class="nav-link" href="{% url 'monitoring:indicator_list' %}"><i class="bi bi-bar-chart-line"></i><span>Indicadores</span></a>
+        <a class="nav-link active" href="{% url 'monitoring:commitment_list' %}"><i class="bi bi-handshake"></i><span>Compromisos</span></a>
+        <a class="nav-link" href="{% url 'monitoring:audit_list' %}"><i class="bi bi-shield-check"></i><span>Auditoría</span></a>
+    </nav>
+</aside>
 {% endblock %}
 
 {% block contenido %}
@@ -40,6 +50,7 @@
     <div class="row g-3 mb-4">
         <div class="col-12 col-md-4"><div class="section-card metric h-100"><div class="value">{{ total_commitments|default:"0" }}</div><div class="label">Compromisos registrados</div></div></div>
         <div class="col-12 col-md-4"><div class="section-card metric h-100"><div class="value text-warning">{{ pending_commitments|default:"0" }}</div><div class="label">Pendientes</div></div></div>
+        <div class="col-12 col-md-4"><div class="section-card metric h-100"><div class="value text-danger">{{ overdue_commitments|default:"0" }}</div><div class="label">Vencidos</div></div></div>
         <div class="col-12 col-md-4"><div class="section-card metric h-100"><div class="value text-success">{{ completed_commitments|default:"0" }}</div><div class="label">Completados</div></div></div>
     </div>
     <section class="section-card p-3 p-lg-4">
@@ -49,9 +60,9 @@
             <div class="col-12 col-md-3"><label class="filter-label" for="commitment-status">Estado</label><select id="commitment-status" name="status" class="form-select"><option value="">Todos los estados</option><option>Pendiente</option><option>En progreso</option><option>Completado</option></select></div>
             <div class="col-12 col-md-2"><button class="btn btn-dark w-100" type="submit"><i class="bi bi-funnel me-1"></i>Filtrar</button></div>
         </form>
-        <div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr><th>Área</th><th>Responsable</th><th>Delegación</th><th>Fecha</th><th>Estado</th><th>Observación</th></tr></thead><tbody>
+        <div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr><th>Área</th><th>Responsable</th><th>Delegación</th><th>Fecha</th><th>Estado</th><th>Comentarios</th></tr></thead><tbody>
             {% for commitment in commitments %}
-            <tr><td class="fw-semibold">{{ commitment.territory|default:"—" }}</td><td>{{ commitment.responsible|default:"Sin responsable" }}</td><td>{{ commitment.delegation|default:"—" }}</td><td class="text-muted small">{{ commitment.commitment_date|date:"d/m/Y"|default:"—" }}</td><td><span class="status {% if commitment.status|lower == 'completed' or commitment.status|lower == 'completado' %}status-green{% elif commitment.status|lower == 'pending' or commitment.status|lower == 'pendiente' %}status-yellow{% else %}status-muted{% endif %}">{{ commitment.status|default:"Pendiente" }}</span></td><td class="small text-muted">{{ commitment.observation|default:"Sin observaciones"|truncatechars:45 }}</td></tr>
+            <tr><td class="fw-semibold">{{ commitment.territory|default:"—" }}</td><td>{{ commitment.responsible|default:"Sin responsable" }}</td><td>{{ commitment.delegation|default:"—" }}</td><td class="text-muted small">{{ commitment.commitment_date|date:"d/m/Y"|default:"—" }}</td><td><span class="status {% if commitment.is_overdue %}status-red{% elif commitment.is_completed %}status-green{% elif commitment.status|lower == 'pending' or commitment.status|lower == 'pendiente' %}status-yellow{% else %}status-muted{% endif %}">{{ commitment.display_status|default:"Pendiente" }}</span></td><td class="small"><div class="text-muted mb-1">{{ commitment.comments.all|length }} comentario{{ commitment.comments.all|length|pluralize }}</div><form method="post" class="d-flex gap-1">{% csrf_token %}<input type="hidden" name="commitment_id" value="{{ commitment.pk }}"><input name="comment" class="form-control form-control-sm" placeholder="Agregar comentario..." required><button class="btn btn-sm btn-outline-dark" type="submit" title="Agregar comentario"><i class="bi bi-chat-left-text"></i></button></form>{% with latest=commitment.comments.all|first %}{% if latest %}<div class="mt-1 text-muted" title="{{ latest.text }}">{% firstof latest.author latest.created_by "Usuario" %}: {{ latest.text|truncatechars:42 }}</div>{% endif %}{% endwith %}</td></tr>
             {% empty %}<tr><td colspan="6" class="text-center py-5"><i class="bi bi-hand-thumbs-up fs-2 text-muted d-block mb-2"></i><span class="text-muted">No hay compromisos para mostrar.</span></td></tr>
             {% endfor %}
         </tbody></table></div>
