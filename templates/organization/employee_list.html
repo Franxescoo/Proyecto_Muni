@@ -3,16 +3,15 @@
 {% block titulo %}Funcionarios · Organización{% endblock %}
 
 {% block contenido %}
-<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
-    <h1 class="organization-title mb-0">Funcionarios</h1>
-    {% if perms.organization.add_employee %}
-    <a class="btn btn-organization-success fw-semibold" href="{% url 'organization:employee_create' %}">
-        <i class="bi bi-plus-lg"></i> Agregar funcionario
-    </a>
-    {% endif %}
-</div>
+<div class="organization-shell">
+<section class="organization-hero mb-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
+    <div><div class="small text-uppercase fw-semibold opacity-75 mb-2">Gestión de personas</div><h1 class="mb-2 fw-bold">Funcionarios</h1><p class="mb-0">Consulta funcionarios, sus delegaciones y cargos asociados.</p></div>
+    <div class="d-flex align-items-center gap-3"><i class="bi bi-people display-5 opacity-75" aria-hidden="true"></i>
+    {% if perms.organization.add_employee %}<a class="btn btn-light fw-semibold" href="{% url 'organization:employee_create' %}"><i class="bi bi-plus-lg me-1"></i>Agregar funcionario</a>{% endif %}
+    </div>
+</section>
 
-<section class="organization-card p-3 p-md-4">
+<section class="section-card p-3 p-lg-4">
     <form method="get" class="row g-2 mb-4">
         <div class="col-md-9">
             <label class="visually-hidden" for="employee-search">Buscar funcionario</label>
@@ -58,4 +57,5 @@
         </table>
     </div>
 </section>
+</div>
 {% endblock %}
