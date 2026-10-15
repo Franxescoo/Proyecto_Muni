@@ -2,7 +2,10 @@ from django.contrib import messages
 from django.contrib.auth.decorators import permission_required
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
+from django.views.decorators.http import require_POST
 
 from .forms import DelegationForm, EmployeeForm, PositionFunctionForm
 from .models import Delegation, Employee, PositionFunction
@@ -27,11 +30,20 @@ def _save_form(
         instance=instance,
         **form_kwargs,
     )
+    modal_request = request.GET.get("modal") == "1"
+
     if request.method == "POST" and form.is_valid():
         form.save()
-        messages.success(request, "Los datos se guardaron correctamente.")
+        message = "Los datos se guardaron correctamente."
+        if modal_request:
+            return JsonResponse({"ok": True, "message": message})
+        messages.success(request, message)
         return redirect(redirect_name)
-    return render(request, template_name, {"form": form, "title": title})
+
+    context = {"form": form, "title": title}
+    if modal_request:
+        return render(request, "organization/_modal_form.html", context)
+    return render(request, template_name, context)
 
 
 @permission_required("organization.view_employee", raise_exception=True)
@@ -78,6 +90,19 @@ def employee_edit(request, pk):
     )
 
 
+@require_POST
+@permission_required("organization.delete_employee", raise_exception=True)
+def employee_delete(request, pk):
+    employees = _active(Employee)
+    delegation_ids = allowed_delegation_ids(request.user)
+    if delegation_ids is not None:
+        employees = employees.filter(delegation_id__in=delegation_ids)
+    employee = get_object_or_404(employees, pk=pk)
+    employee.deleted_at = timezone.now()
+    employee.save(update_fields=["deleted_at", "updated_at"])
+    return JsonResponse({"ok": True, "message": "El funcionario se eliminó correctamente."})
+
+
 @permission_required("organization.view_delegation", raise_exception=True)
 def delegation_list(request):
     query = request.GET.get("q", "").strip()
@@ -121,6 +146,21 @@ def delegation_edit(request, pk):
     )
 
 
+@require_POST
+@permission_required("organization.delete_delegation", raise_exception=True)
+def delegation_delete(request, pk):
+    if not is_general_administrator(request.user):
+        raise PermissionDenied("Solo Administración General puede eliminar delegaciones.")
+    delegations = _active(Delegation)
+    delegation_ids = allowed_delegation_ids(request.user)
+    if delegation_ids is not None:
+        delegations = delegations.filter(pk__in=delegation_ids)
+    delegation = get_object_or_404(delegations, pk=pk)
+    delegation.deleted_at = timezone.now()
+    delegation.save(update_fields=["deleted_at", "updated_at"])
+    return JsonResponse({"ok": True, "message": "La delegación se eliminó correctamente."})
+
+
 @permission_required("organization.view_positionfunction", raise_exception=True)
 def position_list(request):
     query = request.GET.get("q", "").strip()
@@ -153,3 +193,12 @@ def position_edit(request, pk):
         request, PositionFunctionForm, "organization/position_form.html",
         "Editar cargo y función", "organization:position_list", position,
     )
+
+
+@require_POST
+@permission_required("organization.delete_positionfunction", raise_exception=True)
+def position_delete(request, pk):
+    position = get_object_or_404(_active(PositionFunction), pk=pk)
+    position.deleted_at = timezone.now()
+    position.save(update_fields=["deleted_at", "updated_at"])
+    return JsonResponse({"ok": True, "message": "El cargo se eliminó correctamente."})
