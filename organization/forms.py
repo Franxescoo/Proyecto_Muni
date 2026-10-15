@@ -35,13 +35,6 @@ class DelegationForm(BootstrapModelForm):
             "status": "Estado",
         }
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        current = getattr(self.instance, "status", "")
-        valid_values = {value for value, _ in self.fields["status"].choices}
-        if current and current not in valid_values:
-            self.fields["status"].choices += ((current, f"{current} (valor actual)"),)
-
 
 class PositionFunctionForm(BootstrapModelForm):
     class Meta:
