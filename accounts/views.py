@@ -165,6 +165,7 @@ def employee_form(request, pk=None):
 
     form = EmployeeForm(
         request.POST if request.method == "POST" else None,
+        request.FILES if request.method == "POST" else None,
         instance=employee,
     )
 
