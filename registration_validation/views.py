@@ -6,6 +6,7 @@ from django.contrib.auth.mixins import (
 )
 from django.contrib.auth.views import redirect_to_login
 from django.core.exceptions import PermissionDenied
+from django.db import transaction
 from django.db.models import Q
 from django.http import HttpResponseRedirect
 from django.shortcuts import redirect
@@ -19,9 +20,7 @@ from django.views.generic import (
     ListView,
     UpdateView,
 )
-
 from planning_measurements.models import Period
-
 from .forms import (
     ActivityForm,
     EvidenceForm,
@@ -30,11 +29,15 @@ from .forms import (
 from .models import (
     Activity,
     Evidence,
+    EvidenceFile,
     Validation,
 )
 
+
 REGISTRATION_PAGE_SIZE = 25
 REGISTRATION_PAGE_SIZE_OPTIONS = (10, 25, 50)
+
+
 REGISTRATION_PAGE_SIZE_SESSION_KEY = "registration_page_size"
 
 
@@ -49,16 +52,15 @@ def registration_page_size_context(request):
         "page_size": size,
         "page_size_options": REGISTRATION_PAGE_SIZE_OPTIONS,
     }
-
-
 @login_required
 @require_POST
+
+
 def set_page_size(request):
     try:
         size = int(request.POST.get("page_size", ""))
     except (TypeError, ValueError):
         size = None
-
     if size in REGISTRATION_PAGE_SIZE_OPTIONS:
         request.session[REGISTRATION_PAGE_SIZE_SESSION_KEY] = size
         messages.success(
@@ -70,7 +72,6 @@ def set_page_size(request):
             request,
             "Valor no válido para registros por página.",
         )
-
     next_url = request.POST.get("next", "")
     if not url_has_allowed_host_and_scheme(
         next_url,
@@ -78,12 +79,13 @@ def set_page_size(request):
         require_https=request.is_secure(),
     ):
         next_url = reverse("home")
-
     return redirect(next_url)
 
 
 # ---------------------------------------------------------
 # Utilidades de Activity
+
+
 # ---------------------------------------------------------
 
 
@@ -92,7 +94,6 @@ def scoped_activities(user):
     Retorna únicamente las actividades que el usuario
     puede visualizar según su delegación.
     """
-
     activities = (
         Activity.objects
         .filter(
@@ -108,22 +109,18 @@ def scoped_activities(user):
             "author__delegation",
         )
     )
-
     if user.is_superuser:
         return activities
-
     profile = getattr(
         user,
         "profile",
         None,
     )
-
     if (
         profile is None
         or profile.delegation_id is None
     ):
         return activities.none()
-
     return activities.filter(
         author__delegation_id=profile.delegation_id,
     )
@@ -134,22 +131,18 @@ def ensure_activity_editable(activity):
     Impide modificar o eliminar actividades relacionadas
     con metas o períodos archivados/cerrados.
     """
-
     goal = activity.goal
     period = goal.period
-
     if goal.deleted_at is not None:
         raise PermissionDenied(
             "No puedes modificar una actividad cuya "
             "meta se encuentra archivada."
         )
-
     if period.deleted_at is not None:
         raise PermissionDenied(
             "No puedes modificar una actividad asociada "
             "a un período archivado."
         )
-
     if period.status == Period.Status.CLOSED:
         raise PermissionDenied(
             "El período está cerrado. "
@@ -163,21 +156,17 @@ def filtered_activities(request):
     Aplica búsqueda y filtro de estado sobre las
     actividades que el usuario puede visualizar.
     """
-
     activities = scoped_activities(
         request.user,
     )
-
     query = request.GET.get(
         "q",
         "",
     ).strip()
-
     status = request.GET.get(
         "status",
         "",
     ).strip()
-
     if query:
         activities = activities.filter(
             Q(
@@ -196,12 +185,10 @@ def filtered_activities(request):
                 goal__item__icontains=query
             )
         )
-
     if status:
         activities = activities.filter(
             status=status,
         )
-
     return activities.order_by(
         "-date",
         "activity_id",
@@ -213,9 +200,7 @@ def activity_metrics(user):
     Métricas visibles de actividades según el alcance
     autorizado del usuario.
     """
-
     activities = scoped_activities(user)
-
     return {
         "total_activities": activities.count(),
         "pending_activities": activities.filter(
@@ -229,6 +214,8 @@ def activity_metrics(user):
 
 # ---------------------------------------------------------
 # Utilidades de Evidence
+
+
 # ---------------------------------------------------------
 
 
@@ -237,7 +224,6 @@ def scoped_evidences(user):
     Retorna únicamente las evidencias visibles para
     el usuario según la delegación de su actividad.
     """
-
     evidences = (
         Evidence.objects
         .filter(
@@ -256,22 +242,18 @@ def scoped_evidences(user):
             "author__delegation",
         )
     )
-
     if user.is_superuser:
         return evidences
-
     profile = getattr(
         user,
         "profile",
         None,
     )
-
     if (
         profile is None
         or profile.delegation_id is None
     ):
         return evidences.none()
-
     return evidences.filter(
         activity__author__delegation_id=(
             profile.delegation_id
@@ -284,29 +266,24 @@ def ensure_evidence_editable(evidence):
     Impide modificar o eliminar una evidencia cuando
     su actividad, meta o período no permite cambios.
     """
-
     activity = evidence.activity
     goal = activity.goal
     period = goal.period
-
     if activity.deleted_at is not None:
         raise PermissionDenied(
             "No puedes modificar una evidencia cuya "
             "actividad se encuentra eliminada."
         )
-
     if goal.deleted_at is not None:
         raise PermissionDenied(
             "No puedes modificar una evidencia cuya "
             "meta se encuentra archivada."
         )
-
     if period.deleted_at is not None:
         raise PermissionDenied(
             "No puedes modificar una evidencia asociada "
             "a un período archivado."
         )
-
     if period.status == Period.Status.CLOSED:
         raise PermissionDenied(
             "El período está cerrado. "
@@ -320,21 +297,17 @@ def filtered_evidences(request):
     Aplica búsqueda y filtro por estado de revisión
     sobre las evidencias visibles para el usuario.
     """
-
     evidences = scoped_evidences(
         request.user,
     )
-
     query = request.GET.get(
         "q",
         "",
     ).strip()
-
     review_status = request.GET.get(
         "review_status",
         "",
     ).strip()
-
     if query:
         evidences = evidences.filter(
             Q(
@@ -353,12 +326,10 @@ def filtered_evidences(request):
                 file_link__icontains=query
             )
         )
-
     if review_status:
         evidences = evidences.filter(
             review_status=review_status,
         )
-
     return evidences.order_by(
         "-date",
         "evidence_id",
@@ -369,11 +340,9 @@ def evidence_status_options(user):
     """
     Obtiene los estados de revisión que realmente
     existen en los registros visibles.
-
     No se inventan estados que no estén definidos
     actualmente en los datos del proyecto.
     """
-
     return list(
         scoped_evidences(user)
         .exclude(
@@ -392,20 +361,21 @@ def evidence_status_options(user):
 
 def evidence_metrics(user):
     """
-    Métricas visibles de evidencias según el alcance
-    autorizado del usuario.
+    Estadísticas visibles para el usuario. Se cuentan tanto
+    los adjuntos nuevos como el campo de archivo antiguo.
     """
-
     evidences = scoped_evidences(user)
 
     evidences_with_file = (
         evidences
         .filter(
-            file__isnull=False,
+            Q(file__isnull=False) & ~Q(file="")
+            | Q(
+                files__evidence_file_id__isnull=False,
+                files__deleted_at__isnull=True,
+            )
         )
-        .exclude(
-            file="",
-        )
+        .distinct()
         .count()
     )
 
@@ -418,8 +388,61 @@ def evidence_metrics(user):
     }
 
 
+def save_evidence_files(evidence, form):
+    """
+    Sincroniza los archivos ya validados por EvidenceForm.
+
+    Convierte la referencia antigua Evidence.file en una fila
+    de EvidenceFile sin duplicar el archivo físico. Los archivos
+    retirados se archivan lógicamente (no se borran del disco).
+    Esta función debe ejecutarse dentro de transaction.atomic().
+    """
+    if evidence.file:
+        legacy_path = evidence.file.name
+
+        # Consultamos también las filas archivadas para evitar
+        # recrear un adjunto que ya existió con esa ruta.
+        if not EvidenceFile.objects.filter(
+            evidence=evidence,
+            file=legacy_path,
+        ).exists():
+            EvidenceFile.objects.create(
+                evidence=evidence,
+                file=legacy_path,
+            )
+
+        # El archivo continúa en almacenamiento; solamente
+        # dejamos de utilizar el antiguo campo único.
+        evidence.file = None
+        evidence.save(update_fields=["file", "updated_at"])
+
+    now = timezone.now()
+
+    for existing_file in form.files_to_remove:
+        # La comprobación de pertenencia se hizo en form.clean();
+        # se vuelve a restringir aquí para no afectar a otras evidencias.
+        if (
+            existing_file.evidence_id == evidence.pk
+            and existing_file.deleted_at is None
+        ):
+            existing_file.deleted_at = now
+            existing_file.save(
+                update_fields=["deleted_at", "updated_at"],
+            )
+
+    for uploaded_file in form.cleaned_data.get("new_files", []):
+        attachment = EvidenceFile(
+            evidence=evidence,
+            file=uploaded_file,
+        )
+        attachment.full_clean()
+        attachment.save()
+
+
 # ---------------------------------------------------------
 # Utilidades de Validation
+
+
 # ---------------------------------------------------------
 
 
@@ -429,7 +452,6 @@ def scoped_validations(user):
     el usuario según la delegación de la actividad
     asociada a su evidencia.
     """
-
     validations = (
         Validation.objects
         .filter(
@@ -450,22 +472,18 @@ def scoped_validations(user):
             "verifier__delegation",
         )
     )
-
     if user.is_superuser:
         return validations
-
     profile = getattr(
         user,
         "profile",
         None,
     )
-
     if (
         profile is None
         or profile.delegation_id is None
     ):
         return validations.none()
-
     return validations.filter(
         evidence__activity__author__delegation_id=(
             profile.delegation_id
@@ -479,36 +497,30 @@ def ensure_validation_editable(validation):
     la evidencia, actividad, meta o período asociado
     no permite cambios.
     """
-
     evidence = validation.evidence
     activity = evidence.activity
     goal = activity.goal
     period = goal.period
-
     if evidence.deleted_at is not None:
         raise PermissionDenied(
             "No puedes modificar una validación cuya "
             "evidencia se encuentra eliminada."
         )
-
     if activity.deleted_at is not None:
         raise PermissionDenied(
             "No puedes modificar una validación cuya "
             "actividad se encuentra eliminada."
         )
-
     if goal.deleted_at is not None:
         raise PermissionDenied(
             "No puedes modificar una validación cuya "
             "meta se encuentra archivada."
         )
-
     if period.deleted_at is not None:
         raise PermissionDenied(
             "No puedes modificar una validación asociada "
             "a un período archivado."
         )
-
     if period.status == Period.Status.CLOSED:
         raise PermissionDenied(
             "El período está cerrado. "
@@ -522,16 +534,13 @@ def filtered_validations(request):
     Aplica búsqueda sobre las validaciones visibles
     para el usuario.
     """
-
     validations = scoped_validations(
         request.user,
     )
-
     query = request.GET.get(
         "q",
         "",
     ).strip()
-
     if query:
         validations = validations.filter(
             Q(
@@ -550,7 +559,6 @@ def filtered_validations(request):
                 observation__icontains=query
             )
         )
-
     return validations.order_by(
         "-date",
         "-version",
@@ -563,9 +571,7 @@ def validation_metrics(user):
     Métricas visibles de validaciones según el alcance
     autorizado del usuario.
     """
-
     validations = scoped_validations(user)
-
     last_validation_date = (
         validations
         .order_by("-date")
@@ -575,7 +581,6 @@ def validation_metrics(user):
         )
         .first()
     )
-
     reviewed_evidences = (
         validations
         .values(
@@ -584,7 +589,6 @@ def validation_metrics(user):
         .distinct()
         .count()
     )
-
     return {
         "total_validations": validations.count(),
         "reviewed_evidences": reviewed_evidences,
@@ -594,6 +598,8 @@ def validation_metrics(user):
 
 # ---------------------------------------------------------
 # Mixins reutilizables de Activity
+
+
 # ---------------------------------------------------------
 
 
@@ -605,7 +611,6 @@ class ActivityPermissionMixin(
     Exige autenticación y el permiso definido
     por cada vista de Activity.
     """
-
     login_url = "login"
     raise_exception = True
 
@@ -615,7 +620,6 @@ class ActivityPermissionMixin(
                 "No tienes permisos para realizar "
                 "esta operación."
             )
-
         return redirect_to_login(
             self.request.get_full_path(),
             self.get_login_url(),
@@ -642,9 +646,7 @@ class ActivityFormMixin:
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
-
         kwargs["user"] = self.request.user
-
         return kwargs
 
 
@@ -661,27 +663,23 @@ class ActivityPageContextMixin:
         context = super().get_context_data(
             **kwargs,
         )
-
         context["activities"] = (
             filtered_activities(
                 self.request,
             )
         )
-
         context["query"] = (
             self.request.GET.get(
                 "q",
                 "",
             ).strip()
         )
-
         context["selected_status"] = (
             self.request.GET.get(
                 "status",
                 "",
             ).strip()
         )
-
         context["status_options"] = [
             (
                 "Pending",
@@ -696,7 +694,6 @@ class ActivityPageContextMixin:
                 "Completada",
             ),
         ]
-
         context.update(
             activity_metrics(
                 self.request.user,
@@ -707,14 +704,14 @@ class ActivityPageContextMixin:
                 self.request,
             )
         )
-
         context["open_modal"] = True
-
         return context
 
 
 # ---------------------------------------------------------
 # Mixins reutilizables de Evidence
+
+
 # ---------------------------------------------------------
 
 
@@ -726,7 +723,6 @@ class EvidencePermissionMixin(
     Exige autenticación y permiso para las vistas
     relacionadas con Evidence.
     """
-
     login_url = "login"
     raise_exception = True
 
@@ -736,7 +732,6 @@ class EvidencePermissionMixin(
                 "No tienes permisos para realizar "
                 "esta operación."
             )
-
         return redirect_to_login(
             self.request.get_full_path(),
             self.get_login_url(),
@@ -763,9 +758,7 @@ class EvidenceFormMixin:
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
-
         kwargs["user"] = self.request.user
-
         return kwargs
 
 
@@ -782,33 +775,28 @@ class EvidencePageContextMixin:
         context = super().get_context_data(
             **kwargs,
         )
-
         context["evidences"] = (
             filtered_evidences(
                 self.request,
             )
         )
-
         context["query"] = (
             self.request.GET.get(
                 "q",
                 "",
             ).strip()
         )
-
         context["selected_review_status"] = (
             self.request.GET.get(
                 "review_status",
                 "",
             ).strip()
         )
-
         context["review_status_options"] = (
             evidence_status_options(
                 self.request.user,
             )
         )
-
         context.update(
             evidence_metrics(
                 self.request.user,
@@ -819,14 +807,14 @@ class EvidencePageContextMixin:
                 self.request,
             )
         )
-
         context["open_modal"] = True
-
         return context
 
 
 # ---------------------------------------------------------
 # Mixins reutilizables de Validation
+
+
 # ---------------------------------------------------------
 
 
@@ -838,7 +826,6 @@ class ValidationPermissionMixin(
     Exige autenticación y permiso para las vistas
     relacionadas con Validation.
     """
-
     login_url = "login"
     raise_exception = True
 
@@ -848,7 +835,6 @@ class ValidationPermissionMixin(
                 "No tienes permisos para realizar "
                 "esta operación."
             )
-
         return redirect_to_login(
             self.request.get_full_path(),
             self.get_login_url(),
@@ -875,9 +861,7 @@ class ValidationFormMixin:
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
-
         kwargs["user"] = self.request.user
-
         return kwargs
 
 
@@ -894,20 +878,17 @@ class ValidationPageContextMixin:
         context = super().get_context_data(
             **kwargs,
         )
-
         context["validations"] = (
             filtered_validations(
                 self.request,
             )
         )
-
         context["query"] = (
             self.request.GET.get(
                 "q",
                 "",
             ).strip()
         )
-
         context.update(
             validation_metrics(
                 self.request.user,
@@ -918,9 +899,7 @@ class ValidationPageContextMixin:
                 self.request,
             )
         )
-
         context["open_modal"] = True
-
         return context
 
 
@@ -947,6 +926,8 @@ class RegistrationPaginationMixin:
 
 # ---------------------------------------------------------
 # CRUD de Activity
+
+
 # ---------------------------------------------------------
 
 
@@ -956,18 +937,14 @@ class ActivityListView(
     ListView,
 ):
     model = Activity
-
     permission_required = (
         "registration_validation.view_activity"
     )
-
     template_name = (
         "registration_validation/"
         "activity_list.html"
     )
-
     context_object_name = "activities"
-
     paginate_by = 25
 
     def get_queryset(self):
@@ -982,21 +959,18 @@ class ActivityListView(
         context = super().get_context_data(
             **kwargs,
         )
-
         context["query"] = (
             self.request.GET.get(
                 "q",
                 "",
             ).strip()
         )
-
         context["selected_status"] = (
             self.request.GET.get(
                 "status",
                 "",
             ).strip()
         )
-
         context["status_options"] = [
             (
                 "Pending",
@@ -1011,13 +985,11 @@ class ActivityListView(
                 "Completada",
             ),
         ]
-
         context.update(
             activity_metrics(
                 self.request.user,
             )
         )
-
         return context
 
 
@@ -1028,18 +1000,14 @@ class ActivityCreateView(
     CreateView,
 ):
     model = Activity
-
     form_class = ActivityForm
-
     permission_required = (
         "registration_validation.add_activity"
     )
-
     template_name = (
         "registration_validation/"
         "activity_list.html"
     )
-
     success_url = reverse_lazy(
         "registration:activity_list"
     )
@@ -1051,12 +1019,10 @@ class ActivityCreateView(
         response = super().form_valid(
             form,
         )
-
         messages.success(
             self.request,
             "Actividad creada correctamente.",
         )
-
         return response
 
 
@@ -1068,20 +1034,15 @@ class ActivityUpdateView(
     UpdateView,
 ):
     model = Activity
-
     form_class = ActivityForm
-
     permission_required = (
         "registration_validation.change_activity"
     )
-
     template_name = (
         "registration_validation/"
         "activity_list.html"
     )
-
     pk_url_kwarg = "activity_id"
-
     success_url = reverse_lazy(
         "registration:activity_list"
     )
@@ -1093,11 +1054,9 @@ class ActivityUpdateView(
         activity = super().get_object(
             queryset,
         )
-
         ensure_activity_editable(
             activity,
         )
-
         return activity
 
     def form_valid(
@@ -1107,12 +1066,10 @@ class ActivityUpdateView(
         response = super().form_valid(
             form,
         )
-
         messages.success(
             self.request,
             "Actividad actualizada correctamente.",
         )
-
         return response
 
 
@@ -1122,17 +1079,13 @@ class ActivityDeleteView(
     DeleteView,
 ):
     model = Activity
-
     permission_required = (
         "registration_validation.delete_activity"
     )
-
     pk_url_kwarg = "activity_id"
-
     success_url = reverse_lazy(
         "registration:activity_list"
     )
-
     http_method_names = [
         "post",
     ]
@@ -1144,11 +1097,9 @@ class ActivityDeleteView(
         activity = super().get_object(
             queryset,
         )
-
         ensure_activity_editable(
             activity,
         )
-
         return activity
 
     def form_valid(
@@ -1156,21 +1107,17 @@ class ActivityDeleteView(
         form,
     ):
         now = timezone.now()
-
         self.object.deleted_at = now
-
         self.object.save(
             update_fields=[
                 "deleted_at",
                 "updated_at",
             ],
         )
-
         messages.success(
             self.request,
             "Actividad eliminada correctamente.",
         )
-
         return HttpResponseRedirect(
             self.get_success_url(),
         )
@@ -1178,6 +1125,8 @@ class ActivityDeleteView(
 
 # ---------------------------------------------------------
 # CRUD de Evidence
+
+
 # ---------------------------------------------------------
 
 
@@ -1187,18 +1136,14 @@ class EvidenceListView(
     ListView,
 ):
     model = Evidence
-
     permission_required = (
         "registration_validation.view_evidence"
     )
-
     template_name = (
         "registration_validation/"
         "evidence_list.html"
     )
-
     context_object_name = "evidences"
-
     paginate_by = 25
 
     def get_queryset(self):
@@ -1213,33 +1158,28 @@ class EvidenceListView(
         context = super().get_context_data(
             **kwargs,
         )
-
         context["query"] = (
             self.request.GET.get(
                 "q",
                 "",
             ).strip()
         )
-
         context["selected_review_status"] = (
             self.request.GET.get(
                 "review_status",
                 "",
             ).strip()
         )
-
         context["review_status_options"] = (
             evidence_status_options(
                 self.request.user,
             )
         )
-
         context.update(
             evidence_metrics(
                 self.request.user,
             )
         )
-
         return context
 
 
@@ -1250,36 +1190,28 @@ class EvidenceCreateView(
     CreateView,
 ):
     model = Evidence
-
     form_class = EvidenceForm
-
     permission_required = (
         "registration_validation.add_evidence"
     )
-
     template_name = (
         "registration_validation/"
         "evidence_list.html"
     )
-
     success_url = reverse_lazy(
         "registration:evidence_list"
     )
 
-    def form_valid(
-        self,
-        form,
-    ):
-        response = super().form_valid(
-            form,
-        )
+    def form_valid(self, form):
+        with transaction.atomic():
+            self.object = form.save()
+            save_evidence_files(self.object, form)
 
         messages.success(
             self.request,
             "Evidencia creada correctamente.",
         )
-
-        return response
+        return HttpResponseRedirect(self.get_success_url())
 
 
 class EvidenceUpdateView(
@@ -1290,20 +1222,15 @@ class EvidenceUpdateView(
     UpdateView,
 ):
     model = Evidence
-
     form_class = EvidenceForm
-
     permission_required = (
         "registration_validation.change_evidence"
     )
-
     template_name = (
         "registration_validation/"
         "evidence_list.html"
     )
-
     pk_url_kwarg = "evidence_id"
-
     success_url = reverse_lazy(
         "registration:evidence_list"
     )
@@ -1315,27 +1242,21 @@ class EvidenceUpdateView(
         evidence = super().get_object(
             queryset,
         )
-
         ensure_evidence_editable(
             evidence,
         )
-
         return evidence
 
-    def form_valid(
-        self,
-        form,
-    ):
-        response = super().form_valid(
-            form,
-        )
+    def form_valid(self, form):
+        with transaction.atomic():
+            self.object = form.save()
+            save_evidence_files(self.object, form)
 
         messages.success(
             self.request,
             "Evidencia actualizada correctamente.",
         )
-
-        return response
+        return HttpResponseRedirect(self.get_success_url())
 
 
 class EvidenceDeleteView(
@@ -1344,17 +1265,13 @@ class EvidenceDeleteView(
     DeleteView,
 ):
     model = Evidence
-
     permission_required = (
         "registration_validation.delete_evidence"
     )
-
     pk_url_kwarg = "evidence_id"
-
     success_url = reverse_lazy(
         "registration:evidence_list"
     )
-
     http_method_names = [
         "post",
     ]
@@ -1366,11 +1283,9 @@ class EvidenceDeleteView(
         evidence = super().get_object(
             queryset,
         )
-
         ensure_evidence_editable(
             evidence,
         )
-
         return evidence
 
     def form_valid(
@@ -1378,21 +1293,17 @@ class EvidenceDeleteView(
         form,
     ):
         now = timezone.now()
-
         self.object.deleted_at = now
-
         self.object.save(
             update_fields=[
                 "deleted_at",
                 "updated_at",
             ],
         )
-
         messages.success(
             self.request,
             "Evidencia eliminada correctamente.",
         )
-
         return HttpResponseRedirect(
             self.get_success_url(),
         )
@@ -1400,6 +1311,8 @@ class EvidenceDeleteView(
 
 # ---------------------------------------------------------
 # CRUD de Validation
+
+
 # ---------------------------------------------------------
 
 
@@ -1409,18 +1322,14 @@ class ValidationListView(
     ListView,
 ):
     model = Validation
-
     permission_required = (
         "registration_validation.view_validation"
     )
-
     template_name = (
         "registration_validation/"
         "validation_list.html"
     )
-
     context_object_name = "validations"
-
     paginate_by = 25
 
     def get_queryset(self):
@@ -1435,20 +1344,17 @@ class ValidationListView(
         context = super().get_context_data(
             **kwargs,
         )
-
         context["query"] = (
             self.request.GET.get(
                 "q",
                 "",
             ).strip()
         )
-
         context.update(
             validation_metrics(
                 self.request.user,
             )
         )
-
         return context
 
 
@@ -1459,18 +1365,14 @@ class ValidationCreateView(
     CreateView,
 ):
     model = Validation
-
     form_class = ValidationForm
-
     permission_required = (
         "registration_validation.add_validation"
     )
-
     template_name = (
         "registration_validation/"
         "validation_list.html"
     )
-
     success_url = reverse_lazy(
         "registration:validation_list"
     )
@@ -1482,12 +1384,10 @@ class ValidationCreateView(
         response = super().form_valid(
             form,
         )
-
         messages.success(
             self.request,
             "Validación creada correctamente.",
         )
-
         return response
 
 
@@ -1499,20 +1399,15 @@ class ValidationUpdateView(
     UpdateView,
 ):
     model = Validation
-
     form_class = ValidationForm
-
     permission_required = (
         "registration_validation.change_validation"
     )
-
     template_name = (
         "registration_validation/"
         "validation_list.html"
     )
-
     pk_url_kwarg = "validation_id"
-
     success_url = reverse_lazy(
         "registration:validation_list"
     )
@@ -1524,11 +1419,9 @@ class ValidationUpdateView(
         validation = super().get_object(
             queryset,
         )
-
         ensure_validation_editable(
             validation,
         )
-
         return validation
 
     def form_valid(
@@ -1538,12 +1431,10 @@ class ValidationUpdateView(
         response = super().form_valid(
             form,
         )
-
         messages.success(
             self.request,
             "Validación actualizada correctamente.",
         )
-
         return response
 
 
@@ -1553,17 +1444,13 @@ class ValidationDeleteView(
     DeleteView,
 ):
     model = Validation
-
     permission_required = (
         "registration_validation.delete_validation"
     )
-
     pk_url_kwarg = "validation_id"
-
     success_url = reverse_lazy(
         "registration:validation_list"
     )
-
     http_method_names = [
         "post",
     ]
@@ -1575,11 +1462,9 @@ class ValidationDeleteView(
         validation = super().get_object(
             queryset,
         )
-
         ensure_validation_editable(
             validation,
         )
-
         return validation
 
     def form_valid(
@@ -1587,21 +1472,17 @@ class ValidationDeleteView(
         form,
     ):
         now = timezone.now()
-
         self.object.deleted_at = now
-
         self.object.save(
             update_fields=[
                 "deleted_at",
                 "updated_at",
             ],
         )
-
         messages.success(
             self.request,
             "Validación eliminada correctamente.",
         )
-
         return HttpResponseRedirect(
             self.get_success_url(),
         )

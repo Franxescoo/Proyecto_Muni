@@ -1,3 +1,4 @@
+
 {% extends "registration_validation/base.html" %}
 
 {% block titulo %}Evidencias · Registro y validación{% endblock %}
@@ -6,10 +7,10 @@
 
 <div class="registration-shell pb-4" id="evidencias">
 
+    <!-- Encabezado principal -->
     <section class="registration-hero mb-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
 
         <div>
-
             <div class="small text-uppercase fw-semibold opacity-75 mb-2">
                 Registro y validación
             </div>
@@ -21,7 +22,6 @@
             <p class="mb-0">
                 Administra los respaldos asociados a las actividades registradas.
             </p>
-
         </div>
 
         <i class="bi bi-file-earmark-check display-5 opacity-75"
@@ -30,10 +30,10 @@
     </section>
 
 
+    <!-- Tarjetas de métricas -->
     <div class="row g-3 mb-4">
 
         <div class="col-12 col-md-4">
-
             <div class="section-card metric h-100">
 
                 <div class="value">
@@ -45,12 +45,10 @@
                 </div>
 
             </div>
-
         </div>
 
 
         <div class="col-12 col-md-4">
-
             <div class="section-card metric h-100">
 
                 <div class="value text-warning">
@@ -62,12 +60,10 @@
                 </div>
 
             </div>
-
         </div>
 
 
         <div class="col-12 col-md-4">
-
             <div class="section-card metric h-100">
 
                 <div class="value text-success">
@@ -79,18 +75,17 @@
                 </div>
 
             </div>
-
         </div>
 
     </div>
 
 
+    <!-- Listado principal -->
     <section class="section-card p-3 p-lg-4">
 
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
 
             <div>
-
                 <h2 class="h5 mb-1 fw-bold">
                     Listado de evidencias
                 </h2>
@@ -98,7 +93,6 @@
                 <p class="text-muted small mb-0">
                     Consulta archivos, enlaces, responsables y estados de revisión.
                 </p>
-
             </div>
 
 
@@ -117,6 +111,7 @@
         </div>
 
 
+        <!-- Filtros -->
         <form method="get"
               class="row g-3 align-items-end mb-3">
 
@@ -124,9 +119,7 @@
 
                 <label class="filter-label"
                        for="evidence-search">
-
                     Buscar evidencia
-
                 </label>
 
                 <input id="evidence-search"
@@ -143,9 +136,7 @@
 
                 <label class="filter-label"
                        for="evidence-status">
-
                     Estado de revisión
-
                 </label>
 
                 <select id="evidence-status"
@@ -159,9 +150,7 @@
                     {% for status in review_status_options %}
 
                     <option value="{{ status }}"
-                            {% if selected_review_status == status %}
-                            selected
-                            {% endif %}>
+                            {% if selected_review_status == status %}selected{% endif %}>
 
                         {{ status }}
 
@@ -191,60 +180,75 @@
 
                 <a href="{% url 'registration:evidence_list' %}"
                    class="btn btn-outline-secondary w-100">
-
                     Limpiar
-
                 </a>
 
             </div>
 
         </form>
 
+
+        <!-- Preferencia de paginación -->
         {% if not open_modal %}
+
         <form method="post"
               action="{% url 'registration:set_page_size' %}"
               class="d-flex flex-wrap align-items-center gap-2 mb-3">
 
             {% csrf_token %}
-            <input type="hidden" name="next" value="{{ request.get_full_path }}">
 
-            <label for="evidence-page-size" class="form-label mb-0 small text-muted">
+            <input type="hidden"
+                   name="next"
+                   value="{{ request.get_full_path }}">
+
+            <label for="evidence-page-size"
+                   class="form-label mb-0 small text-muted">
                 Registros por página
             </label>
+
             <select id="evidence-page-size"
                     name="page_size"
                     class="form-select form-select-sm w-auto">
+
                 {% for size in page_size_options %}
-                <option value="{{ size }}" {% if size == page_size %}selected{% endif %}>
+
+                <option value="{{ size }}"
+                        {% if size == page_size %}selected{% endif %}>
                     {{ size }}
                 </option>
+
                 {% endfor %}
+
             </select>
-            <button type="submit" class="btn btn-secondary btn-sm">
+
+            <button type="submit"
+                    class="btn btn-secondary btn-sm">
                 Guardar preferencia
             </button>
 
         </form>
+
         {% endif %}
 
+
+        <!-- Tabla de evidencias -->
         <div class="table-responsive">
 
             <table class="table table-hover align-middle mb-0">
 
                 <thead>
-
                     <tr>
                         <th>Código</th>
                         <th>Actividad</th>
                         <th>Funcionario</th>
                         <th>Fecha</th>
                         <th>Estado</th>
-                        <th>Archivo / Enlace</th>
+                        <th>Archivos / Enlace</th>
                         <th>Período</th>
                         <th class="text-end">Acciones</th>
                     </tr>
-
                 </thead>
+
 
                 <tbody>
 
@@ -272,6 +276,7 @@
                         </td>
 
 
+                        <!-- Estado de revisión -->
                         <td>
 
                             {% if evidence.review_status|lower == "pending" or evidence.review_status|lower == "pendiente" %}
@@ -291,51 +296,102 @@
                         </td>
 
 
+                        <!-- Archivos múltiples y enlace -->
                         <td>
 
-                            {% if evidence.file %}
+                            <div class="d-flex flex-column align-items-start gap-1">
 
-                            <a href="{{ evidence.file.url }}"
-                               target="_blank"
-                               rel="noopener noreferrer"
-                               class="btn btn-sm btn-light border mb-1"
-                               title="Ver archivo">
+                                {% with attachments=evidence.files.all %}
 
-                                <i class="bi bi-paperclip me-1"></i>
-                                Archivo
+                                    {% if attachments %}
 
-                            </a>
+                                    <details class="w-100">
 
-                            {% endif %}
+                                        <summary class="btn btn-sm btn-light border mb-1">
+
+                                            <i class="bi bi-paperclip me-1"></i>
+                                            Ver archivos
+
+                                        </summary>
+
+                                        <div class="d-flex flex-column align-items-start gap-1 mt-1 ps-2">
+
+                                            {% for attachment in attachments %}
+
+                                                {% if not attachment.deleted_at %}
+
+                                                <a href="{{ attachment.file.url }}"
+                                                   target="_blank"
+                                                   rel="noopener noreferrer"
+                                                   class="btn btn-sm btn-outline-secondary text-start"
+                                                   title="{{ attachment.file.name }}">
+
+                                                    <i class="bi bi-file-earmark me-1"></i>
+                                                    {{ attachment.file.name|truncatechars:40 }}
+
+                                                </a>
+
+                                                {% endif %}
+
+                                            {% endfor %}
+
+                                        </div>
+
+                                    </details>
+
+                                    {% endif %}
+
+                                {% endwith %}
 
 
-                            {% if evidence.file_link %}
+                                <!-- Compatibilidad con archivo antiguo -->
+                                {% if evidence.file %}
 
-                            <a href="{{ evidence.file_link }}"
-                               target="_blank"
-                               rel="noopener noreferrer"
-                               class="btn btn-sm btn-light border mb-1"
-                               title="Abrir enlace">
+                                <a href="{{ evidence.file.url }}"
+                                   target="_blank"
+                                   rel="noopener noreferrer"
+                                   class="btn btn-sm btn-light border"
+                                   title="{{ evidence.file.name }}">
 
-                                <i class="bi bi-link-45deg me-1"></i>
-                                Enlace
+                                    <i class="bi bi-file-earmark me-1"></i>
+                                    Archivo anterior
 
-                            </a>
+                                </a>
 
-                            {% endif %}
+                                {% endif %}
 
 
-                            {% if not evidence.file and not evidence.file_link %}
+                                <!-- Enlace opcional -->
+                                {% if evidence.file_link %}
 
-                            <span class="text-muted small">
-                                Sin respaldo
-                            </span>
+                                <a href="{{ evidence.file_link }}"
+                                   target="_blank"
+                                   rel="noopener noreferrer"
+                                   class="btn btn-sm btn-light border"
+                                   title="Abrir enlace de evidencia">
 
-                            {% endif %}
+                                    <i class="bi bi-link-45deg me-1"></i>
+                                    Ver enlace
+
+                                </a>
+
+                                {% endif %}
+
+
+                                {% if not evidence.files.all and not evidence.file and not evidence.file_link %}
+
+                                <span class="text-muted small">
+                                    Sin respaldo
+                                </span>
+
+                                {% endif %}
+
+                            </div>
 
                         </td>
 
 
+                        <!-- Período -->
                         <td class="small">
 
                             <div>
@@ -359,6 +415,7 @@
                         </td>
 
 
+                        <!-- Acciones -->
                         <td class="text-end">
 
                             {% if evidence.activity.goal.period.status == "Closed" %}
@@ -398,7 +455,6 @@
 
                                 </form>
 
-
                                 <button type="button"
                                         class="btn btn-sm btn-light border text-danger"
                                         title="Eliminar evidencia"
@@ -416,7 +472,6 @@
                                 </button>
 
                                 {% endif %}
-
 
                             {% endif %}
 
@@ -451,6 +506,7 @@
         </div>
 
 
+        <!-- Paginación -->
         {% if is_paginated %}
 
         <nav class="mt-4">
@@ -462,10 +518,8 @@
                 <li class="page-item">
 
                     <a class="page-link"
-                       href="?page={{ page_obj.previous_page_number }}&q={{ query }}&review_status={{ selected_review_status }}">
-
+                       href="?page={{ page_obj.previous_page_number }}&q={{ query|urlencode }}&review_status={{ selected_review_status|urlencode }}">
                         Anterior
-
                     </a>
 
                 </li>
@@ -476,11 +530,9 @@
                 <li class="page-item active">
 
                     <span class="page-link">
-
                         {{ page_obj.number }}
                         de
                         {{ page_obj.paginator.num_pages }}
-
                     </span>
 
                 </li>
@@ -491,10 +543,8 @@
                 <li class="page-item">
 
                     <a class="page-link"
-                       href="?page={{ page_obj.next_page_number }}&q={{ query }}&review_status={{ selected_review_status }}">
-
+                       href="?page={{ page_obj.next_page_number }}&q={{ query|urlencode }}&review_status={{ selected_review_status|urlencode }}">
                         Siguiente
-
                     </a>
 
                 </li>
@@ -512,6 +562,7 @@
 </div>
 
 
+<!-- Modal de crear / modificar -->
 {% include "registration_validation/_evidence_modal.html" %}
 
 {% endblock %}
@@ -524,24 +575,17 @@
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 
+<!-- Confirmación de eliminación -->
 <script>
-
     function confirmDeleteEvidence(id, code) {
 
         Swal.fire({
-
             title: "¿Eliminar evidencia?",
-
             text: code,
-
             icon: "warning",
-
             showCancelButton: true,
-
             confirmButtonText: "Sí, eliminar",
-
             cancelButtonText: "Cancelar",
-
             confirmButtonColor: "#a60a17"
 
         }).then((result) => {
@@ -549,9 +593,7 @@
             if (result.isConfirmed) {
 
                 document
-                    .getElementById(
-                        "delete-form-" + id
-                    )
+                    .getElementById("delete-form-" + id)
                     .submit();
 
             }
@@ -559,35 +601,28 @@
         });
 
     }
-
 </script>
 
 
+<!-- Mensajes SweetAlert -->
 {% if messages %}
 
 <script>
-
     document.addEventListener(
         "DOMContentLoaded",
         function () {
 
-            document
-                .querySelectorAll(
-                    ".alert-dismissible"
-                )
-                .forEach(
-                    function (alertElement) {
-
-                        alertElement.remove();
-
-                    }
-                );
-
+            document.querySelectorAll(
+                ".alert-dismissible"
+            ).forEach(
+                function (alertElement) {
+                    alertElement.remove();
+                }
+            );
 
             {% for message in messages %}
 
             Swal.fire({
-
                 title: (
                     "{% if message.tags == 'success' %}"
                     + "Operación exitosa"
@@ -615,25 +650,22 @@
                 ),
 
                 confirmButtonText: "Aceptar",
-
                 confirmButtonColor: "#a60a17"
-
             });
 
             {% endfor %}
 
         }
     );
-
 </script>
 
 {% endif %}
 
 
+<!-- Abrir el modal cuando corresponde -->
 {% if open_modal %}
 
 <script>
-
     document.addEventListener(
         "DOMContentLoaded",
         function () {
@@ -642,7 +674,6 @@
                 document.getElementById(
                     "evidenceModal"
                 );
-
 
             if (
                 modalElement &&
@@ -660,7 +691,6 @@
 
         }
     );
-
 </script>
 
 {% endif %}

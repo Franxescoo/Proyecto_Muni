@@ -1,9 +1,24 @@
+
 from django import forms
+from django.core.validators import FileExtensionValidator
 
 from organization.models import Employee
 from planning_measurements.models import Goal, Period
 
-from .models import Activity, Evidence, Validation
+from .models import (
+    Activity,
+    Evidence,
+    Validation,
+    MIN_EVIDENCE_FILES,
+    MAX_EVIDENCE_FILES,
+    MAX_EVIDENCE_TOTAL_SIZE,
+    EVIDENCE_ALLOWED_EXTENSIONS,
+)
+
+
+# ---------------------------------------------------------
+# Estilos reutilizables
+# ---------------------------------------------------------
 
 
 class BootstrapMixin:
@@ -21,6 +36,46 @@ class BootstrapMixin:
                 css_class = "form-control"
 
             field.widget.attrs["class"] = css_class
+
+
+# ---------------------------------------------------------
+# Campos para múltiples archivos
+# ---------------------------------------------------------
+
+
+class MultipleFileInput(forms.ClearableFileInput):
+    allow_multiple_selected = True
+
+
+class MultipleFileField(forms.FileField):
+    """
+    Permite recibir y validar varios archivos
+    desde un único campo del formulario.
+    """
+
+    def clean(self, data, initial=None):
+        if not data:
+            if self.required:
+                raise forms.ValidationError(
+                    "Debes seleccionar archivos."
+                )
+            return []
+
+        if not isinstance(data, (list, tuple)):
+            data = [data]
+
+        cleaned_files = []
+
+        for uploaded_file in data:
+            cleaned_file = super().clean(uploaded_file)
+            cleaned_files.append(cleaned_file)
+
+        return cleaned_files
+
+
+# ---------------------------------------------------------
+# Formulario de Actividades
+# ---------------------------------------------------------
 
 
 class ActivityForm(BootstrapMixin, forms.ModelForm):
@@ -67,32 +122,24 @@ class ActivityForm(BootstrapMixin, forms.ModelForm):
                 },
                 format="%Y-%m-%d",
             ),
-
             "request_problem": forms.Textarea(
                 attrs={
                     "rows": 3,
                 },
             ),
-
             "action": forms.Textarea(
                 attrs={
                     "rows": 3,
                 },
             ),
-
             "contact": forms.TextInput(
                 attrs={
-                    "placeholder": (
-                        "Nombre o medio de contacto"
-                    ),
+                    "placeholder": "Nombre o medio de contacto",
                 },
             ),
-
             "phone": forms.TextInput(
                 attrs={
-                    "placeholder": (
-                        "Ej.: +56 9 1234 5678"
-                    ),
+                    "placeholder": "Ej.: +56 9 1234 5678",
                 },
             ),
         }
@@ -131,15 +178,8 @@ class ActivityForm(BootstrapMixin, forms.ModelForm):
             .order_by("name")
         )
 
-        if (
-            user is not None
-            and not user.is_superuser
-        ):
-            profile = getattr(
-                user,
-                "profile",
-                None,
-            )
+        if user is not None and not user.is_superuser:
+            profile = getattr(user, "profile", None)
 
             delegation_id = (
                 profile.delegation_id
@@ -153,9 +193,7 @@ class ActivityForm(BootstrapMixin, forms.ModelForm):
 
             else:
                 goals = goals.filter(
-                    employee__delegation_id=(
-                        delegation_id
-                    ),
+                    employee__delegation_id=delegation_id,
                 )
 
                 employees = employees.filter(
@@ -192,10 +230,12 @@ class ActivityForm(BootstrapMixin, forms.ModelForm):
         return cleaned_data
 
 
-class EvidenceForm(
-    BootstrapMixin,
-    forms.ModelForm,
-):
+# ---------------------------------------------------------
+# Formulario de Evidencias
+# ---------------------------------------------------------
+
+
+class EvidenceForm(BootstrapMixin, forms.ModelForm):
     date = forms.DateTimeField(
         label="Fecha y hora",
         input_formats=[
@@ -209,6 +249,27 @@ class EvidenceForm(
         ),
     )
 
+    new_files = MultipleFileField(
+        label="Archivos de evidencia",
+        required=False,
+        widget=MultipleFileInput(
+            attrs={
+                "multiple": True,
+                "accept": ".pdf,.jpg,.jpeg,.png,.doc,.docx",
+            },
+        ),
+        validators=[
+            FileExtensionValidator(
+                allowed_extensions=EVIDENCE_ALLOWED_EXTENSIONS
+            ),
+        ],
+        help_text=(
+            "Debes mantener entre 2 y 5 archivos por evidencia. "
+            "El peso total no puede superar 50 MB. "
+            "Formatos permitidos: PDF, JPG, JPEG, PNG, DOC y DOCX."
+        ),
+    )
+
     class Meta:
         model = Evidence
 
@@ -217,7 +278,6 @@ class EvidenceForm(
             "activity",
             "author",
             "file_link",
-            "file",
             "date",
             "review_status",
         ]
@@ -227,7 +287,6 @@ class EvidenceForm(
             "activity": "Actividad",
             "author": "Funcionario",
             "file_link": "Enlace de evidencia",
-            "file": "Archivo de evidencia",
             "date": "Fecha y hora",
             "review_status": "Estado de revisión",
         }
@@ -235,34 +294,17 @@ class EvidenceForm(
         widgets = {
             "code": forms.TextInput(
                 attrs={
-                    "placeholder": (
-                        "Ej.: EVID-001"
-                    ),
+                    "placeholder": "Ej.: EVID-001",
                 },
             ),
-
             "file_link": forms.TextInput(
                 attrs={
-                    "placeholder": (
-                        "https://..."
-                    ),
+                    "placeholder": "https://...",
                 },
             ),
-
-            "file": forms.ClearableFileInput(
-                attrs={
-                    "accept": (
-                        ".pdf,.jpg,.jpeg,"
-                        ".png,.doc,.docx"
-                    ),
-                },
-            ),
-
             "review_status": forms.TextInput(
                 attrs={
-                    "placeholder": (
-                        "Ej.: Pending"
-                    ),
+                    "placeholder": "Ej.: Pending",
                 },
             ),
         }
@@ -281,9 +323,7 @@ class EvidenceForm(
                 deleted_at__isnull=True,
                 goal__deleted_at__isnull=True,
                 goal__period__deleted_at__isnull=True,
-                goal__period__status=(
-                    Period.Status.ACTIVE
-                ),
+                goal__period__status=Period.Status.ACTIVE,
             )
             .select_related(
                 "goal",
@@ -309,15 +349,8 @@ class EvidenceForm(
             .order_by("name")
         )
 
-        if (
-            user is not None
-            and not user.is_superuser
-        ):
-            profile = getattr(
-                user,
-                "profile",
-                None,
-            )
+        if user is not None and not user.is_superuser:
+            profile = getattr(user, "profile", None)
 
             delegation_id = (
                 profile.delegation_id
@@ -331,30 +364,31 @@ class EvidenceForm(
 
             else:
                 activities = activities.filter(
-                    author__delegation_id=(
-                        delegation_id
-                    ),
+                    author__delegation_id=delegation_id,
                 )
 
                 employees = employees.filter(
                     delegation_id=delegation_id,
                 )
 
-        self.fields[
-            "activity"
-        ].queryset = activities
-
-        self.fields[
-            "author"
-        ].queryset = employees
-
-        self.fields["file"].help_text = (
-            "Formatos permitidos: PDF, JPG, JPEG, "
-            "PNG, DOC y DOCX. Tamaño máximo: 5 MB."
-        )
+        self.fields["activity"].queryset = activities
+        self.fields["author"].queryset = employees
 
         self.fields["file_link"].required = False
-        self.fields["file"].required = False
+
+        # La vista utilizará esta colección al guardar
+        # para eliminar los adjuntos seleccionados.
+        self.files_to_remove = []
+
+        # Archivos que ya pertenecen a esta evidencia.
+        self.existing_evidence_files = []
+
+        if self.instance.pk:
+            self.existing_evidence_files = list(
+                self.instance.files.filter(
+                    deleted_at__isnull=True,
+                )
+            )
 
         self._apply_bootstrap()
 
@@ -362,16 +396,7 @@ class EvidenceForm(
         cleaned_data = super().clean()
 
         activity = cleaned_data.get("activity")
-        file = cleaned_data.get("file")
-
-        file_link = (
-            cleaned_data
-            .get(
-                "file_link",
-                "",
-            )
-            .strip()
-        )
+        uploaded_files = cleaned_data.get("new_files", [])
 
         if activity is not None:
             period = activity.goal.period
@@ -390,32 +415,133 @@ class EvidenceForm(
                     "cerrado."
                 )
 
-        existing_file = None
+        # Si hubo errores al validar los archivos nuevos,
+        # no continuamos con el cálculo de cantidad y peso.
+        if "new_files" in self.errors:
+            return cleaned_data
 
-        if (
-            self.instance
-            and self.instance.pk
-            and self.instance.file
-        ):
-            existing_file = self.instance.file
+        # Los IDs enviados para eliminar adjuntos serán
+        # comprobados contra los archivos de ESTA evidencia.
+        raw_ids = (
+            self.data.getlist("remove_file_ids")
+            if hasattr(self.data, "getlist")
+            else self.data.get("remove_file_ids", [])
+        )
 
-        if (
-            not file
-            and not existing_file
-            and not file_link
-        ):
+        if isinstance(raw_ids, str):
+            raw_ids = [raw_ids]
+
+        try:
+            ids_to_remove = {
+                int(value) for value in raw_ids
+            }
+        except (TypeError, ValueError):
             raise forms.ValidationError(
-                "Debes adjuntar un archivo o ingresar "
-                "un enlace de evidencia."
+                "La selección de archivos a eliminar no es válida."
+            )
+
+        existing_by_id = {
+            item.pk: item
+            for item in self.existing_evidence_files
+        }
+
+        if not ids_to_remove.issubset(existing_by_id.keys()):
+            raise forms.ValidationError(
+                "Se seleccionó un archivo que no pertenece "
+                "a esta evidencia."
+            )
+
+        self.files_to_remove = [
+            existing_by_id[file_id]
+            for file_id in ids_to_remove
+        ]
+
+        remaining_files = [
+            item
+            for item in self.existing_evidence_files
+            if item.pk not in ids_to_remove
+        ]
+
+        # Compatibilidad temporal con el campo único
+        # antiguo Evidence.file.
+        #
+        # Evitamos contar dos veces un archivo si ya
+        # está representado en EvidenceFile.
+        legacy_file = None
+
+        if self.instance.pk and self.instance.file:
+            legacy_file = self.instance.file
+
+        all_existing_names = {
+            item.file.name
+            for item in self.existing_evidence_files
+        }
+
+        if (
+            legacy_file
+            and legacy_file.name in all_existing_names
+        ):
+            legacy_file = None
+
+        # Se cuentan los archivos que quedarán guardados
+        # después de la operación.
+        final_count = (
+            len(remaining_files)
+            + len(uploaded_files)
+            + (1 if legacy_file else 0)
+        )
+
+        if final_count < MIN_EVIDENCE_FILES:
+            raise forms.ValidationError(
+                "La evidencia debe tener al menos "
+                f"{MIN_EVIDENCE_FILES} archivos. "
+                f"Actualmente quedaría con {final_count}."
+            )
+
+        if final_count > MAX_EVIDENCE_FILES:
+            raise forms.ValidationError(
+                "La evidencia puede tener como máximo "
+                f"{MAX_EVIDENCE_FILES} archivos. "
+                f"Actualmente quedaría con {final_count}."
+            )
+
+        # El límite de 50 MB corresponde a la suma:
+        # archivos conservados + archivos nuevos +
+        # archivo antiguo, cuando corresponda.
+        total_size = sum(
+            uploaded_file.size
+            for uploaded_file in uploaded_files
+        )
+
+        try:
+            for existing_file in remaining_files:
+                total_size += existing_file.file.size
+
+            if legacy_file:
+                total_size += legacy_file.size
+
+        except (OSError, ValueError):
+            raise forms.ValidationError(
+                "No fue posible comprobar el tamaño de "
+                "uno de los archivos existentes. "
+                "Revisa los archivos de esta evidencia."
+            )
+
+        if total_size > MAX_EVIDENCE_TOTAL_SIZE:
+            raise forms.ValidationError(
+                "La suma de todos los archivos no puede "
+                "superar los 50 MB."
             )
 
         return cleaned_data
 
 
-class ValidationForm(
-    BootstrapMixin,
-    forms.ModelForm,
-):
+# ---------------------------------------------------------
+# Formulario de Validaciones
+# ---------------------------------------------------------
+
+
+class ValidationForm(BootstrapMixin, forms.ModelForm):
     date = forms.DateTimeField(
         label="Fecha y hora",
         input_formats=[
@@ -455,12 +581,9 @@ class ValidationForm(
         widgets = {
             "decision": forms.TextInput(
                 attrs={
-                    "placeholder": (
-                        "Ingrese la decisión"
-                    ),
+                    "placeholder": "Ingrese la decisión",
                 },
             ),
-
             "observation": forms.Textarea(
                 attrs={
                     "rows": 3,
@@ -470,15 +593,11 @@ class ValidationForm(
                     ),
                 },
             ),
-
             "result": forms.TextInput(
                 attrs={
-                    "placeholder": (
-                        "Ingrese el resultado"
-                    ),
+                    "placeholder": "Ingrese el resultado",
                 },
             ),
-
             "version": forms.NumberInput(
                 attrs={
                     "min": 1,
@@ -501,9 +620,7 @@ class ValidationForm(
                 activity__deleted_at__isnull=True,
                 activity__goal__deleted_at__isnull=True,
                 activity__goal__period__deleted_at__isnull=True,
-                activity__goal__period__status=(
-                    Period.Status.ACTIVE
-                ),
+                activity__goal__period__status=Period.Status.ACTIVE,
             )
             .select_related(
                 "activity",
@@ -530,15 +647,8 @@ class ValidationForm(
             .order_by("name")
         )
 
-        if (
-            user is not None
-            and not user.is_superuser
-        ):
-            profile = getattr(
-                user,
-                "profile",
-                None,
-            )
+        if user is not None and not user.is_superuser:
+            profile = getattr(user, "profile", None)
 
             delegation_id = (
                 profile.delegation_id
@@ -552,22 +662,15 @@ class ValidationForm(
 
             else:
                 evidences = evidences.filter(
-                    activity__author__delegation_id=(
-                        delegation_id
-                    ),
+                    activity__author__delegation_id=delegation_id,
                 )
 
                 employees = employees.filter(
                     delegation_id=delegation_id,
                 )
 
-        self.fields[
-            "evidence"
-        ].queryset = evidences
-
-        self.fields[
-            "verifier"
-        ].queryset = employees
+        self.fields["evidence"].queryset = evidences
+        self.fields["verifier"].queryset = employees
 
         self.fields["observation"].required = False
 
