@@ -6,7 +6,7 @@
     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
 </div>
 <div class="modal-body p-4">
-    <form method="post" action="{% url 'accounts:account_edit' account.pk %}?modal=1" class="account-modal-form">
+    <form method="post" enctype="multipart/form-data" action="{% url 'accounts:account_edit' account.pk %}?modal=1" class="account-modal-form">
         {% csrf_token %}
         <input type="hidden" name="modal" value="1">
         {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
