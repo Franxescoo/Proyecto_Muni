@@ -1,21 +1,149 @@
+
 {% extends "base.html" %}
 
 {% block titulo %}Planificación{% endblock %}
 
 {% block submenu %}
-<ul class="nav nav-pills mb-3">
-    <li class="nav-item"><a class="nav-link" href="{% url 'planning:index' %}">Resumen</a></li>
-    {% if perms.planning_measurements.view_period %}
-    <li class="nav-item"><a class="nav-link" href="{% url 'planning:period_list' %}">Períodos</a></li>
-    {% endif %}
-    {% if perms.planning_measurements.view_goal %}
-    <li class="nav-item"><a class="nav-link" href="{% url 'planning:goal_list' %}">Metas</a></li>
-    {% endif %}
-    {% if user.is_superuser %}
-    <a class="nav-link"
-    href="{% url 'accounts:access_home' %}">
-        Gestión de accesos
-    </a>
-    {% endif %}
-</ul>
+<style>
+    .planning-side-panel {
+        position: fixed;
+        top: 90px;
+        left: 24px;
+        width: 225px;
+        max-height: calc(100vh - 110px);
+        overflow-y: auto;
+        z-index: 100;
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: .65rem;
+        box-shadow: 0 3px 12px rgba(24,33,44,.06);
+    }
+
+    .planning-side-toggle {
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem;
+        border: 0;
+        background: linear-gradient(135deg, #a60a17, #760710);
+        color: #fff;
+        text-align: left;
+        font-weight: 700;
+    }
+
+    .planning-side-toggle:hover {
+        color: #fff;
+    }
+
+    .planning-side-body {
+        padding: .75rem;
+    }
+
+    .planning-side-link {
+        display: flex;
+        align-items: center;
+        gap: .65rem;
+        padding: .75rem;
+        margin-bottom: .25rem;
+        border-radius: .4rem;
+        text-decoration: none;
+        color: #343a40;
+        font-size: .9rem;
+        font-weight: 500;
+    }
+
+    .planning-side-link:hover {
+        background: #f8e9eb;
+        color: #a60a17;
+    }
+
+    .planning-side-link.active {
+        background: #a60a17;
+        color: #fff;
+        font-weight: 600;
+    }
+
+    /* Reservar espacio para el menú */
+    .container-fluid.px-4 > main {
+        margin-left: 245px;
+        min-width: 0;
+    }
+
+    @media (max-width: 991.98px) {
+        .planning-side-panel {
+            position: static;
+            width: 100%;
+            max-height: none;
+            margin-bottom: 1rem;
+        }
+
+        .container-fluid.px-4 > main {
+            margin-left: 0;
+        }
+    }
+</style>
+
+<aside class="planning-side-panel">
+    <button class="planning-side-toggle"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#planningMenu"
+            aria-expanded="true"
+            aria-controls="planningMenu">
+
+        <span>
+            <i class="bi bi-list me-2"></i>
+            Planificación
+        </span>
+
+        <i class="bi bi-chevron-down"></i>
+    </button>
+
+    <div class="collapse show" id="planningMenu">
+        <nav class="planning-side-body"
+             aria-label="Navegación de Planificación">
+
+            <a href="{% url 'home' %}"
+            class="planning-side-link">
+                <i class="bi bi-house-door"></i>
+                <span>Inicio</span>
+            </a>
+
+
+            {% if perms.planning_measurements.view_period %}
+            <a href="{% url 'planning:period_list' %}"
+               class="planning-side-link {% if request.resolver_match.url_name == 'period_list' or request.resolver_match.url_name == 'period_create' or request.resolver_match.url_name == 'period_edit' %}active{% endif %}">
+                <i class="bi bi-calendar-range"></i>
+                Períodos
+            </a>
+            {% endif %}
+
+            {% if perms.planning_measurements.view_goal %}
+            <a href="{% url 'planning:goal_list' %}"
+               class="planning-side-link {% if request.resolver_match.url_name == 'goal_list' or request.resolver_match.url_name == 'goal_create' or request.resolver_match.url_name == 'goal_edit' %}active{% endif %}">
+                <i class="bi bi-bullseye"></i>
+                Metas
+            </a>
+            {% endif %}
+
+            {% if perms.planning_measurements.view_measurementitem %}
+            <a href="{% url 'planning:item_list' %}"
+               class="planning-side-link {% if request.resolver_match.url_name == 'item_list' or request.resolver_match.url_name == 'item_create' or request.resolver_match.url_name == 'item_edit' or request.resolver_match.url_name == 'item_detail' %}active{% endif %}">
+                <i class="bi bi-card-checklist"></i>
+                Ítems
+            </a>
+            {% endif %}
+
+            {% if user.is_superuser %}
+            <a href="{% url 'accounts:access_home' %}"
+               class="planning-side-link">
+                <i class="bi bi-shield-lock"></i>
+                Gestión de accesos
+            </a>
+            {% endif %}
+
+        </nav>
+    </div>
+</aside>
 {% endblock %}

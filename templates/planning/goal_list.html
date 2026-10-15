@@ -1,185 +1,571 @@
+
 {% extends "planning/base.html" %}
+{% load i18n %}
 
-{% block titulo %}Metas{% endblock %}
+{% block titulo %}Metas - La Serena{% endblock %}
 
-{% block contenido %}
+{% block estilos %}
 <style>
-    /* Colores institucionales */
-    :root {
-        --color-rojo-brand: #a60a17;
-        --color-verde-btn: #138d56;
+    .monitor-shell {
+        max-width: 1480px;
+        margin: 0 auto;
     }
 
-    .titulo-seccion {
-        color: #000;
-        font-weight: bold;
-        border-left: 6px solid var(--color-rojo-brand);
-        padding-left: 12px;
-        margin-top: 5px;
-        font-size: 1.8rem;
+    .monitor-hero {
+        background: linear-gradient(135deg, #a60a17, #760710);
+        color: #fff;
+        border-radius: .65rem;
+        padding: 1.5rem 1.75rem;
+        box-shadow: 0 6px 18px rgba(166, 10, 23, .18);
     }
 
-    .btn-primary { background-color: var(--color-rojo-brand); border-color: var(--color-rojo-brand); color: white; }
-    .btn-primary:hover { background-color: #800711; border-color: #800711; color: white; }
-    
-    .btn-success { background-color: var(--color-verde-btn); border-color: var(--color-verde-btn); color: white; }
-    .btn-success:hover { background-color: #0e7044; border-color: #0e7044; color: white; }
-
-    .card-header-brand { background-color: var(--color-rojo-brand); color: white; font-weight: 600; }
-    
-    /* 1. El CUADRO del encabezado ahora es ROJO */
-    .table-dark-brand { 
-        background-color: var(--color-rojo-brand) !important; 
+    .monitor-hero h1 {
+        font-size: clamp(1.35rem, 2vw, 1.85rem);
+        font-weight: 700;
     }
-    
-    /* 2. Las LETRAS ahora son NEGRAS y NO cambian al apretarlas */
-    .table-dark-brand th,
-    .table-dark-brand th a,
-    .table-dark-brand th span { 
-        color: #000000 !important; /* Fuerza el color negro */
-        font-weight: bold; 
+
+    .monitor-hero p {
+        color: rgba(255, 255, 255, .8);
+    }
+
+    .section-card {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: .65rem;
+        box-shadow: 0 3px 12px rgba(24, 33, 44, .04);
+    }
+
+    .metric {
+        border-left: 4px solid #a60a17;
+        padding: 1rem 1.1rem;
+        height: 100%;
+    }
+
+    .metric .value {
+        color: #23272b;
+        font-size: 1.55rem;
+        font-weight: 700;
+    }
+
+    .metric .label {
+        color: #6c757d;
+        font-size: .82rem;
+    }
+
+    .filter-label {
+        color: #56616b;
+        font-size: .78rem;
+        font-weight: 600;
+        margin-bottom: .35rem;
+    }
+
+    .goals-table thead th {
+        color: #6c757d;
+        font-size: .72rem;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        white-space: nowrap;
+        vertical-align: middle;
+    }
+
+    .goals-table thead th a {
+        color: inherit;
         text-decoration: none;
     }
+
+    .goals-table tbody td {
+        vertical-align: middle;
+        font-size: .9rem;
+    }
+
+    .goal-actions {
+        display: flex;
+        gap: .35rem;
+        flex-wrap: wrap;
+        min-width: 150px;
+    }
+
+    .goal-created {
+        min-width: 185px;
+        font-size: .85rem;
+    }
+
+    .btn-monitor-primary {
+        background: #a60a17;
+        border-color: #a60a17;
+        color: #fff;
+    }
+
+    .btn-monitor-primary:hover {
+        background: #760710;
+        border-color: #760710;
+        color: #fff;
+    }
 </style>
+{% endblock %}
 
-<div class="row mb-4">
-    <div class="col-9">
-        <h2 class="titulo-seccion">Listado de Metas</h2>
-    </div>
-    <div class="col-3 text-end align-self-center">
-        {% if perms.planning_measurements.add_goal %}
-        <a class="btn btn-success btn-sm px-3 fw-semibold" href="{% url 'planning:goal_create' %}">Agregar Meta</a>
-        {% endif %}
-    </div>
-</div>
+{% block contenido %}
 
-<div class="row">
-    <div class="col-md-9">
-        <form method="get" class="row g-2 mb-3">
-            <div class="col-md-8">
-                <input type="text" name="q" value="{{ query }}" class="form-control" placeholder="Buscar por ítem o funcionario">
+<div class="monitor-shell pb-4">
+
+    <!-- CABECERA INSTITUCIONAL -->
+    <section class="monitor-hero mb-4
+                    d-flex flex-wrap align-items-center
+                    justify-content-between gap-3">
+
+        <div>
+            <div class="small text-uppercase fw-semibold opacity-75 mb-2">
+                PLANIFICACIÓN
             </div>
-            <div class="col-md-4">
-                {% if selected_period %}<input type="hidden" name="period" value="{{ selected_period }}">{% endif %}
-                {% if selected_position %}<input type="hidden" name="position" value="{{ selected_position }}">{% endif %}
-                {% if selected_unit %}<input type="hidden" name="unit" value="{{ selected_unit }}">{% endif %}
-                <button type="submit" class="btn btn-primary px-4 fw-semibold">Buscar</button>
+
+            <h1 class="mb-2">
+                Gestión de metas
+            </h1>
+
+            <p class="mb-0">
+                Administra las metas, sus valores objetivos,
+                ponderaciones y períodos asociados.
+            </p>
+        </div>
+
+        <i class="bi bi-bullseye display-5 opacity-75"
+           aria-hidden="true"></i>
+
+    </section>
+
+    <!-- INDICADORES RESUMEN -->
+    <div class="row g-3 mb-4">
+
+        <div class="col-12 col-md-4">
+            <div class="section-card metric">
+                <div class="value">
+                    {{ total_goals|default:"0" }}
+                </div>
+                <div class="label">
+                    Metas registradas
+                </div>
             </div>
+        </div>
+
+        <div class="col-12 col-md-4">
+            <div class="section-card metric">
+                <div class="value text-success">
+                    {{ active_goals|default:"0" }}
+                </div>
+                <div class="label">
+                    Metas en períodos activos
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-md-4">
+            <div class="section-card metric">
+                <div class="value text-danger">
+                    {{ closed_goals|default:"0" }}
+                </div>
+                <div class="label">
+                    Metas en períodos cerrados
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- REGISTRO DE METAS -->
+    <section class="section-card p-3 p-lg-4">
+
+        <div class="d-flex flex-wrap justify-content-between
+                    align-items-center gap-3 mb-4">
+
+            <div>
+                <h2 class="h5 fw-bold mb-1">
+                    Registro de metas
+                </h2>
+
+                <p class="text-muted small mb-0">
+                    Consulta, filtra y administra las metas registradas.
+                </p>
+            </div>
+
+            {% if perms.planning_measurements.add_goal %}
+            <a href="{% url 'planning:goal_create' %}"
+               class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-plus-lg me-1"></i>
+                Agregar meta
+            </a>
+            {% endif %}
+
+        </div>
+
+        <!-- FILTROS -->
+        <form method="get" class="row g-3 align-items-end mb-4">
+
+            <div class="col-12 col-md-4">
+                <label for="goal-search" class="filter-label">
+                    Buscar meta o funcionario
+                </label>
+
+                <input type="search"
+                       id="goal-search"
+                       name="q"
+                       value="{{ query }}"
+                       class="form-control"
+                       placeholder="Escribe para buscar...">
+            </div>
+
+            <div class="col-12 col-md-4">
+                <label for="goal-period" class="filter-label">
+                    Período
+                </label>
+
+                <select id="goal-period"
+                        name="period"
+                        class="form-select">
+
+                    <option value="">Todos los períodos</option>
+
+                    {% for period in periods %}
+                    <option value="{{ period.period_id }}"
+                        {% if selected_period == period.period_id|stringformat:"s" %}selected{% endif %}>
+
+                        {{ period.start_date|date:"d-m-Y" }}
+                        al
+                        {{ period.end_date|date:"d-m-Y" }}
+
+                    </option>
+                    {% endfor %}
+
+                </select>
+            </div>
+
+            <div class="col-12 col-md-4">
+                <label for="goal-position" class="filter-label">
+                    Cargo
+                </label>
+
+                <select id="goal-position"
+                        name="position"
+                        class="form-select">
+
+                    <option value="">Todos los cargos</option>
+
+                    {% for position in positions %}
+                    <option value="{{ position.position_id }}"
+                        {% if selected_position == position.position_id|stringformat:"s" %}selected{% endif %}>
+
+                        {{ position }}
+
+                    </option>
+                    {% endfor %}
+
+                </select>
+            </div>
+
+            <div class="col-12 col-md-6">
+                <label for="goal-unit" class="filter-label">
+                    Unidad
+                </label>
+
+                <select id="goal-unit"
+                        name="unit"
+                        class="form-select">
+
+                    <option value="">Todas las unidades</option>
+
+                    {% for unit in units %}
+                    <option value="{{ unit }}"
+                        {% if selected_unit == unit %}selected{% endif %}>
+
+                        {{ unit|default:"Sin unidad" }}
+
+                    </option>
+                    {% endfor %}
+
+                </select>
+            </div>
+
+            <div class="col-12 col-md-3">
+                <button type="submit" class="btn btn-dark w-100">
+                    <i class="bi bi-funnel me-1"></i>
+                    Filtrar
+                </button>
+            </div>
+
+            <div class="col-12 col-md-3">
+                <a href="{% url 'planning:goal_list' %}"
+                   class="btn btn-outline-secondary w-100">
+                    Limpiar
+                </a>
+            </div>
+
         </form>
 
-        <form method="post">
+        <!-- REGISTROS POR PÁGINA -->
+        {% include "planning/_page_size.html" %}
+
+        <!-- FORMULARIO DE ELIMINACIÓN MÚLTIPLE -->
+        <form method="post" data-swal-bulk-delete>
             {% csrf_token %}
-            {% if user.is_superuser %}
-            <div class="row g-2 mb-2">
-                <div class="col-auto">
-                    <select name="action" class="form-select form-select-sm">
-                        <option value="">- Acción -</option>
-                        <option value="delete_selected">Delete</option>
-                    </select>
-                </div>
-                <div class="col-auto"><button type="submit" class="btn btn-secondary btn-sm">Ejecutar</button></div>
+
+            {% if perms.planning_measurements.delete_goal %}
+            <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+
+                <select name="action"
+                        class="form-select form-select-sm"
+                        style="max-width: 220px;">
+
+                    <option value="">- Acción -</option>
+                    <option value="delete_selected">
+                        Eliminar seleccionados
+                    </option>
+                </select>
+
+                <button type="submit"
+                        class="btn btn-outline-secondary btn-sm">
+                    Ejecutar
+                </button>
+
             </div>
             {% endif %}
 
+            <!-- TABLA -->
             <div class="table-responsive">
-                <table class="table table-hover table-striped border">
-                    <thead class="table-dark-brand">
+
+                <table class="table table-hover goals-table align-middle mb-0">
+
+                    <thead>
                         <tr>
-                            {% if user.is_superuser %}<th><input type="checkbox" class="form-check-input" onclick="document.querySelectorAll('.sel').forEach(c => c.checked = this.checked)"></th>{% endif %}
+
+                            {% if perms.planning_measurements.delete_goal %}
+                            <th>
+                                <input type="checkbox"
+                                       class="form-check-input"
+                                       aria-label="Seleccionar todas las metas"
+                                       onclick="document.querySelectorAll('.sel').forEach(c => c.checked = this.checked)">
+                            </th>
+                            {% endif %}
+
                             {% include "planning/_headers.html" %}
+
                         </tr>
                     </thead>
+
                     <tbody>
+
                         {% for goal in page %}
+
                         <tr>
-                            {% if user.is_superuser %}<td><input type="checkbox" class="form-check-input sel" name="_selected_action" value="{{ goal.pk }}"></td>{% endif %}
-                            <td><a href="{% url 'planning:goal_edit' goal.goal_id %}">{{ goal.goal_id }}</a></td>
-                            <td>{{ goal.item }}</td>
-                            <td>{{ goal.period.start_date|date:"d-m-Y" }} al {{ goal.period.end_date|date:"d-m-Y" }}</td>
-                            <td>{{ goal.employee }}</td>
-                            <td>{{ goal.position }}</td>
-                            <td>{{ goal.objective_value }}</td>
-                            <td>{{ goal.unit }}</td>
-                            <td>{{ goal.weight }}</td>
-                            <td>{{ goal.created_at|date:"d-m-Y H:i" }}</td>
+
+                            {% if perms.planning_measurements.delete_goal %}
                             <td>
-                                <a class="btn btn-warning btn-sm" href="{% url 'planning:goal_edit' goal.goal_id %}">{% if perms.planning_measurements.change_goal %}Modificar{% else %}Ver{% endif %}</a>
-                                {% if user.is_superuser %}
-                                <a class="btn btn-danger btn-sm" href="{% url 'planning:goal_delete' goal.goal_id %}">Eliminar</a>
-                                {% endif %}
+                                <input type="checkbox"
+                                       class="form-check-input sel"
+                                       name="_selected_action"
+                                       value="{{ goal.pk }}"
+                                       aria-label="Seleccionar meta {{ goal.pk }}">
+                            </td>
+                            {% endif %}
+
+                            <td class="fw-semibold">
+                                {{ goal.item }}
+                            </td>
+
+                            <td>
+                                {{ goal.period.start_date|date:"d-m-Y" }}
+                                al
+                                {{ goal.period.end_date|date:"d-m-Y" }}
+                            </td>
+
+                            <td>
+                                {{ goal.employee }}
+                            </td>
+
+                            <td>
+                                {{ goal.position }}
+                            </td>
+
+                            <td>
+                                {{ goal.objective_value }}
+                            </td>
+
+                            <td>
+                                {{ goal.unit }}
+                            </td>
+
+                            <td>
+                                {{ goal.weight }}
+                            </td>
+
+                            <td class="goal-created">
+                                {% language 'es' %}
+                                {{ goal.created_at|date:"H:i — d \d\e F \d\e Y" }}
+                                {% endlanguage %}
+                            </td>
+
+                            <td>
+                                <div class="goal-actions">
+
+                                    <!-- VER -->
+                                    <a href="{% url 'planning:goal_edit' goal.goal_id %}?view=1"
+                                       class="btn btn-sm btn-outline-info">
+
+                                        
+                                        Ver
+                                    </a>
+
+                                    <!-- MODIFICAR -->
+                                    {% if perms.planning_measurements.change_goal and goal.period.status != "Closed" %}
+                                    <a href="{% url 'planning:goal_edit' goal.goal_id %}"
+                                       class="btn btn-sm btn-outline-secondary">
+
+                                        
+                                        Modificar
+                                    </a>
+                                    {% endif %}
+
+                                    <!-- ELIMINAR -->
+                                    {% if perms.planning_measurements.delete_goal %}
+                                    <a href="{% url 'planning:goal_delete' goal.goal_id %}"
+                                       class="btn btn-sm btn-outline-danger goal-delete-btn"
+                                       data-goal-name="{{ goal.item }}">
+
+                                        
+                                        Eliminar
+                                    </a>
+                                    {% endif %}
+
+                                </div>
+                            </td>
+
+                        </tr>
+
+                        {% empty %}
+
+                        <tr>
+                            <td colspan="{% if perms.planning_measurements.delete_goal %}10{% else %}9{% endif %}"
+                                class="text-center text-muted py-4">
+                                No hay metas para mostrar.
                             </td>
                         </tr>
-                        {% empty %}
-                        <tr><td colspan="11" class="text-center py-4">No hay metas para mostrar.</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </form>
-        <p class="text-muted">{{ page.paginator.count }} meta(s)</p>
-        {% include "planning/_pagination.html" %}
-    </div>
 
-    <div class="col-md-3">
-        <form method="get" class="card shadow-sm border-0">
-            <div class="card-header card-header-brand">
-                Filtros
+                        {% endfor %}
+
+                    </tbody>
+
+                </table>
+
             </div>
-            <div class="card-body bg-light">
-                {% if query %}<input type="hidden" name="q" value="{{ query }}">{% endif %}
-                <label class="fw-bold mb-1 text-secondary">Por período</label>
-                <select name="period" class="form-select form-select-sm mb-3">
-                    <option value="">Todos</option>
-                    {% for period in periods %}
-                    <option value="{{ period.period_id }}" {% if selected_period == period.period_id|stringformat:"s" %}selected{% endif %}>
-                        {{ period.start_date|date:"d-m-Y" }} al {{ period.end_date|date:"d-m-Y" }}
-                    </option>
-                    {% endfor %}
-                </select>
-                
-                <label class="fw-bold mb-1 text-secondary">Por cargo</label>
-                <select name="position" class="form-select form-select-sm mb-3">
-                    <option value="">Todos</option>
-                    {% for position in positions %}
-                    <option value="{{ position.position_id }}" {% if selected_position == position.position_id|stringformat:"s" %}selected{% endif %}>{{ position }}</option>
-                    {% endfor %}
-                </select>
-                
-                <label class="fw-bold mb-1 text-secondary">Por unidad</label>
-                <select name="unit" class="form-select form-select-sm mb-3">
-                    <option value="">Todas</option>
-                    {% for unit in units %}
-                    <option value="{{ unit }}" {% if selected_unit == unit %}selected{% endif %}>{{ unit }}</option>
-                    {% endfor %}
-                </select>
-                
-                <div class="d-grid gap-2 mt-4">
-                    <button type="submit" class="btn btn-primary btn-sm fw-semibold">Filtrar</button>
-                    <a class="btn btn-outline-secondary btn-sm" href="{% url 'planning:goal_list' %}">Limpiar</a>
-                </div>
-            </div>
+
         </form>
-    </div>
+
+        <!-- PAGINACIÓN -->
+        <div class="d-flex flex-wrap justify-content-between
+                    align-items-center gap-2 mt-3">
+
+            <p class="text-muted small mb-0">
+                {{ page.paginator.count }} meta(s) encontrada(s)
+            </p>
+
+            {% include "planning/_pagination.html" %}
+
+        </div>
+
+    </section>
+
 </div>
+
+<!-- VENTANA MODAL EXISTENTE -->
 {% include "planning/_goal_modal.html" %}
 
 {% endblock %}
+
+
 {% block scripts %}
 
-
-{% if open_modal %}
-{% include "planning/goal_position_script.html" %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
+
+    // Confirmación SweetAlert2 al eliminar una meta.
+    document.querySelectorAll(".goal-delete-btn").forEach(function (button) {
+
+        button.addEventListener("click", function (event) {
+            event.preventDefault();
+
+            const goalName = button.dataset.goalName;
+            const deleteUrl = button.href;
+
+            Swal.fire({
+                title: "¿Eliminar meta?",
+                text: `Se archivará la meta "${goalName}". Esta acción no se puede deshacer desde esta pantalla.`,
+                icon: "warning",
+                showCancelButton: true,
+                confirmButtonText: "Sí, eliminar",
+                cancelButtonText: "Cancelar",
+                confirmButtonColor: "#a50012",
+                cancelButtonColor: "#6c757d",
+                reverseButtons: true,
+                focusCancel: true
+            }).then(function (result) {
+
+                if (result.isConfirmed) {
+
+                    const form = document.createElement("form");
+
+                    form.method = "POST";
+                    form.action = deleteUrl;
+                    form.style.display = "none";
+
+                    const csrf = document.querySelector(
+                        'form input[name="csrfmiddlewaretoken"]'
+                    );
+
+                    if (!csrf) {
+                        Swal.fire({
+                            title: "Error",
+                            text: "No se encontró el token de seguridad. Recarga la página.",
+                            icon: "error"
+                        });
+                        return;
+                    }
+
+                    const csrfInput = document.createElement("input");
+
+                    csrfInput.type = "hidden";
+                    csrfInput.name = "csrfmiddlewaretoken";
+                    csrfInput.value = csrf.value;
+
+                    form.appendChild(csrfInput);
+                    document.body.appendChild(form);
+
+                    form.submit();
+                }
+            });
+        });
+    });
+
+});
+</script>
+
+<!-- SCRIPTS DE LA VENTANA MODAL DE METAS -->
+{% if open_modal %}
+
+{% include "planning/goal_position_script.html" %}
+{% include "planning/goal_item_script.html" %}
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+
     const el = document.getElementById("goalModal");
 
     if (el && window.bootstrap) {
-        new bootstrap.Modal(el).show();
+        bootstrap.Modal.getOrCreateInstance(el).show();
     }
+
 });
 </script>
-{% endif %}
 
+{% endif %}
 
 {% endblock %}
