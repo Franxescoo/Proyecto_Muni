@@ -182,6 +182,7 @@ class EmployeeForm(BootstrapMixin, forms.ModelForm):
         model = Employee
         fields = [
             "name",
+            "photo",
             "delegation",
             "position",
             "roles",
@@ -189,6 +190,7 @@ class EmployeeForm(BootstrapMixin, forms.ModelForm):
         ]
         labels = {
             "name": "Nombre",
+            "photo": "Foto de perfil",
             "delegation": "Delegación",
             "position": "Cargo",
             "roles": "Descripción de funciones",
@@ -198,6 +200,8 @@ class EmployeeForm(BootstrapMixin, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        self.fields["photo"].required = False
+        self.fields["photo"].widget.attrs.update({"accept": "image/*"})
         self.fields["delegation"].queryset = (
             Delegation.objects.filter(
                 deleted_at__isnull=True
@@ -225,6 +229,7 @@ class AccountCreateForm(BootstrapMixin, UserCreationForm):
         label="Código de funcionario",
         max_length=30,
     )
+    avatar = forms.ImageField(label="Foto de perfil", required=False)
 
     groups = forms.ModelMultipleChoiceField(
         label="Roles",
@@ -241,6 +246,7 @@ class AccountCreateForm(BootstrapMixin, UserCreationForm):
             "email",
             "employee",
             "employee_code",
+            "avatar",
             "groups",
             "password1",
             "password2",
@@ -302,6 +308,7 @@ class AccountEditForm(BootstrapMixin, forms.ModelForm):
         max_length=20,
         required=False,
     )
+    avatar = forms.ImageField(label="Foto de perfil", required=False)
     employee = forms.ModelChoiceField(
         label="Funcionario asociado",
         queryset=Employee.objects.none(),
@@ -320,6 +327,7 @@ class AccountEditForm(BootstrapMixin, forms.ModelForm):
             "groups",
             "employee_code",
             "phone",
+            "avatar",
             "employee",
         ]
         labels = {
@@ -340,6 +348,7 @@ class AccountEditForm(BootstrapMixin, forms.ModelForm):
             self.fields["employee_code"].initial = profile.employee_code
             self.fields["employee_code"].required = True
             self.fields["phone"].initial = profile.phone
+            self.fields["avatar"].initial = profile.avatar
             self.fields["employee"].initial = profile.employee
         else:
             self.fields["employee_code"].help_text = "Esta cuenta no tiene un perfil asociado; no se creará uno automáticamente."
@@ -371,11 +380,13 @@ class AccountEditForm(BootstrapMixin, forms.ModelForm):
             if profile:
                 profile.employee_code = self.cleaned_data.get("employee_code", profile.employee_code)
                 profile.phone = self.cleaned_data.get("phone", profile.phone)
+                if self.cleaned_data.get("avatar"):
+                    profile.avatar = self.cleaned_data["avatar"]
                 selected_employee = self.cleaned_data.get("employee")
                 if selected_employee:
                     profile.employee = selected_employee
                     profile.delegation = selected_employee.delegation
-                profile.save(update_fields=["employee_code", "phone", "employee", "delegation", "updated_at"])
+                profile.save(update_fields=["employee_code", "phone", "avatar", "employee", "delegation", "updated_at"])
         return user
 
 
@@ -409,3 +420,45 @@ class ProfileLinkForm(BootstrapMixin, forms.ModelForm):
 
         self.fields["employee"].required = True
         self.apply_bootstrap()
+
+
+class MyAccountForm(BootstrapMixin, forms.ModelForm):
+    """Permite al usuario editar solo los datos personales modificables."""
+
+    phone = forms.CharField(
+        label="Teléfono",
+        max_length=20,
+        required=False,
+    )
+    avatar = forms.ImageField(
+        label="Foto de perfil",
+        required=False,
+        help_text="Si no subes una foto, se mostrará el avatar predeterminado.",
+    )
+
+    class Meta:
+        model = get_user_model()
+        fields = ["first_name", "last_name", "email"]
+        labels = {
+            "first_name": "Nombre",
+            "last_name": "Apellidos",
+            "email": "Correo electrónico",
+        }
+
+    def __init__(self, *args, profile=None, **kwargs):
+        self.profile = profile
+        super().__init__(*args, **kwargs)
+        if profile:
+            self.fields["phone"].initial = profile.phone
+            self.fields["avatar"].initial = profile.avatar
+        self.fields["avatar"].widget.attrs.update({"accept": "image/*"})
+        self.apply_bootstrap()
+
+    def save(self, commit=True):
+        user = super().save(commit=commit)
+        if commit and self.profile:
+            self.profile.phone = self.cleaned_data.get("phone", "")
+            if self.cleaned_data.get("avatar"):
+                self.profile.avatar = self.cleaned_data["avatar"]
+            self.profile.save(update_fields=["phone", "avatar", "updated_at"])
+        return user
