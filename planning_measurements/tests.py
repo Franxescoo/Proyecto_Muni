@@ -20,6 +20,9 @@ from .forms import GoalForm, GoalInlineForm, PeriodForm
 from .models import Goal, Period
 from .views import scoped_goals
 
+from django.test import SimpleTestCase
+
+from .working_days import calculate_computable_days
 
 class PlanningTests(TestCase):
     def setUp(self):
@@ -505,3 +508,129 @@ class PlanningTests(TestCase):
 
         with self.assertRaises(ValidationError):
             goal.full_clean()
+
+
+class PeriodWeightCalculationTests(PlanningTests):
+    """RN-001: configuración completa por cargo antes de cerrar."""
+
+    def test_exactly_100_is_accepted(self):
+        from .calculations import validate_period_weights
+
+        self.create_goal(item="Atenciones", weight=40)
+        self.create_goal(item="Informes", weight=60)
+
+        self.assertIsNone(
+            validate_period_weights(self.period)
+        )
+
+    def test_less_than_100_is_rejected(self):
+        from .calculations import (
+            InvalidPeriodWeights,
+            validate_period_weights,
+        )
+
+        self.create_goal(item="Atenciones", weight=40)
+        self.create_goal(item="Informes", weight=50)
+
+        with self.assertRaises(InvalidPeriodWeights):
+            validate_period_weights(self.period)
+
+    def test_over_100_is_rejected(self):
+        from .calculations import (
+            InvalidPeriodWeights,
+            validate_period_weights,
+        )
+
+        self.create_goal(item="Atenciones", weight=60)
+        self.create_goal(item="Informes", weight=50)
+
+        with self.assertRaises(InvalidPeriodWeights):
+            validate_period_weights(self.period)
+
+    def test_same_item_for_two_employees_is_counted_once(self):
+        from .calculations import validate_period_weights
+
+        self.create_goal(item="Atenciones", weight=40)
+        self.create_goal(item="Informes", weight=60)
+
+        self.create_goal(
+            employee=self.outside,
+            item="Atenciones",
+            weight=40
+        )
+
+        self.assertIsNone(
+            validate_period_weights(self.period)
+        )
+
+    def test_same_item_different_weights_is_rejected(self):
+        from .calculations import (
+            InvalidPeriodWeights,
+            validate_period_weights,
+        )
+
+        self.create_goal(item="Atenciones", weight=40)
+
+        self.create_goal(
+            employee=self.outside,
+            item="Atenciones",
+            weight=50
+        )
+
+        with self.assertRaises(InvalidPeriodWeights):
+            validate_period_weights(self.period)
+
+    def test_empty_period_cannot_close(self):
+        from .calculations import (
+            InvalidPeriodWeights,
+            validate_period_weights,
+        )
+
+        with self.assertRaises(InvalidPeriodWeights):
+            validate_period_weights(self.period)
+
+class ComputableDaysTests(SimpleTestCase):
+
+    def test_weekdays_without_holidays(self):
+        # Del lunes 5 al viernes 9 de enero de 2026.
+        result = calculate_computable_days(
+            date(2026, 1, 5),
+            date(2026, 1, 9),
+        )
+
+        self.assertEqual(result, 5)
+
+    def test_excludes_weekends(self):
+        # Del viernes 2 al lunes 5 de enero.
+        # Sábado y domingo no cuentan.
+        result = calculate_computable_days(
+            date(2026, 1, 2),
+            date(2026, 1, 5),
+        )
+
+        self.assertEqual(result, 2)
+
+    def test_excludes_chilean_holiday(self):
+        # El 1 de enero es feriado en Chile.
+        result = calculate_computable_days(
+            date(2026, 1, 1),
+            date(2026, 1, 7),
+        )
+
+        self.assertEqual(result, 4)
+
+    def test_holiday_only(self):
+        # Día de Año Nuevo.
+        result = calculate_computable_days(
+            date(2026, 1, 1),
+            date(2026, 1, 1),
+        )
+
+        self.assertEqual(result, 0)
+
+    def test_invalid_date_range(self):
+        with self.assertRaises(ValueError):
+            calculate_computable_days(
+                date(2026, 1, 10),
+                date(2026, 1, 1),
+            )
