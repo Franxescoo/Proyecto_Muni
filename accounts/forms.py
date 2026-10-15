@@ -456,9 +456,17 @@ class MyAccountForm(BootstrapMixin, forms.ModelForm):
 
     def save(self, commit=True):
         user = super().save(commit=commit)
-        if commit and self.profile:
-            self.profile.phone = self.cleaned_data.get("phone", "")
-            if self.cleaned_data.get("avatar"):
-                self.profile.avatar = self.cleaned_data["avatar"]
-            self.profile.save(update_fields=["phone", "avatar", "updated_at"])
+        if not commit:
+            return user
+        if self.profile is None:
+            # Cuentas antiguas (por ejemplo, creadas antes de vincular
+            # funcionarios) también pueden guardar su foto y teléfono.
+            self.profile = UserProfile.objects.create(
+                user=user,
+                employee_code=f"USR-{user.pk}",
+            )
+        self.profile.phone = self.cleaned_data.get("phone", "")
+        if self.cleaned_data.get("avatar"):
+            self.profile.avatar = self.cleaned_data["avatar"]
+        self.profile.save(update_fields=["phone", "avatar", "updated_at"])
         return user
