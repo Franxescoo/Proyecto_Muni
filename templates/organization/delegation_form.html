@@ -3,5 +3,40 @@
 {% block titulo %}{{ title|default:"Delegación" }} · Organización{% endblock %}
 
 {% block contenido %}
-<div class="row justify-content-center"><div class="col-lg-8"><section class="organization-card"><div class="card-header py-3 px-4"><i class="bi bi-building me-2"></i>{{ title|default:"Delegación" }}</div><div class="card-body p-4"><form method="post">{% csrf_token %}{% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}{% for field in form %}<div class="mb-3">{{ field.label_tag }}{{ field }}{% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}{% if field.errors %}<div class="text-danger small mt-1">{{ field.errors }}</div>{% endif %}</div>{% endfor %}<div class="d-flex justify-content-between gap-2 mt-4"><a class="btn btn-outline-secondary" href="{% url 'organization:delegation_list' %}">Cancelar</a><button class="btn btn-organization fw-semibold" type="submit">Guardar delegación</button></div></form></div></section></div></div>
+<div class="organization-shell">
+    <section class="organization-hero mb-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
+        <div>
+            <div class="small text-uppercase fw-semibold opacity-75 mb-2">Estructura institucional</div>
+            <h1 class="mb-2 fw-bold">{{ title|default:"Delegación" }}</h1>
+            <p class="mb-0">Completa la información correspondiente a la delegación.</p>
+        </div>
+        <i class="bi bi-building display-5 opacity-75" aria-hidden="true"></i>
+    </section>
+
+    <div class="row justify-content-center">
+        <div class="col-12 col-lg-8">
+            <section class="organization-card">
+                <div class="card-header py-3 px-4"><i class="bi bi-card-list me-2"></i>Datos de la delegación</div>
+                <div class="card-body p-3 p-md-4">
+                    <form method="post" class="organization-form">
+                        {% csrf_token %}
+                        {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+                        {% for field in form %}
+                        <div class="mb-3">
+                            {{ field.label_tag }}
+                            {{ field }}
+                            {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+                            {% if field.errors %}<div class="text-danger small mt-1">{{ field.errors }}</div>{% endif %}
+                        </div>
+                        {% endfor %}
+                        <div class="d-flex flex-wrap justify-content-between gap-2 mt-4 pt-3 border-top">
+                            <a class="btn btn-outline-secondary" href="{% url 'organization:delegation_list' %}"><i class="bi bi-arrow-left me-1"></i>Cancelar</a>
+                            <button class="btn btn-organization fw-semibold" type="submit"><i class="bi bi-check-lg me-1"></i>Guardar delegación</button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+        </div>
+    </div>
+</div>
 {% endblock %}
