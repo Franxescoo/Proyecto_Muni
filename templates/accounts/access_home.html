@@ -1,91 +1,82 @@
 {% extends "organization/base.html" %}
 
-{% block titulo %}Gestión de accesos{% endblock %}
-
-{% block estilos %}
-{{ block.super }}
-<style>
-    .access-hero {
-        background: linear-gradient(135deg, #a60a17 0%, #6a040d 100%);
-        border-left: 8px solid #ffb3b3;
-        border-radius: .5rem;
-        box-shadow: 0 4px 15px rgba(166, 10, 23, .25);
-        color: #fff;
-    }
-
-    .access-hero p { opacity: .86; }
-    .role-card { height: 100%; }
-    .role-card.global-role { background: #fff5f6; border-color: #f1bbc1; }
-    .role-scope { color: #6c757d; font-size: .9rem; }
-</style>
-{% endblock %}
+{% block titulo %}Roles y Permisos{% endblock %}
 
 {% block contenido %}
-<section class="access-hero p-4 mb-4">
-    <h1 class="h3 fw-bold mb-2">Gestión de accesos</h1>
-    <p class="mb-0">Administra roles, permisos y el alcance por delegación de las cuentas.</p>
-</section>
+<div class="organization-shell">
+    <section class="organization-hero mb-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
+        <div>
+            <div class="small text-uppercase fw-semibold opacity-75 mb-2">Administración del sistema</div>
+            <h1 class="mb-2 fw-bold">Roles y Permisos</h1>
+            <p class="mb-0">Administra roles, permisos y el alcance por delegación de las cuentas.</p>
+        </div>
+        <i class="bi bi-shield-lock display-5 opacity-75" aria-hidden="true"></i>
+    </section>
 
-<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
-    <h2 class="organization-title mb-0">Roles</h2>
-    <a class="btn btn-organization-success fw-semibold" href="{% url 'accounts:group_create' %}">
-        <i class="bi bi-plus-lg"></i> Crear rol
-    </a>
-</div>
-
-<section class="row g-3 mb-4">
-    {% for role in roles %}
-    <div class="col-12 col-md-6 col-xl-4">
-        <article class="organization-card role-card p-4 {% if role.role_scope.all_delegations %}global-role{% endif %}">
-            <h3 class="h5 mb-2">{{ role.name }}</h3>
-            {% if role.role_scope.all_delegations %}
-            <p class="role-scope">Acceso total a todas las delegaciones.</p>
-            <span class="badge text-bg-danger">Acceso total</span>
-            {% elif role.role_scope.delegations.all %}
-            <p class="role-scope">Delegaciones autorizadas:</p>
-            {% for delegation in role.role_scope.delegations.all %}
-            <span class="badge text-bg-secondary me-1">{{ delegation.name }}</span>
-            {% endfor %}
-            {% else %}
-            <p class="role-scope">Se limita a la delegación del funcionario asociado.</p>
-            {% endif %}
-            <div class="mt-3">
-                <span class="small text-muted">{{ role.permissions.count }} permiso(s)</span>
-                <a class="btn btn-sm btn-outline-warning float-end" href="{% url 'accounts:group_edit' role.pk %}">Editar</a>
-            </div>
-        </article>
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+        <div><h2 class="organization-title mb-1">Roles</h2><p class="text-muted small mb-0">Permisos y alcance asignado a cada rol.</p></div>
+        <a class="btn btn-organization-success fw-semibold" href="{% url 'accounts:group_create' %}">
+            <i class="bi bi-plus-lg me-1"></i>Crear rol
+        </a>
     </div>
-    {% empty %}
-    <div class="col-12"><div class="organization-card organization-empty">No hay roles configurados todavía.</div></div>
-    {% endfor %}
-</section>
 
-<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
-    <h2 class="organization-title mb-0">Cuentas</h2>
-    <a class="btn btn-organization-success fw-semibold" href="{% url 'accounts:account_create' %}">
-        <i class="bi bi-person-plus"></i> Crear cuenta
-    </a>
-</div>
-
-<section class="organization-card p-3 p-md-4">
-    <div class="table-responsive">
-        <table class="table table-hover align-middle organization-table mb-0">
-            <thead><tr><th>Cuenta</th><th>Funcionario</th><th>Delegación</th><th>Roles</th><th>Estado</th><th class="text-end">Acciones</th></tr></thead>
-            <tbody>
-                {% for account in users %}
-                <tr>
-                    <td class="fw-semibold">{{ account.username }}</td>
-                    <td>{{ account.profile.employee|default:"Sin funcionario" }}</td>
-                    <td>{{ account.profile.delegation|default:"Sin delegación" }}</td>
-                    <td>{% for role in account.groups.all %}<span class="badge text-bg-secondary me-1">{{ role.name }}</span>{% empty %}<span class="text-muted">Sin rol</span>{% endfor %}</td>
-                    <td>{% if account.is_active %}<span class="badge text-bg-success">Activa</span>{% else %}<span class="badge text-bg-secondary">Inactiva</span>{% endif %}</td>
-                    <td class="text-end"><a class="btn btn-sm btn-outline-warning" href="{% url 'accounts:account_edit' account.pk %}">Editar</a></td>
-                </tr>
-                {% empty %}
-                <tr><td colspan="6" class="organization-empty">No hay cuentas de trabajadores.</td></tr>
+    <section class="row g-3 mb-4">
+        {% for role in roles %}
+        <div class="col-12 col-md-6 col-xl-4">
+            <article class="organization-card role-card p-4 {% if role.role_scope.all_delegations %}global-role{% endif %}">
+                <div class="d-flex align-items-start gap-2 mb-2">
+                    <span class="rounded-circle d-inline-flex align-items-center justify-content-center flex-shrink-0" style="width:2.25rem;height:2.25rem;background:#fbe1e3;color:#a60a17"><i class="bi bi-shield-check"></i></span>
+                    <h3 class="h5 mb-0 pt-1">{{ role.name }}</h3>
+                </div>
+                {% if role.role_scope.all_delegations %}
+                <p class="role-scope mb-2">Acceso total a todas las delegaciones.</p>
+                <span class="badge text-bg-danger">Acceso total</span>
+                {% elif role.role_scope.delegations.all %}
+                <p class="role-scope mb-2">Delegaciones autorizadas:</p>
+                {% for delegation in role.role_scope.delegations.all %}
+                <span class="badge text-bg-secondary me-1 mb-1">{{ delegation.name }}</span>
                 {% endfor %}
-            </tbody>
-        </table>
+                {% else %}
+                <p class="role-scope mb-2">Se limita a la delegación del funcionario asociado.</p>
+                {% endif %}
+                <div class="d-flex justify-content-between align-items-center gap-2 mt-3 pt-3 border-top">
+                    <span class="small text-muted"><i class="bi bi-key me-1"></i>{{ role.permissions.count }} permiso(s)</span>
+                    <a class="btn btn-sm btn-outline-danger" href="{% url 'accounts:group_edit' role.pk %}">Editar</a>
+                </div>
+            </article>
+        </div>
+        {% empty %}
+        <div class="col-12"><div class="organization-card organization-empty"><i class="bi bi-shield-lock fs-2 d-block mb-2"></i>No hay roles configurados todavía.</div></div>
+        {% endfor %}
+    </section>
+
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+        <div><h2 class="organization-title mb-1">Cuentas</h2><p class="text-muted small mb-0">Usuarios y roles asociados.</p></div>
+        <a class="btn btn-organization-success fw-semibold" href="{% url 'accounts:account_create' %}">
+            <i class="bi bi-person-plus me-1"></i>Crear cuenta
+        </a>
     </div>
-</section>
+
+    <section class="organization-card p-3 p-md-4">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle organization-table mb-0">
+                <thead><tr><th>Cuenta</th><th>Funcionario</th><th>Delegación</th><th>Roles</th><th>Estado</th><th class="text-end">Acciones</th></tr></thead>
+                <tbody>
+                    {% for account in users %}
+                    <tr>
+                        <td class="fw-semibold">{{ account.username }}</td>
+                        <td>{{ account.profile.employee|default:"Sin funcionario" }}</td>
+                        <td>{{ account.profile.delegation|default:"Sin delegación" }}</td>
+                        <td>{% for role in account.groups.all %}<span class="badge text-bg-secondary me-1">{{ role.name }}</span>{% empty %}<span class="text-muted">Sin rol</span>{% endfor %}</td>
+                        <td>{% if account.is_active %}<span class="badge rounded-pill text-bg-success">Activa</span>{% else %}<span class="badge rounded-pill text-bg-secondary">Inactiva</span>{% endif %}</td>
+                        <td class="text-end"><a class="btn btn-sm btn-outline-danger" href="{% url 'accounts:account_edit' account.pk %}">Editar</a></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="6" class="organization-empty"><i class="bi bi-person-x fs-3 d-block mb-2"></i>No hay cuentas de trabajadores.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
 {% endblock %}
