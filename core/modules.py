@@ -5,8 +5,7 @@ Cada compañero puede ajustar o agregar tarjetas de su módulo aquí:
 - title: texto de la tarjeta.
 - icon:  ícono de Bootstrap Icons (https://icons.getbootstrap.com).
 - url:   nombre de la ruta (el mismo que se usa en {% url %}).
-         Si la ruta todavía no existe, la tarjeta aparece como "Próximamente"
-         y se activa sola cuando se defina una ruta con ese nombre.
+         Si la ruta todavía no existe, la tarjeta se muestra deshabilitada.
 - perm:  permiso necesario para ver la tarjeta (app.view_modelo).
          Los superusuarios ven todas las tarjetas.
 """
