@@ -1,0 +1,5 @@
+{% extends "base.html" %}
+{% block titulo %}{{ item.position_name }} · Cargo{% endblock %}
+{% block contenido %}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-4"><div><h1 class="h3 mb-1">{{ item.position_name }}</h1><p class="text-muted mb-0">Detalle del cargo y sus funciones</p></div><a class="btn btn-outline-secondary" href="{% url 'organization:position_list' %}">Volver al listado</a></div><div class="card shadow-sm border-0"><div class="card-body"><dl class="row mb-0"><dt class="col-sm-3">Ítems medibles</dt><dd class="col-sm-9">{{ item.measurable_items|linebreaksbr }}</dd><dt class="col-sm-3">Servicios</dt><dd class="col-sm-9">{{ item.services|linebreaksbr }}</dd><dt class="col-sm-3">Ponderaciones</dt><dd class="col-sm-9">{{ item.weightings|linebreaksbr }}</dd><dt class="col-sm-3">Inicio de vigencia</dt><dd class="col-sm-9">{{ item.validity_start|date:"d/m/Y" }}</dd><dt class="col-sm-3">Fin de vigencia</dt><dd class="col-sm-9">{{ item.validity_end|date:"d/m/Y" }}</dd><dt class="col-sm-3">Grupo de permisos</dt><dd class="col-sm-9">{{ item.group|default:"Sin grupo asociado" }}</dd></dl></div></div>
+{% endblock %}
