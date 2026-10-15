@@ -1,0 +1,5 @@
+{% extends "base.html" %}
+{% block titulo %}{{ item.name }} · Funcionario{% endblock %}
+{% block contenido %}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-4"><div><h1 class="h3 mb-1">{{ item.name }}</h1><p class="text-muted mb-0">Detalle del funcionario</p></div><a class="btn btn-outline-secondary" href="{% url 'organization:employee_list' %}">Volver al listado</a></div><div class="card shadow-sm border-0"><div class="card-body"><dl class="row mb-0"><dt class="col-sm-3">Delegación</dt><dd class="col-sm-9">{{ item.delegation }}</dd><dt class="col-sm-3">Cargo</dt><dd class="col-sm-9">{{ item.position }}</dd><dt class="col-sm-3">Funciones</dt><dd class="col-sm-9">{{ item.roles|linebreaksbr }}</dd><dt class="col-sm-3">Estado</dt><dd class="col-sm-9">{{ item.status }}</dd></dl></div></div>
+{% endblock %}
