@@ -302,6 +302,12 @@ class AccountEditForm(BootstrapMixin, forms.ModelForm):
         max_length=20,
         required=False,
     )
+    employee = forms.ModelChoiceField(
+        label="Funcionario asociado",
+        queryset=Employee.objects.none(),
+        required=False,
+        help_text="Cambiarlo actualiza la asociación del perfil y su delegación.",
+    )
 
     class Meta:
         model = get_user_model()
@@ -330,8 +336,20 @@ class AccountEditForm(BootstrapMixin, forms.ModelForm):
         if profile:
             self.fields["employee_code"].initial = profile.employee_code
             self.fields["phone"].initial = profile.phone
+            self.fields["employee"].initial = profile.employee
         else:
             self.fields["employee_code"].help_text = "Esta cuenta no tiene un perfil asociado; no se creará uno automáticamente."
+        available_employees = Employee.objects.filter(
+            deleted_at__isnull=True,
+            position__deleted_at__isnull=True,
+            delegation__deleted_at__isnull=True,
+        ).filter(
+            Q(user_profile__isnull=True) | Q(user_profile=profile)
+        ).distinct().order_by("name")
+        self.fields["employee"].queryset = available_employees
+        if not profile:
+            self.fields["employee"].disabled = True
+            self.fields["employee"].help_text = "Esta cuenta no tiene un perfil de funcionario que pueda modificarse."
         self.apply_bootstrap()
         self.fields["is_active"].widget.attrs["class"] = "form-check-input"
 
@@ -349,7 +367,11 @@ class AccountEditForm(BootstrapMixin, forms.ModelForm):
             if profile:
                 profile.employee_code = self.cleaned_data.get("employee_code", profile.employee_code)
                 profile.phone = self.cleaned_data.get("phone", profile.phone)
-                profile.save(update_fields=["employee_code", "phone", "updated_at"])
+                selected_employee = self.cleaned_data.get("employee")
+                if selected_employee:
+                    profile.employee = selected_employee
+                    profile.delegation = selected_employee.delegation
+                profile.save(update_fields=["employee_code", "phone", "employee", "delegation", "updated_at"])
         return user
 
 
