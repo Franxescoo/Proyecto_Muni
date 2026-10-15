@@ -1,0 +1,5 @@
+{% extends "base.html" %}
+{% block titulo %}Eliminar {{ label }} · Organización{% endblock %}
+{% block contenido %}
+<div class="row justify-content-center"><div class="col-12 col-lg-7"><div class="card border-danger shadow-sm"><div class="card-body p-4"><h1 class="h4">Eliminar {{ label }}</h1><p>¿Confirmas que deseas eliminar <strong>{{ item }}</strong>?</p><p class="text-muted small">El registro se ocultará de los listados, pero se conservará en la base de datos.</p><form method="post">{% csrf_token %}<button class="btn btn-danger" type="submit">Confirmar eliminación</button><a class="btn btn-outline-secondary ms-2" href="javascript:history.back()">Cancelar</a></form></div></div></div></div>
+{% endblock %}
