@@ -338,6 +338,7 @@ class AccountEditForm(BootstrapMixin, forms.ModelForm):
         profile = getattr(self.instance, "profile", None) if self.instance and self.instance.pk else None
         if profile:
             self.fields["employee_code"].initial = profile.employee_code
+            self.fields["employee_code"].required = True
             self.fields["phone"].initial = profile.phone
             self.fields["employee"].initial = profile.employee
         else:
