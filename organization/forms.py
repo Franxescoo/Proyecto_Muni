@@ -1,4 +1,5 @@
 from django import forms
+from django.contrib.auth.models import Group
 
 from .models import Delegation, Employee, PositionFunction
 
@@ -19,6 +20,12 @@ class BootstrapModelForm(forms.ModelForm):
 
 
 class DelegationForm(BootstrapModelForm):
+    status = forms.ChoiceField(
+        label="Estado",
+        choices=(("", "Selecciona un estado"), ("Activo", "Activo"), ("Inactivo", "Inactivo")),
+        required=True,
+    )
+
     class Meta:
         model = Delegation
         fields = ["name", "scope", "status"]
@@ -27,6 +34,13 @@ class DelegationForm(BootstrapModelForm):
             "scope": "Alcance",
             "status": "Estado",
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        current = getattr(self.instance, "status", "")
+        valid_values = {value for value, _ in self.fields["status"].choices}
+        if current and current not in valid_values:
+            self.fields["status"].choices += ((current, f"{current} (valor actual)"),)
 
 
 class PositionFunctionForm(BootstrapModelForm):
@@ -55,6 +69,25 @@ class PositionFunctionForm(BootstrapModelForm):
 
 
 class EmployeeForm(BootstrapModelForm):
+    # Los nombres se consultan en cada petición, así que los roles creados
+    # en "Roles y Permisos" aparecen automáticamente al crear un funcionario.
+    roles = forms.ChoiceField(
+        label="Rol de acceso",
+        choices=(),
+        required=True,
+        help_text="Selecciona uno de los roles configurados en Roles y Permisos.",
+    )
+    status = forms.ChoiceField(
+        label="Estado",
+        choices=(
+            ("", "Selecciona un estado"),
+            ("Activo", "Activo"),
+            ("Inactivo", "Inactivo"),
+            ("Licencia", "Licencia"),
+        ),
+        required=True,
+    )
+
     class Meta:
         model = Employee
         fields = ["name", "delegation", "position", "roles", "status"]
@@ -62,12 +95,26 @@ class EmployeeForm(BootstrapModelForm):
             "name": "Nombre",
             "delegation": "Delegación",
             "position": "Cargo y función",
-            "roles": "Funciones",
+            "roles": "Rol de acceso",
             "status": "Estado",
         }
 
     def __init__(self, *args, delegation_ids=None, **kwargs):
         super().__init__(*args, **kwargs)
+
+        role_names = list(Group.objects.order_by("name").values_list("name", flat=True))
+        choices = [("", "Selecciona un rol")]
+        choices.extend((name, name) for name in role_names)
+
+        # Si el rol antiguo ya no existe, conservarlo como opción para que
+        # editar un funcionario no lo cambie silenciosamente.
+        current_role = getattr(self.instance, "roles", "")
+        if current_role and current_role not in role_names:
+            choices.append((current_role, f"{current_role} (rol actual no existente)"))
+        self.fields["roles"].choices = choices
+        if current_role:
+            self.fields["roles"].initial = current_role
+
         delegations = Delegation.objects.filter(deleted_at__isnull=True)
         if delegation_ids is not None:
             delegations = delegations.filter(pk__in=delegation_ids)
