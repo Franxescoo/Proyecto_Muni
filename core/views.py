@@ -2,6 +2,7 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import render
 from django.urls import NoReverseMatch, reverse
 
+from accounts.access import is_general_administrator
 from .modules import MODULES
 
 # Colores de las tarjetas (se repiten en ciclo)
@@ -15,6 +16,11 @@ def build_sections(user):
     for section in MODULES:
         cards = []
         for card in section["cards"]:
+            if (
+                card.get("general_admin_only")
+                and not is_general_administrator(user)
+            ):
+                continue
             permission = card.get("perm")
             is_monitoring = section["title"] == "Monitoreo y trazabilidad"
             if permission and not is_monitoring and not user.has_perm(permission):

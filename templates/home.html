@@ -118,7 +118,9 @@
             </a>
             {% else %}
             <div class="tile tile-{{ card.color }} disabled" title="Módulo en construcción">
+                {% if section.title != "Organización" %}
                 <span class="badge text-bg-secondary">Próximamente</span>
+                {% endif %}
                 <div class="circle"><i class="bi {{ card.icon }}"></i></div>
                 <div class="name">{{ card.title }}</div>
             </div>

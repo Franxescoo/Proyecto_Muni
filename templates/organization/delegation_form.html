@@ -1,0 +1,7 @@
+{% extends "organization/base.html" %}
+
+{% block titulo %}{{ title|default:"Delegación" }} · Organización{% endblock %}
+
+{% block contenido %}
+<div class="row justify-content-center"><div class="col-lg-8"><section class="organization-card"><div class="card-header py-3 px-4"><i class="bi bi-building me-2"></i>{{ title|default:"Delegación" }}</div><div class="card-body p-4"><form method="post">{% csrf_token %}{% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}{% for field in form %}<div class="mb-3">{{ field.label_tag }}{{ field }}{% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}{% if field.errors %}<div class="text-danger small mt-1">{{ field.errors }}</div>{% endif %}</div>{% endfor %}<div class="d-flex justify-content-between gap-2 mt-4"><a class="btn btn-outline-secondary" href="{% url 'organization:delegation_list' %}">Cancelar</a><button class="btn btn-organization fw-semibold" type="submit">Guardar delegación</button></div></form></div></section></div></div>
+{% endblock %}

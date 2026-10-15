@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+
+{% block titulo %}Organización · Proyecto Muni{% endblock %}
+
+{% block estilos %}
+<style>
+    :root {
+        --organization-brand: #a60a17;
+        --organization-brand-dark: #760710;
+        --organization-success: #138d56;
+    }
+
+    .organization-shell { max-width: 1480px; margin: 0 auto; padding-bottom: 1rem; }
+    .organization-hero {
+        background: linear-gradient(135deg, #a60a17, #760710);
+        color: #fff;
+        border-radius: .65rem;
+        padding: 1.5rem 1.75rem;
+        box-shadow: 0 6px 18px rgba(166, 10, 23, .18);
+    }
+    .organization-hero h1 { font-size: clamp(1.35rem, 2vw, 1.85rem); }
+    .organization-hero p { color: rgba(255,255,255,.8); }
+    .organization-title {
+        border-left: 4px solid var(--organization-brand);
+        color: #23272b;
+        font-size: 1.35rem;
+        font-weight: 700;
+        padding-left: .75rem;
+    }
+    .organization-card, .section-card {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: .65rem;
+        box-shadow: 0 3px 12px rgba(24, 33, 44, .04);
+        overflow: hidden;
+    }
+    .organization-card .card-header {
+        background: linear-gradient(135deg, #a60a17, #760710);
+        color: #fff;
+        font-weight: 600;
+        border-bottom: 0;
+    }
+    .btn-organization {
+        background: var(--organization-brand);
+        border-color: var(--organization-brand);
+        color: #fff;
+    }
+    .btn-organization:hover, .btn-organization:focus {
+        background: var(--organization-brand-dark);
+        border-color: var(--organization-brand-dark);
+        color: #fff;
+    }
+    .btn-organization-success {
+        background: var(--organization-success);
+        border-color: var(--organization-success);
+        color: #fff;
+    }
+    .btn-organization-success:hover, .btn-organization-success:focus {
+        background: #0e7044;
+        border-color: #0e7044;
+        color: #fff;
+    }
+    .organization-table thead th {
+        color: #6c757d;
+        font-size: .72rem;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        white-space: nowrap;
+        vertical-align: middle;
+        border-bottom-color: #e5e7eb;
+    }
+    .organization-table tbody td { vertical-align: middle; }
+    .organization-empty { color: #6c757d; padding: 3rem 1rem; text-align: center; }
+    .organization-filter-label {
+        color: #56616b;
+        font-size: .78rem;
+        font-weight: 600;
+        margin-bottom: .35rem;
+    }
+    .organization-form .form-label { font-weight: 600; color: #374151; }
+    .organization-form input:not([type="checkbox"]):not([type="radio"]),
+    .organization-form select, .organization-form textarea {
+        border-color: #d9dee5;
+        border-radius: .5rem;
+        padding: .65rem .75rem;
+    }
+    .organization-form input:focus, .organization-form select:focus, .organization-form textarea:focus {
+        border-color: #c56b73;
+        box-shadow: 0 0 0 .2rem rgba(166, 10, 23, .1);
+    }
+    .role-card { height: 100%; }
+    .role-card.global-role { background: #fff7f7; border-color: #f1c7cb; }
+    .role-scope { color: #6c757d; font-size: .9rem; }
+    .organization-modal .modal-content { border: 0; border-radius: .9rem; box-shadow: 0 1rem 3rem rgba(20,20,20,.22); overflow: hidden; }
+    .organization-modal .modal-header { background: #fff8f8; border-bottom-color: #f0dadd; }
+    .organization-modal .modal-body { max-height: 70vh; overflow-y: auto; }
+    .status-pill { display:inline-flex; align-items:center; border-radius:999px; padding:.3rem .65rem; font-size:.78rem; font-weight:700; line-height:1.2; white-space:nowrap; }
+    .status-active { color:#146c43; background:#d1e7dd; border:1px solid #a3cfbb; }
+    .status-inactive { color:#842029; background:#f8d7da; border:1px solid #f1aeb5; }
+    .status-leave { color:#664d03; background:#fff3cd; border:1px solid #ffec99; }
+    .account-modal-header { background:#fff8f8; border-bottom-color:#f0dadd; }
+    .account-role-list ul { list-style:none; padding-left:0; margin-bottom:0; display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:.65rem; }
+    .account-role-list li { padding:.45rem .6rem; border:1px solid #e5e7eb; border-radius:.45rem; }
+    .employee-avatar,.account-avatar { width:42px;height:42px;border-radius:50%;overflow:hidden;background:#f7e6e8;color:#a60a17;display:flex;align-items:center;justify-content:center;border:1px solid #ead0d3;flex-shrink:0; }
+    .employee-avatar img,.account-avatar img { width:100%;height:100%;object-fit:cover; }
+    .employee-avatar .bi,.account-avatar .bi { font-size:1.3rem; }
+    .my-account-wrap { max-width:1100px;margin:0 auto 2rem; }
+    .my-account-hero { background:linear-gradient(135deg,#a60a17,#760710);color:white;border-radius:1rem;padding:1.5rem; }
+    .my-account-avatar { width:112px;height:112px;border-radius:50%;overflow:hidden;background:#f7e6e8;color:#a60a17;display:flex;align-items:center;justify-content:center;border:4px solid rgba(255,255,255,.8);flex-shrink:0; }
+    .my-account-avatar img { width:100%;height:100%;object-fit:cover; }
+    .my-account-avatar i { font-size:3.5rem; }
+    .my-account-label { font-size:.78rem;color:#6c757d;text-transform:uppercase;letter-spacing:.04em;font-weight:700; }
+    .my-account-value { font-weight:600;overflow-wrap:anywhere; }
+</style>
+{% endblock %}
+
+{% block submenu %}
+<ul class="nav nav-pills mb-3 gap-1">
+    {% if perms.organization.view_employee %}
+    <li class="nav-item"><a class="nav-link" href="{% url 'organization:employee_list' %}">Funcionarios</a></li>
+    {% endif %}
+    {% if perms.organization.view_delegation %}
+    <li class="nav-item"><a class="nav-link" href="{% url 'organization:delegation_list' %}">Delegaciones</a></li>
+    {% endif %}
+    {% if perms.organization.view_positionfunction %}
+    <li class="nav-item"><a class="nav-link" href="{% url 'organization:position_list' %}">Cargos y funciones</a></li>
+    {% endif %}
+</ul>
+
+<div class="modal fade organization-modal" id="organizationFormModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+    <div class="modal-content"><div class="modal-body p-5 text-center">Cargando...</div></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+(() => {
+ const el=document.getElementById("organizationFormModal");
+ const modal=el?new bootstrap.Modal(el):null;
+ const body=el?el.querySelector(".modal-content"):null;
+ const csrf=f=>f.querySelector('[name=csrfmiddlewaretoken]')?.value||"";
+ const parseForm=(html,actionUrl)=>{
+   const doc=new DOMParser().parseFromString(html,"text/html");
+   const card=doc.querySelector(".organization-card");
+   const form=card?.querySelector("form");if(form){form.classList.add("organization-modal-form");if(actionUrl)form.action=actionUrl;}
+   return card ? '<div class="modal-header"><h2 class="modal-title fs-5">'+(doc.querySelector(".card-header")?.textContent.trim()||"Formulario")+'</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body p-4">'+(card.querySelector(".card-body")?.innerHTML||card.innerHTML)+'</div>' : html;
+ };
+ document.addEventListener("click",async e=>{
+   const open=e.target.closest("[data-organization-modal]");
+   if(open){
+     e.preventDefault(); if(!modal||!body)return;
+     body.innerHTML='<div class="modal-body p-5 text-center"><div class="spinner-border text-danger"></div><p class="mt-3">Cargando formulario...</p></div>';modal.show();
+     try { const u=new URL(open.href);u.searchParams.set("modal","1");const res=await fetch(u,{headers:{"X-Requested-With":"XMLHttpRequest"}});if(!res.ok)throw Error("No se pudo abrir el formulario. Comprueba tus permisos.");body.innerHTML=parseForm(await res.text(),u.toString()); }
+     catch(err){body.innerHTML='<div class="modal-body alert alert-danger m-3"></div>';body.querySelector(".alert").textContent=err.message;}
+     return;
+   }
+   const del=e.target.closest("[data-organization-delete]");
+   if(del){
+     e.preventDefault();const f=del.closest("form");if(!f)return;
+     const label=del.dataset.itemLabel||"este registro";
+     const answer=await Swal.fire({title:"¿Estás seguro?",text:"¿Deseas borrar "+label+"?",icon:"warning",showCancelButton:true,confirmButtonText:"Sí, borrar",cancelButtonText:"Cancelar",confirmButtonColor:"#a60a17",reverseButtons:true});
+     if(!answer.isConfirmed)return;del.disabled=true;
+     try {const res=await fetch(f.action,{method:"POST",body:new FormData(f),headers:{"X-Requested-With":"XMLHttpRequest","X-CSRFToken":csrf(f)},credentials:"same-origin"});const data=await res.json();if(!res.ok||!data.ok)throw Error(data.message||"No se pudo borrar.");await Swal.fire({title:"Eliminado",text:data.message,icon:"success",confirmButtonColor:"#a60a17"});location.reload();}
+     catch(err){await Swal.fire({title:"Error",text:err.message,icon:"error",confirmButtonColor:"#a60a17"});del.disabled=false;}
+   }
+ });
+ document.addEventListener("submit",async e=>{
+   const f=e.target.closest(".organization-modal-form");if(!f)return;e.preventDefault();
+   const bad=[...f.querySelectorAll("input,select,textarea")].find(x=>!x.checkValidity());if(bad){bad.reportValidity();await Swal.fire({title:"Revisa los campos",text:"Corrige los campos marcados antes de guardar.",icon:"warning",confirmButtonColor:"#a60a17"});return;}
+   const ok=await Swal.fire({title:"¿Guardar los cambios?",text:"Confirma que los datos estén correctos.",icon:"question",showCancelButton:true,confirmButtonText:"Sí, guardar",cancelButtonText:"Seguir revisando",confirmButtonColor:"#a60a17",reverseButtons:true});if(!ok.isConfirmed)return;
+   const btn=f.querySelector('[type=submit]');if(btn)btn.disabled=true;
+   try {const res=await fetch(f.action,{method:"POST",body:new FormData(f),headers:{"X-Requested-With":"XMLHttpRequest","X-CSRFToken":csrf(f)},credentials:"same-origin"});const type=res.headers.get("content-type")||"";
+     if(type.includes("application/json")){const data=await res.json();if(!res.ok||!data.ok)throw Error(data.message||"No se pudo guardar.");modal.hide();await Swal.fire({title:"Guardado",text:data.message,icon:"success",confirmButtonColor:"#a60a17"});location.reload();}
+     else {if(!res.ok)throw Error("No se pudo validar el formulario.");body.innerHTML=parseForm(await res.text(),f.action);await Swal.fire({title:"Revisa los datos",text:"El formulario contiene errores. Corrígelos y vuelve a guardar.",icon:"warning",confirmButtonColor:"#a60a17"});}
+   }catch(err){await Swal.fire({title:"Error al guardar",text:err.message,icon:"error",confirmButtonColor:"#a60a17"});}
+ });
+})();
+</script>
+{% endblock %}
