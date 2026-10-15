@@ -101,6 +101,16 @@
     .account-modal-header { background:#fff8f8; border-bottom-color:#f0dadd; }
     .account-role-list ul { list-style:none; padding-left:0; margin-bottom:0; display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:.65rem; }
     .account-role-list li { padding:.45rem .6rem; border:1px solid #e5e7eb; border-radius:.45rem; }
+    .employee-avatar,.account-avatar { width:42px;height:42px;border-radius:50%;overflow:hidden;background:#f7e6e8;color:#a60a17;display:flex;align-items:center;justify-content:center;border:1px solid #ead0d3;flex-shrink:0; }
+    .employee-avatar img,.account-avatar img { width:100%;height:100%;object-fit:cover; }
+    .employee-avatar .bi,.account-avatar .bi { font-size:1.3rem; }
+    .my-account-wrap { max-width:1100px;margin:0 auto 2rem; }
+    .my-account-hero { background:linear-gradient(135deg,#a60a17,#760710);color:white;border-radius:1rem;padding:1.5rem; }
+    .my-account-avatar { width:112px;height:112px;border-radius:50%;overflow:hidden;background:#f7e6e8;color:#a60a17;display:flex;align-items:center;justify-content:center;border:4px solid rgba(255,255,255,.8);flex-shrink:0; }
+    .my-account-avatar img { width:100%;height:100%;object-fit:cover; }
+    .my-account-avatar i { font-size:3.5rem; }
+    .my-account-label { font-size:.78rem;color:#6c757d;text-transform:uppercase;letter-spacing:.04em;font-weight:700; }
+    .my-account-value { font-weight:600;overflow-wrap:anywhere; }
 </style>
 {% endblock %}
 
