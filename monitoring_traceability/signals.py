@@ -4,7 +4,12 @@ from django.dispatch import receiver
 from planning_measurements.models import Goal, Period
 from registration_validation.models import Activity, Evidence, Validation
 
-from .models import Indicator
+from .models import (
+    Audit,
+    Commitment,
+    CommitmentComment,
+    Indicator,
+)
 from .services import recalculate_indicator_for_goal
 
 
@@ -72,3 +77,59 @@ def period_deleted(sender, instance, **kwargs):
         compliance=0,
         traffic_light="Red",
     )
+
+
+def _audit_employee(instance):
+    created_by = getattr(instance, "created_by", None)
+    profile = getattr(created_by, "profile", None)
+    if profile and profile.employee_id:
+        return profile.employee
+
+    for field_name in ("author", "verifier", "responsible", "employee"):
+        employee = getattr(instance, field_name, None)
+        if employee is not None:
+            return employee
+
+    if isinstance(instance, Commitment):
+        return instance.responsible
+
+    return None
+
+
+def _record_audit(instance, event):
+    employee = _audit_employee(instance)
+    if employee is None:
+        return
+
+    Audit.objects.create(
+        user=employee,
+        event=event,
+        entity=instance.__class__.__name__,
+        object_identifier=str(instance.pk),
+        new_value={"text": instance.text}
+        if isinstance(instance, CommitmentComment)
+        else None,
+    )
+
+
+@receiver(post_save, sender=Commitment)
+@receiver(post_save, sender=CommitmentComment)
+@receiver(post_save, sender=Goal)
+@receiver(post_save, sender=Activity)
+@receiver(post_save, sender=Evidence)
+@receiver(post_save, sender=Validation)
+def tracked_object_saved(sender, instance, created, **kwargs):
+    _record_audit(
+        instance,
+        f"{'Created' if created else 'Updated'} {sender.__name__}",
+    )
+
+
+@receiver(post_delete, sender=Commitment)
+@receiver(post_delete, sender=CommitmentComment)
+@receiver(post_delete, sender=Goal)
+@receiver(post_delete, sender=Activity)
+@receiver(post_delete, sender=Evidence)
+@receiver(post_delete, sender=Validation)
+def tracked_object_deleted(sender, instance, **kwargs):
+    _record_audit(instance, f"Deleted {sender.__name__}")

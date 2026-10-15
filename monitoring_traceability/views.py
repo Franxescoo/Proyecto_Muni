@@ -1,8 +1,9 @@
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from django.shortcuts import render
 from django.shortcuts import redirect
+from django.utils import timezone
 
 from planning_measurements.models import Goal
 
@@ -90,28 +91,51 @@ def commitment_list(request):
         Commitment.objects.select_related(
             "delegation",
             "responsible",
-        ).prefetch_related("comments__author"),
+        ).prefetch_related(
+            Prefetch(
+                "comments",
+                queryset=CommitmentComment.objects.filter(
+                    deleted_at__isnull=True,
+                ).select_related(
+                    "author",
+                    "created_by__profile",
+                ),
+            ),
+        ),
         request.user,
         "responsible",
     )
 
     if request.method == "POST":
+        action = request.POST.get("action", "add")
         commitment_id = request.POST.get("commitment_id")
-        text = _query(request.POST.get("comment"))
         profile = getattr(request.user, "profile", None)
         commitment = commitments.filter(
             pk=commitment_id
         ).first()
         if commitment is None:
             messages.error(request, "No tienes acceso a ese compromiso.")
-        elif not text:
-            messages.error(request, "El comentario no puede estar vacío.")
-        elif not profile or not profile.employee_id:
-            messages.error(
-                request,
-                "Tu usuario no tiene un funcionario asociado para comentar.",
-            )
+        elif action == "delete":
+            comment = CommitmentComment.objects.filter(
+                comment_id=request.POST.get("comment_id"),
+                commitment=commitment,
+                created_by=request.user,
+                deleted_at__isnull=True,
+            ).first()
+            if comment is None:
+                messages.error(
+                    request,
+                    "No puedes eliminar este comentario.",
+                )
+            else:
+                comment.deleted_at = timezone.now()
+                comment.save(update_fields=["deleted_at", "updated_at"])
+                messages.success(request, "Comentario eliminado.")
         else:
+            text = _query(request.POST.get("comment"))
+            if not text:
+                messages.error(request, "El comentario no puede estar vacío.")
+                return redirect(request.get_full_path())
             CommitmentComment.objects.create(
                 commitment=commitment,
                 author=profile.employee if profile else None,
@@ -142,6 +166,8 @@ def commitment_list(request):
     total = commitments.count()
     pending = commitments.filter(
         status__in=["Pending", "Pendiente", "In progress", "En progreso"]
+    ).exclude(
+        commitment_date__lt=timezone.localdate()
     ).count()
     completed = commitments.filter(
         status__in=["Completed", "Completado", "Realizado"]

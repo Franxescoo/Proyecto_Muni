@@ -5,10 +5,6 @@ from decimal import Decimal, ROUND_HALF_UP
 from .models import Indicator
 
 
-MIN_APPROVED_EVIDENCES = 2
-MAX_APPROVED_EVIDENCES = 5
-
-
 _THRESHOLD_PATTERN = re.compile(
     r"(?P<label>[A-Za-zÁÉÍÓÚáéíóúñÑ]+)\s*[:>=]+\s*"
     r"(?P<value>\d+(?:[.,]\d+)?)"
@@ -113,24 +109,14 @@ def recalculate_indicator_for_goal(goal, create_if_missing=True):
         for evidence in activity.evidences.all()
         if _evidence_is_approved(evidence)
     )
-    approved_evidences = min(
-        raw_approved_evidences,
-        MAX_APPROVED_EVIDENCES,
-    )
-
-    expected = Decimal(goal.objective_value)
-    actual = Decimal(min(approved_evidences, MAX_APPROVED_EVIDENCES))
+    expected = Decimal(goal.required_evidence_count)
+    actual = Decimal(raw_approved_evidences)
     cap = _compliance_cap(goal.period)
-    if approved_evidences < MIN_APPROVED_EVIDENCES:
-        compliance = Decimal("0")
-    else:
-        compliance = (
-            Decimal(
-                approved_evidences - MIN_APPROVED_EVIDENCES
-            )
-            / Decimal(MAX_APPROVED_EVIDENCES - MIN_APPROVED_EVIDENCES)
-            * Decimal("100")
-        )
+    compliance = (
+        Decimal(raw_approved_evidences)
+        / Decimal(goal.required_evidence_count)
+        * Decimal("100")
+    )
     compliance = min(compliance, cap).quantize(
         Decimal("0.01"), ROUND_HALF_UP
     )
@@ -169,7 +155,7 @@ def recalculate_indicator_for_goal(goal, create_if_missing=True):
     indicator.weighting = goal.weight
     indicator.weighted_result = weighted_result
     indicator.approved_activities = approved_activities
-    indicator.approved_evidences = approved_evidences
+    indicator.approved_evidences = raw_approved_evidences
     indicator.traffic_light = _traffic_light(compliance, goal.period)
     indicator.save(
         update_fields=[
