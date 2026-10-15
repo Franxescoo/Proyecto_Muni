@@ -6,75 +6,96 @@
 <style>
     :root {
         --organization-brand: #a60a17;
-        --organization-brand-dark: #800711;
+        --organization-brand-dark: #760710;
         --organization-success: #138d56;
     }
 
+    .organization-shell { max-width: 1480px; margin: 0 auto; padding-bottom: 1rem; }
+    .organization-hero {
+        background: linear-gradient(135deg, #a60a17, #760710);
+        color: #fff;
+        border-radius: .65rem;
+        padding: 1.5rem 1.75rem;
+        box-shadow: 0 6px 18px rgba(166, 10, 23, .18);
+    }
+    .organization-hero h1 { font-size: clamp(1.35rem, 2vw, 1.85rem); }
+    .organization-hero p { color: rgba(255,255,255,.8); }
     .organization-title {
-        border-left: 6px solid var(--organization-brand);
-        color: #202124;
-        font-size: 1.75rem;
+        border-left: 4px solid var(--organization-brand);
+        color: #23272b;
+        font-size: 1.35rem;
         font-weight: 700;
         padding-left: .75rem;
     }
-
-    .organization-card {
+    .organization-card, .section-card {
         background: #fff;
-        border: 1px solid #e2e6ea;
-        border-radius: .5rem;
-        box-shadow: 0 .125rem .25rem rgba(0, 0, 0, .06);
+        border: 1px solid #e5e7eb;
+        border-radius: .65rem;
+        box-shadow: 0 3px 12px rgba(24, 33, 44, .04);
+        overflow: hidden;
     }
-
     .organization-card .card-header {
-        background: var(--organization-brand);
+        background: linear-gradient(135deg, #a60a17, #760710);
         color: #fff;
         font-weight: 600;
+        border-bottom: 0;
     }
-
     .btn-organization {
         background: var(--organization-brand);
         border-color: var(--organization-brand);
         color: #fff;
     }
-
-    .btn-organization:hover,
-    .btn-organization:focus {
+    .btn-organization:hover, .btn-organization:focus {
         background: var(--organization-brand-dark);
         border-color: var(--organization-brand-dark);
         color: #fff;
     }
-
     .btn-organization-success {
         background: var(--organization-success);
         border-color: var(--organization-success);
         color: #fff;
     }
-
-    .btn-organization-success:hover,
-    .btn-organization-success:focus {
+    .btn-organization-success:hover, .btn-organization-success:focus {
         background: #0e7044;
         border-color: #0e7044;
         color: #fff;
     }
-
     .organization-table thead th {
-        background: var(--organization-brand);
-        color: #fff;
-        font-weight: 600;
-        vertical-align: middle;
-        white-space: nowrap;
-    }
-
-    .organization-empty {
         color: #6c757d;
-        padding: 3rem 1rem;
-        text-align: center;
+        font-size: .72rem;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        white-space: nowrap;
+        vertical-align: middle;
+        border-bottom-color: #e5e7eb;
     }
+    .organization-table tbody td { vertical-align: middle; }
+    .organization-empty { color: #6c757d; padding: 3rem 1rem; text-align: center; }
+    .organization-filter-label {
+        color: #56616b;
+        font-size: .78rem;
+        font-weight: 600;
+        margin-bottom: .35rem;
+    }
+    .organization-form .form-label { font-weight: 600; color: #374151; }
+    .organization-form input:not([type="checkbox"]):not([type="radio"]),
+    .organization-form select, .organization-form textarea {
+        border-color: #d9dee5;
+        border-radius: .5rem;
+        padding: .65rem .75rem;
+    }
+    .organization-form input:focus, .organization-form select:focus, .organization-form textarea:focus {
+        border-color: #c56b73;
+        box-shadow: 0 0 0 .2rem rgba(166, 10, 23, .1);
+    }
+    .role-card { height: 100%; }
+    .role-card.global-role { background: #fff7f7; border-color: #f1c7cb; }
+    .role-scope { color: #6c757d; font-size: .9rem; }
 </style>
 {% endblock %}
 
 {% block submenu %}
-<ul class="nav nav-pills mb-4 gap-1">
+<ul class="nav nav-pills mb-3 gap-1">
     {% if perms.organization.view_employee %}
     <li class="nav-item"><a class="nav-link" href="{% url 'organization:employee_list' %}">Funcionarios</a></li>
     {% endif %}
