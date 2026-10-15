@@ -19,15 +19,18 @@ from django.urls import include, path
 from django.views.generic import RedirectView
 
 urlpatterns = [
-# Autenticación y cuentas
+    # Administración
+    path('admin/', admin.site.urls),
+
+    # Autenticación y cuentas
     path('accounts/', include('django.contrib.auth.urls')),
     path('accounts/', include('accounts.urls')),
 
-# Módulos del sistema
+    # Módulos del sistema
     path('planning/', include('planning_measurements.urls')),
     path('organization/', include('organization.urls')),
     path('monitoring/', include('monitoring_traceability.urls')),
 
-# Página principal
-path('', include('core.urls')),
+    # Página principal
+    path('', include('core.urls')),
 ]
