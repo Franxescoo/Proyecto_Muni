@@ -14,6 +14,12 @@ class UserProfile(BaseModel):
 
     employee_code = models.CharField(max_length=30, unique=True)
     phone = models.CharField(max_length=20, blank=True)
+    profile_photo = models.ImageField(
+        upload_to="profile_photos/",
+        blank=True,
+        null=True,
+        verbose_name="Foto de perfil",
+    )
 
     employee = models.OneToOneField(
     "organization.Employee",

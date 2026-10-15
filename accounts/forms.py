@@ -252,9 +252,10 @@ class ProfileLinkForm(BootstrapMixin, forms.ModelForm):
 
     class Meta:
         model = UserProfile
-        fields = ["employee"]
+        fields = ["employee", "profile_photo"]
         labels = {
             "employee": "Funcionario",
+            "profile_photo": "Foto de perfil",
         }
 
     def __init__(self, *args, **kwargs):

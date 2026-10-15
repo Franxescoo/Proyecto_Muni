@@ -269,6 +269,7 @@ def profile_link(request, pk):
 
     form = ProfileLinkForm(
         request.POST if request.method == "POST" else None,
+        request.FILES if request.method == "POST" else None,
         instance=profile,
     )
 

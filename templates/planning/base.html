@@ -3,16 +3,11 @@
 
 {% block titulo %}Planificación{% endblock %}
 
-{% block submenu %}
+{% block sidebar %}
 <style>
     .planning-side-panel {
-        position: fixed;
-        top: 90px;
-        left: 24px;
-        width: 225px;
-        max-height: calc(100vh - 110px);
-        overflow-y: auto;
-        z-index: 100;
+        flex: 0 0 225px;
+        overflow: hidden;
         background: #fff;
         border: 1px solid #e5e7eb;
         border-radius: .65rem;
@@ -64,22 +59,10 @@
         font-weight: 600;
     }
 
-    /* Reservar espacio para el menú */
-    .container-fluid.px-4 > main {
-        margin-left: 245px;
-        min-width: 0;
-    }
-
     @media (max-width: 991.98px) {
         .planning-side-panel {
-            position: static;
-            width: 100%;
-            max-height: none;
+            flex-basis: auto;
             margin-bottom: 1rem;
-        }
-
-        .container-fluid.px-4 > main {
-            margin-left: 0;
         }
     }
 </style>

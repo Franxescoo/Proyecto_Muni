@@ -1,8 +1,14 @@
 from django.contrib.auth.decorators import login_required
-from django.db.models import Q
+from django.contrib import messages
+from django.db.models import Prefetch, Q
 from django.shortcuts import render
+from django.shortcuts import redirect
+from django.utils import timezone
 
-from .models import Audit, Commitment, Indicator
+from planning_measurements.models import Goal
+
+from .models import Audit, Commitment, CommitmentComment, Indicator
+from .services import synchronize_indicators_for_goals
 
 
 def _delegation_id(user):
@@ -27,10 +33,26 @@ def _query(value):
 
 @login_required
 def indicator_list(request):
+    goals = Goal.objects.filter(
+        deleted_at__isnull=True,
+        period__deleted_at__isnull=True,
+    ).select_related("employee", "period")
+    if not request.user.is_superuser:
+        delegation_id = _delegation_id(request.user)
+        if delegation_id is None:
+            goals = goals.none()
+        else:
+            goals = goals.filter(employee__delegation_id=delegation_id)
+
+    synchronize_indicators_for_goals(goals)
+
     indicators = _scoped_queryset(
-        Indicator.objects.select_related("goal", "employee"),
+        Indicator.objects.select_related("goal", "employee", "goal__period"),
         request.user,
         "employee",
+    ).filter(
+        goal__deleted_at__isnull=True,
+        goal__period__deleted_at__isnull=True,
     )
 
     search = _query(request.GET.get("q"))
@@ -69,10 +91,59 @@ def commitment_list(request):
         Commitment.objects.select_related(
             "delegation",
             "responsible",
+        ).prefetch_related(
+            Prefetch(
+                "comments",
+                queryset=CommitmentComment.objects.filter(
+                    deleted_at__isnull=True,
+                ).select_related(
+                    "author",
+                    "created_by__profile",
+                ),
+            ),
         ),
         request.user,
         "responsible",
     )
+
+    if request.method == "POST":
+        action = request.POST.get("action", "add")
+        commitment_id = request.POST.get("commitment_id")
+        profile = getattr(request.user, "profile", None)
+        commitment = commitments.filter(
+            pk=commitment_id
+        ).first()
+        if commitment is None:
+            messages.error(request, "No tienes acceso a ese compromiso.")
+        elif action == "delete":
+            comment = CommitmentComment.objects.filter(
+                comment_id=request.POST.get("comment_id"),
+                commitment=commitment,
+                created_by=request.user,
+                deleted_at__isnull=True,
+            ).first()
+            if comment is None:
+                messages.error(
+                    request,
+                    "No puedes eliminar este comentario.",
+                )
+            else:
+                comment.deleted_at = timezone.now()
+                comment.save(update_fields=["deleted_at", "updated_at"])
+                messages.success(request, "Comentario eliminado.")
+        else:
+            text = _query(request.POST.get("comment"))
+            if not text:
+                messages.error(request, "El comentario no puede estar vacío.")
+                return redirect(request.get_full_path())
+            CommitmentComment.objects.create(
+                commitment=commitment,
+                author=profile.employee if profile else None,
+                created_by=request.user,
+                text=text,
+            )
+            messages.success(request, "Comentario agregado.")
+        return redirect(request.get_full_path())
 
     search = _query(request.GET.get("q"))
     status = _query(request.GET.get("status"))
@@ -87,11 +158,21 @@ def commitment_list(request):
     if status:
         commitments = commitments.filter(status__iexact=status)
 
+    for commitment in commitments:
+        commitment.display_status = (
+            "Vencido" if commitment.is_overdue else commitment.status
+        )
+
     total = commitments.count()
-    pending = commitments.filter(status__iexact="Pending").count()
-    completed = commitments.filter(
-        status__iexact="Completed"
+    pending = commitments.filter(
+        status__in=["Pending", "Pendiente", "In progress", "En progreso"]
+    ).exclude(
+        commitment_date__lt=timezone.localdate()
     ).count()
+    completed = commitments.filter(
+        status__in=["Completed", "Completado", "Realizado"]
+    ).count()
+    overdue = sum(commitment.is_overdue for commitment in commitments)
 
     return render(
         request,
@@ -101,6 +182,7 @@ def commitment_list(request):
             "total_commitments": total,
             "pending_commitments": pending,
             "completed_commitments": completed,
+            "overdue_commitments": overdue,
         },
     )
 
