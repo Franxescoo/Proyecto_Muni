@@ -283,35 +283,74 @@ class AccountCreateForm(BootstrapMixin, UserCreationForm):
 
 
 class AccountEditForm(BootstrapMixin, forms.ModelForm):
-    """Edita una cuenta y los grupos asignados."""
+    """Edita datos de acceso y los datos básicos del perfil asociado."""
 
     groups = forms.ModelMultipleChoiceField(
         label="Roles",
         queryset=Group.objects.order_by("name"),
         widget=forms.CheckboxSelectMultiple,
         required=False,
-        help_text=(
-            "Sin roles, la cuenta no recibe permisos."
-        ),
+        help_text="Los roles determinan los permisos que recibe la cuenta.",
+    )
+    employee_code = forms.CharField(
+        label="Código de funcionario",
+        max_length=30,
+        required=False,
+    )
+    phone = forms.CharField(
+        label="Teléfono de contacto",
+        max_length=20,
+        required=False,
     )
 
     class Meta:
         model = get_user_model()
         fields = [
             "username",
+            "first_name",
+            "last_name",
             "email",
             "is_active",
             "groups",
         ]
         labels = {
             "username": "Nombre de usuario",
-            "email": "Correo",
+            "first_name": "Nombre",
+            "last_name": "Apellidos",
+            "email": "Correo electrónico",
             "is_active": "Cuenta activa",
+        }
+        help_texts = {
+            "is_active": "Desactiva la cuenta para impedir que inicie sesión sin eliminarla.",
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        profile = getattr(self.instance, "profile", None) if self.instance and self.instance.pk else None
+        if profile:
+            self.fields["employee_code"].initial = profile.employee_code
+            self.fields["phone"].initial = profile.phone
+        else:
+            self.fields["employee_code"].help_text = "Esta cuenta no tiene un perfil asociado; no se creará uno automáticamente."
         self.apply_bootstrap()
+        self.fields["is_active"].widget.attrs["class"] = "form-check-input"
+
+    def clean_employee_code(self):
+        code = self.cleaned_data.get("employee_code", "").strip()
+        profile = getattr(self.instance, "profile", None) if self.instance and self.instance.pk else None
+        if code and UserProfile.objects.filter(employee_code=code).exclude(pk=getattr(profile, "pk", None)).exists():
+            raise forms.ValidationError("Ese código ya está asignado a otra cuenta.")
+        return code
+
+    def save(self, commit=True):
+        user = super().save(commit=commit)
+        if commit:
+            profile = UserProfile.objects.filter(user=user).first()
+            if profile:
+                profile.employee_code = self.cleaned_data.get("employee_code", profile.employee_code)
+                profile.phone = self.cleaned_data.get("phone", profile.phone)
+                profile.save(update_fields=["employee_code", "phone", "updated_at"])
+        return user
 
 
 class ProfileLinkForm(BootstrapMixin, forms.ModelForm):
