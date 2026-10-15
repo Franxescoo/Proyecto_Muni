@@ -124,9 +124,10 @@
  const modal=el?new bootstrap.Modal(el):null;
  const body=el?el.querySelector(".modal-content"):null;
  const csrf=f=>f.querySelector('[name=csrfmiddlewaretoken]')?.value||"";
- const parseForm=html=>{
+ const parseForm=(html,actionUrl)=>{
    const doc=new DOMParser().parseFromString(html,"text/html");
    const card=doc.querySelector(".organization-card");
+   const form=card?.querySelector("form");if(form){form.classList.add("organization-modal-form");if(actionUrl)form.action=actionUrl;}
    return card ? '<div class="modal-header"><h2 class="modal-title fs-5">'+(doc.querySelector(".card-header")?.textContent.trim()||"Formulario")+'</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body p-4">'+(card.querySelector(".card-body")?.innerHTML||card.innerHTML)+'</div>' : html;
  };
  document.addEventListener("click",async e=>{
@@ -134,7 +135,7 @@
    if(open){
      e.preventDefault(); if(!modal||!body)return;
      body.innerHTML='<div class="modal-body p-5 text-center"><div class="spinner-border text-danger"></div><p class="mt-3">Cargando formulario...</p></div>';modal.show();
-     try { const u=new URL(open.href);u.searchParams.set("modal","1");const res=await fetch(u,{headers:{"X-Requested-With":"XMLHttpRequest"}});if(!res.ok)throw Error("No se pudo abrir el formulario. Comprueba tus permisos.");body.innerHTML=parseForm(await res.text()); }
+     try { const u=new URL(open.href);u.searchParams.set("modal","1");const res=await fetch(u,{headers:{"X-Requested-With":"XMLHttpRequest"}});if(!res.ok)throw Error("No se pudo abrir el formulario. Comprueba tus permisos.");body.innerHTML=parseForm(await res.text(),u.toString()); }
      catch(err){body.innerHTML='<div class="modal-body alert alert-danger m-3"></div>';body.querySelector(".alert").textContent=err.message;}
      return;
    }
@@ -155,7 +156,7 @@
    const btn=f.querySelector('[type=submit]');if(btn)btn.disabled=true;
    try {const res=await fetch(f.action,{method:"POST",body:new FormData(f),headers:{"X-Requested-With":"XMLHttpRequest","X-CSRFToken":csrf(f)},credentials:"same-origin"});const type=res.headers.get("content-type")||"";
      if(type.includes("application/json")){const data=await res.json();if(!res.ok||!data.ok)throw Error(data.message||"No se pudo guardar.");modal.hide();await Swal.fire({title:"Guardado",text:data.message,icon:"success",confirmButtonColor:"#a60a17"});location.reload();}
-     else {if(!res.ok)throw Error("No se pudo validar el formulario.");body.innerHTML=parseForm(await res.text());await Swal.fire({title:"Revisa los datos",text:"El formulario contiene errores. Corrígelos y vuelve a guardar.",icon:"warning",confirmButtonColor:"#a60a17"});}
+     else {if(!res.ok)throw Error("No se pudo validar el formulario.");body.innerHTML=parseForm(await res.text(),f.action);await Swal.fire({title:"Revisa los datos",text:"El formulario contiene errores. Corrígelos y vuelve a guardar.",icon:"warning",confirmButtonColor:"#a60a17"});}
    }catch(err){await Swal.fire({title:"Error al guardar",text:err.message,icon:"error",confirmButtonColor:"#a60a17"});}
  });
 })();
