@@ -4,6 +4,7 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import Group
+from django.http import JsonResponse
 from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404, redirect, render
@@ -239,16 +240,34 @@ def account_edit(request, pk):
         is_superuser=False,
     )
 
+    modal_request = request.GET.get("modal") == "1" or request.POST.get("modal") == "1"
     form = AccountEditForm(
         request.POST if request.method == "POST" else None,
         instance=user,
     )
 
-    return save_model_form(
-        request,
-        form,
-        f"Editar cuenta: {user.username}",
-    )
+    if request.method == "POST" and form.is_valid():
+        with transaction.atomic():
+            form.save()
+        if modal_request:
+            return JsonResponse({
+                "ok": True,
+                "message": f"La cuenta {user.username} se actualizó correctamente.",
+            })
+        messages.success(request, "Cuenta actualizada correctamente.")
+        return redirect("accounts:access_home")
+
+    if modal_request:
+        return render(request, "accounts/_account_edit_modal.html", {
+            "form": form,
+            "title": f"Editar cuenta: {user.username}",
+            "account": user,
+        })
+
+    return render(request, "accounts/manage_form.html", {
+        "form": form,
+        "title": f"Editar cuenta: {user.username}",
+    })
 
 
 @administrator_required
