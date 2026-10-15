@@ -318,6 +318,9 @@ class AccountEditForm(BootstrapMixin, forms.ModelForm):
             "email",
             "is_active",
             "groups",
+            "employee_code",
+            "phone",
+            "employee",
         ]
         labels = {
             "username": "Nombre de usuario",
