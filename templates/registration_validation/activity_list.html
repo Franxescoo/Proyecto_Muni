@@ -1,411 +1,468 @@
 {% extends "registration_validation/base.html" %}
 
-{% block titulo %}Actividades{% endblock %}
+{% block titulo %}Actividades · Registro y validación{% endblock %}
 
 {% block contenido %}
 
-<style>
-    :root {
-        --color-rojo-brand: #a60a17;
-        --color-verde-btn: #138d56;
-    }
+<div class="registration-shell pb-4" id="actividades">
 
-    .titulo-seccion {
-        color: #000;
-        font-weight: bold;
-        border-left: 6px solid var(--color-rojo-brand);
-        padding-left: 12px;
-        margin-top: 5px;
-        font-size: 1.8rem;
-    }
+    <section class="registration-hero mb-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
 
-    .btn-primary {
-        background-color: var(--color-rojo-brand);
-        border-color: var(--color-rojo-brand);
-    }
+        <div>
+            <div class="small text-uppercase fw-semibold opacity-75 mb-2">
+                Registro y validación
+            </div>
 
-    .btn-primary:hover {
-        background-color: #800711;
-        border-color: #800711;
-    }
+            <h1 class="mb-2 fw-bold">
+                Gestión de actividades
+            </h1>
 
-    .btn-success {
-        background-color: var(--color-verde-btn);
-        border-color: var(--color-verde-btn);
-    }
+            <p class="mb-0">
+                Registra y consulta las actividades asociadas a las metas institucionales.
+            </p>
+        </div>
 
-    .btn-success:hover {
-        background-color: #0e7044;
-        border-color: #0e7044;
-    }
+        <i class="bi bi-clipboard-check display-5 opacity-75"
+           aria-hidden="true"></i>
 
-    .table-dark-brand th {
-        background-color: var(--color-rojo-brand) !important;
-        color: white !important;
-        font-weight: 600;
-    }
-</style>
+    </section>
 
-<div class="row mb-4 align-items-center">
 
-    <div class="col-8">
-        <h1 class="titulo-seccion">
-            Listado de Actividades
-        </h1>
-    </div>
+    <div class="row g-3 mb-4">
 
-    <div class="col-4 text-end">
+        <div class="col-12 col-md-4">
 
-        {% if perms.registration_validation.add_activity %}
+            <div class="section-card metric h-100">
 
-        <a
-            class="btn btn-success px-4 fw-semibold shadow-sm"
-            href="{% url 'registration:activity_create' %}"
-        >
-            Agregar Actividad
-        </a>
-
-        {% endif %}
-
-    </div>
-
-</div>
-
-<div class="row">
-
-    <div class="col-md-9">
-
-        <div class="bg-white p-3 rounded border shadow-sm">
-
-            <form
-                method="get"
-                class="row g-2 mb-4"
-            >
-
-                <div class="col-md-8">
-
-                    <input
-                        type="text"
-                        name="q"
-                        value="{{ query }}"
-                        class="form-control bg-light"
-                        placeholder="Buscar por problema, acción, contacto, funcionario o meta"
-                    >
-
+                <div class="value">
+                    {{ total_activities|default:"0" }}
                 </div>
 
-                <div class="col-md-4">
-
-                    {% if selected_status %}
-
-                    <input
-                        type="hidden"
-                        name="status"
-                        value="{{ selected_status }}"
-                    >
-
-                    {% endif %}
-
-                    <button
-                        type="submit"
-                        class="btn btn-primary w-100 fw-semibold"
-                    >
-                        Buscar
-                    </button>
-
+                <div class="label">
+                    Actividades registradas
                 </div>
-
-            </form>
-
-            <div class="table-responsive">
-
-                <table class="table table-hover table-striped border mb-0">
-
-                    <thead class="table-dark-brand">
-
-                        <tr>
-                            <th>ID</th>
-                            <th>Meta</th>
-                            <th>Funcionario</th>
-                            <th>Fecha</th>
-                            <th>Estado</th>
-                            <th>Período</th>
-                            <th>Acciones</th>
-                        </tr>
-
-                    </thead>
-
-                    <tbody>
-
-                        {% for activity in activities %}
-
-                        <tr>
-
-                            <td>
-                                {{ activity.activity_id }}
-                            </td>
-
-                            <td>
-                                {{ activity.goal.item }}
-                            </td>
-
-                            <td>
-                                {{ activity.author }}
-                            </td>
-
-                            <td>
-                                {{ activity.date|date:"d-m-Y" }}
-                            </td>
-
-                            <td>
-
-                                {% if activity.status == "Completed" %}
-
-                                <span class="badge bg-success">
-                                    Completada
-                                </span>
-
-                                {% elif activity.status == "In progress" %}
-
-                                <span class="badge bg-warning text-dark">
-                                    En progreso
-                                </span>
-
-                                {% else %}
-
-                                <span class="badge bg-secondary">
-                                    Pendiente
-                                </span>
-
-                                {% endif %}
-
-                            </td>
-
-                            <td>
-
-                                {{ activity.goal.period.start_date|date:"d-m-Y" }}
-                                al
-                                {{ activity.goal.period.end_date|date:"d-m-Y" }}
-
-                                {% if activity.goal.period.status == "Closed" %}
-
-                                <div class="mt-1">
-                                    <span class="badge bg-dark">
-                                        Cerrado
-                                    </span>
-                                </div>
-
-                                {% endif %}
-
-                            </td>
-
-                            <td>
-
-                                {% if activity.goal.period.status == "Closed" %}
-
-                                <span class="badge bg-secondary">
-                                    Solo lectura
-                                </span>
-
-                                {% else %}
-
-                                    {% if perms.registration_validation.change_activity %}
-
-                                    <a
-                                        href="{% url 'registration:activity_update' activity.activity_id %}"
-                                        class="btn btn-warning btn-sm"
-                                    >
-                                        Modificar
-                                    </a>
-
-                                    {% endif %}
-
-                                    {% if perms.registration_validation.delete_activity %}
-
-                                    <form
-                                        id="delete-form-{{ activity.activity_id }}"
-                                        method="post"
-                                        action="{% url 'registration:activity_delete' activity.activity_id %}"
-                                        class="d-none"
-                                    >
-                                        {% csrf_token %}
-                                    </form>
-
-                                    <button
-                                        type="button"
-                                        class="btn btn-danger btn-sm"
-                                        onclick="confirmDelete(
-                                            '{{ activity.activity_id }}',
-                                            '{{ activity.goal.item|escapejs }}'
-                                        )"
-                                    >
-                                        Eliminar
-                                    </button>
-
-                                    {% endif %}
-
-                                {% endif %}
-
-                            </td>
-
-                        </tr>
-
-                        {% empty %}
-
-                        <tr>
-
-                            <td
-                                colspan="7"
-                                class="text-center py-4 text-muted"
-                            >
-                                No hay actividades para mostrar.
-                            </td>
-
-                        </tr>
-
-                        {% endfor %}
-
-                    </tbody>
-
-                </table>
 
             </div>
 
-            {% if is_paginated %}
+        </div>
 
-            <nav class="mt-3">
 
-                <ul class="pagination justify-content-center">
+        <div class="col-12 col-md-4">
 
-                    {% if page_obj.has_previous %}
+            <div class="section-card metric h-100">
 
-                    <li class="page-item">
+                <div class="value text-warning">
+                    {{ pending_activities|default:"0" }}
+                </div>
 
-                        <a
-                            class="page-link"
-                            href="?page={{ page_obj.previous_page_number }}&q={{ query }}&status={{ selected_status }}"
-                        >
-                            Anterior
-                        </a>
+                <div class="label">
+                    Pendientes
+                </div>
 
-                    </li>
+            </div>
 
-                    {% endif %}
+        </div>
 
-                    <li class="page-item active">
 
-                        <span class="page-link">
-                            {{ page_obj.number }}
-                            de
-                            {{ page_obj.paginator.num_pages }}
-                        </span>
+        <div class="col-12 col-md-4">
 
-                    </li>
+            <div class="section-card metric h-100">
 
-                    {% if page_obj.has_next %}
+                <div class="value text-success">
+                    {{ completed_activities|default:"0" }}
+                </div>
 
-                    <li class="page-item">
+                <div class="label">
+                    Completadas
+                </div>
 
-                        <a
-                            class="page-link"
-                            href="?page={{ page_obj.next_page_number }}&q={{ query }}&status={{ selected_status }}"
-                        >
-                            Siguiente
-                        </a>
-
-                    </li>
-
-                    {% endif %}
-
-                </ul>
-
-            </nav>
-
-            {% endif %}
+            </div>
 
         </div>
 
     </div>
 
-    <div class="col-md-3">
 
-        <form
-            method="get"
-            class="card shadow-sm border-0"
-        >
+    <section class="section-card p-3 p-lg-4">
 
-            <div
-                class="card-header text-white fw-semibold"
-                style="background-color: #a60a17;"
-            >
-                Filtros
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+
+            <div>
+
+                <h2 class="h5 mb-1 fw-bold">
+                    Listado de actividades
+                </h2>
+
+                <p class="text-muted small mb-0">
+                    Seguimiento de actividades por meta, funcionario, estado y período.
+                </p>
+
             </div>
 
-            <div class="card-body bg-light">
 
-                {% if query %}
+            {% if perms.registration_validation.add_activity %}
 
-                <input
-                    type="hidden"
-                    name="q"
-                    value="{{ query }}"
-                >
+            <a href="{% url 'registration:activity_create' %}"
+               class="btn btn-outline-secondary btn-sm">
 
-                {% endif %}
+                <i class="bi bi-plus-lg me-1"></i>
+                Agregar actividad
 
-                <label class="fw-bold mb-1 text-secondary">
-                    Estado
+            </a>
+
+            {% endif %}
+
+        </div>
+
+
+        <form method="get"
+              class="row g-3 align-items-end mb-3">
+
+            <div class="col-12 col-md-5">
+
+                <label class="filter-label"
+                       for="activity-search">
+
+                    Buscar actividad
+
                 </label>
 
-                <select
-                    name="status"
-                    class="form-select form-select-sm mb-3"
-                >
+                <input id="activity-search"
+                       type="search"
+                       name="q"
+                       value="{{ query }}"
+                       class="form-control"
+                       placeholder="Problema, acción, funcionario o meta...">
+
+            </div>
+
+
+            <div class="col-12 col-md-3">
+
+                <label class="filter-label"
+                       for="activity-status">
+
+                    Estado
+
+                </label>
+
+                <select id="activity-status"
+                        name="status"
+                        class="form-select">
 
                     <option value="">
-                        Todos
+                        Todos los estados
                     </option>
 
                     {% for value, label in status_options %}
 
-                    <option
-                        value="{{ value }}"
-                        {% if selected_status == value %}
-                        selected
-                        {% endif %}
-                    >
+                    <option value="{{ value }}"
+                            {% if selected_status == value %}
+                            selected
+                            {% endif %}>
+
                         {{ label }}
+
                     </option>
 
                     {% endfor %}
 
                 </select>
 
-                <div class="d-grid gap-2 mt-4">
+            </div>
 
-                    <button
-                        type="submit"
-                        class="btn btn-primary btn-sm fw-semibold"
-                    >
-                        Filtrar
-                    </button>
 
-                    <a
-                        href="{% url 'registration:activity_list' %}"
-                        class="btn btn-outline-secondary btn-sm"
-                    >
-                        Limpiar
-                    </a>
+            <div class="col-12 col-md-2">
 
-                </div>
+                <button type="submit"
+                        class="btn btn-dark w-100">
+
+                    <i class="bi bi-funnel me-1"></i>
+                    Filtrar
+
+                </button>
+
+            </div>
+
+
+            <div class="col-12 col-md-2">
+
+                <a href="{% url 'registration:activity_list' %}"
+                   class="btn btn-outline-secondary w-100">
+
+                    Limpiar
+
+                </a>
 
             </div>
 
         </form>
 
-    </div>
+        {% if not open_modal %}
+        <form method="post"
+              action="{% url 'registration:set_page_size' %}"
+              class="d-flex flex-wrap align-items-center gap-2 mb-3">
+
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+
+            <label for="activity-page-size" class="form-label mb-0 small text-muted">
+                Registros por página
+            </label>
+            <select id="activity-page-size"
+                    name="page_size"
+                    class="form-select form-select-sm w-auto">
+                {% for size in page_size_options %}
+                <option value="{{ size }}" {% if size == page_size %}selected{% endif %}>
+                    {{ size }}
+                </option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-secondary btn-sm">
+                Guardar preferencia
+            </button>
+
+        </form>
+        {% endif %}
+
+        <div class="table-responsive">
+
+            <table class="table table-hover align-middle mb-0">
+
+                <thead>
+
+                    <tr>
+                        <th>Meta</th>
+                        <th>Funcionario</th>
+                        <th>Fecha</th>
+                        <th>Estado</th>
+                        <th>Período</th>
+                        <th class="text-end">Acciones</th>
+                    </tr>
+
+                </thead>
+
+                <tbody>
+
+                    {% for activity in activities %}
+
+                    <tr>
+
+                        <td class="fw-semibold">
+                            {{ activity.goal.item }}
+                        </td>
+
+
+                        <td>
+                            {{ activity.author }}
+                        </td>
+
+
+                        <td class="text-muted small">
+                            {{ activity.date|date:"d/m/Y" }}
+                        </td>
+
+
+                        <td>
+
+                            {% if activity.status == "Completed" %}
+
+                            <span class="status status-green">
+                                Completada
+                            </span>
+
+                            {% elif activity.status == "In progress" %}
+
+                            <span class="status status-yellow">
+                                En progreso
+                            </span>
+
+                            {% else %}
+
+                            <span class="status status-muted">
+                                Pendiente
+                            </span>
+
+                            {% endif %}
+
+                        </td>
+
+
+                        <td class="small">
+
+                            <div>
+                                {{ activity.goal.period.start_date|date:"d/m/Y" }}
+                                al
+                                {{ activity.goal.period.end_date|date:"d/m/Y" }}
+                            </div>
+
+                            {% if activity.goal.period.status == "Closed" %}
+
+                            <div class="mt-1">
+
+                                <span class="status status-red">
+                                    Cerrado
+                                </span>
+
+                            </div>
+
+                            {% endif %}
+
+                        </td>
+
+
+                        <td class="text-end">
+
+                            {% if activity.goal.period.status == "Closed" %}
+
+                            <span class="status status-muted">
+                                Solo lectura
+                            </span>
+
+                            {% else %}
+
+
+                                {% if perms.registration_validation.change_activity %}
+
+                                <a href="{% url 'registration:activity_update' activity.activity_id %}"
+                                   class="btn btn-sm btn-light border me-1"
+                                   title="Modificar actividad">
+
+                                    <i class="bi bi-pencil"></i>
+
+                                    <span class="d-none d-xl-inline ms-1">
+                                        Modificar
+                                    </span>
+
+                                </a>
+
+                                {% endif %}
+
+
+                                {% if perms.registration_validation.delete_activity %}
+
+                                <form id="delete-form-{{ activity.activity_id }}"
+                                      method="post"
+                                      action="{% url 'registration:activity_delete' activity.activity_id %}"
+                                      class="d-none">
+
+                                    {% csrf_token %}
+
+                                </form>
+
+
+                                <button type="button"
+                                        class="btn btn-sm btn-light border text-danger"
+                                        title="Eliminar actividad"
+                                        onclick="confirmDelete(
+                                            '{{ activity.activity_id }}',
+                                            '{{ activity.goal.item|escapejs }}'
+                                        )">
+
+                                    <i class="bi bi-trash"></i>
+
+                                    <span class="d-none d-xl-inline ms-1">
+                                        Eliminar
+                                    </span>
+
+                                </button>
+
+                                {% endif %}
+
+
+                            {% endif %}
+
+                        </td>
+
+                    </tr>
+
+
+                    {% empty %}
+
+                    <tr>
+
+                        <td colspan="6"
+                            class="text-center py-5">
+
+                            <i class="bi bi-clipboard-check fs-2 text-muted d-block mb-2"></i>
+
+                            <span class="text-muted">
+                                No hay actividades para mostrar.
+                            </span>
+
+                        </td>
+
+                    </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+
+        {% if is_paginated %}
+
+        <nav class="mt-4">
+
+            <ul class="pagination justify-content-center mb-0">
+
+                {% if page_obj.has_previous %}
+
+                <li class="page-item">
+
+                    <a class="page-link"
+                       href="?page={{ page_obj.previous_page_number }}&q={{ query }}&status={{ selected_status }}">
+
+                        Anterior
+
+                    </a>
+
+                </li>
+
+                {% endif %}
+
+
+                <li class="page-item active">
+
+                    <span class="page-link">
+
+                        {{ page_obj.number }}
+                        de
+                        {{ page_obj.paginator.num_pages }}
+
+                    </span>
+
+                </li>
+
+
+                {% if page_obj.has_next %}
+
+                <li class="page-item">
+
+                    <a class="page-link"
+                       href="?page={{ page_obj.next_page_number }}&q={{ query }}&status={{ selected_status }}">
+
+                        Siguiente
+
+                    </a>
+
+                </li>
+
+                {% endif %}
+
+            </ul>
+
+        </nav>
+
+        {% endif %}
+
+    </section>
 
 </div>
+
 
 {% include "registration_validation/_activity_modal.html" %}
 
@@ -418,16 +475,25 @@
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
+
 <script>
+
     function confirmDelete(id, name) {
 
         Swal.fire({
+
             title: "¿Eliminar actividad?",
+
             text: name,
+
             icon: "warning",
+
             showCancelButton: true,
+
             confirmButtonText: "Sí, eliminar",
+
             cancelButtonText: "Cancelar",
+
             confirmButtonColor: "#a60a17"
 
         }).then((result) => {
@@ -445,12 +511,81 @@
         });
 
     }
+
 </script>
+
+
+{% if messages %}
+
+<script>
+
+    document.addEventListener(
+        "DOMContentLoaded",
+        function () {
+
+            document
+                .querySelectorAll(
+                    ".alert-dismissible"
+                )
+                .forEach(
+                    function (alertElement) {
+
+                        alertElement.remove();
+
+                    }
+                );
+
+
+            {% for message in messages %}
+
+            Swal.fire({
+
+                title: (
+                    "{% if message.tags == 'success' %}"
+                    + "Operación exitosa"
+                    + "{% elif message.tags == 'error' %}"
+                    + "Error"
+                    + "{% elif message.tags == 'warning' %}"
+                    + "Advertencia"
+                    + "{% else %}"
+                    + "Información"
+                    + "{% endif %}"
+                ),
+
+                text: "{{ message|escapejs }}",
+
+                icon: (
+                    "{% if message.tags == 'success' %}"
+                    + "success"
+                    + "{% elif message.tags == 'error' %}"
+                    + "error"
+                    + "{% elif message.tags == 'warning' %}"
+                    + "warning"
+                    + "{% else %}"
+                    + "info"
+                    + "{% endif %}"
+                ),
+
+                confirmButtonText: "Aceptar",
+
+                confirmButtonColor: "#a60a17"
+
+            });
+
+            {% endfor %}
+
+        }
+    );
+
+</script>
+
+{% endif %}
 
 
 {% if open_modal %}
 
 <script>
+
     document.addEventListener(
         "DOMContentLoaded",
         function () {
@@ -459,6 +594,7 @@
                 document.getElementById(
                     "activityModal"
                 );
+
 
             if (
                 modalElement &&
@@ -476,6 +612,7 @@
 
         }
     );
+
 </script>
 
 {% endif %}

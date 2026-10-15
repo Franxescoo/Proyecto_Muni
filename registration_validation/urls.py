@@ -9,6 +9,11 @@ from .views import (
     EvidenceDeleteView,
     EvidenceListView,
     EvidenceUpdateView,
+    ValidationCreateView,
+    ValidationDeleteView,
+    ValidationListView,
+    ValidationUpdateView,
+    set_page_size,
 )
 
 
@@ -16,6 +21,11 @@ app_name = "registration"
 
 
 urlpatterns = [
+    path(
+        "preferences/page-size/",
+        set_page_size,
+        name="set_page_size",
+    ),
     # -----------------------------------------------------
     # Activity
     # -----------------------------------------------------
@@ -62,5 +72,29 @@ urlpatterns = [
         "evidences/<int:evidence_id>/delete/",
         EvidenceDeleteView.as_view(),
         name="evidence_delete",
+    ),
+
+    # -----------------------------------------------------
+    # Validation
+    # -----------------------------------------------------
+    path(
+        "validations/",
+        ValidationListView.as_view(),
+        name="validation_list",
+    ),
+    path(
+        "validations/new/",
+        ValidationCreateView.as_view(),
+        name="validation_create",
+    ),
+    path(
+        "validations/<int:validation_id>/edit/",
+        ValidationUpdateView.as_view(),
+        name="validation_update",
+    ),
+    path(
+        "validations/<int:validation_id>/delete/",
+        ValidationDeleteView.as_view(),
+        name="validation_delete",
     ),
 ]

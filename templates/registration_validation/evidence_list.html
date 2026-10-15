@@ -1,389 +1,159 @@
 {% extends "registration_validation/base.html" %}
 
-{% block titulo %}Evidencias{% endblock %}
+{% block titulo %}Evidencias · Registro y validación{% endblock %}
 
 {% block contenido %}
 
-<style>
-    :root {
-        --color-rojo-brand: #a60a17;
-        --color-verde-btn: #138d56;
-    }
+<div class="registration-shell pb-4" id="evidencias">
 
-    .titulo-seccion {
-        color: #000;
-        font-weight: bold;
-        border-left: 6px solid var(--color-rojo-brand);
-        padding-left: 12px;
-        margin-top: 5px;
-        font-size: 1.8rem;
-    }
+    <section class="registration-hero mb-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
 
-    .btn-primary {
-        background-color: var(--color-rojo-brand);
-        border-color: var(--color-rojo-brand);
-    }
+        <div>
 
-    .btn-primary:hover {
-        background-color: #800711;
-        border-color: #800711;
-    }
+            <div class="small text-uppercase fw-semibold opacity-75 mb-2">
+                Registro y validación
+            </div>
 
-    .btn-success {
-        background-color: var(--color-verde-btn);
-        border-color: var(--color-verde-btn);
-    }
+            <h1 class="mb-2 fw-bold">
+                Gestión de evidencias
+            </h1>
 
-    .btn-success:hover {
-        background-color: #0e7044;
-        border-color: #0e7044;
-    }
+            <p class="mb-0">
+                Administra los respaldos asociados a las actividades registradas.
+            </p>
 
-    .table-dark-brand th {
-        background-color: var(--color-rojo-brand) !important;
-        color: white !important;
-        font-weight: 600;
-    }
-</style>
+        </div>
+
+        <i class="bi bi-file-earmark-check display-5 opacity-75"
+           aria-hidden="true"></i>
+
+    </section>
 
 
-<div class="row mb-4 align-items-center">
+    <div class="row g-3 mb-4">
 
-    <div class="col-8">
+        <div class="col-12 col-md-4">
 
-        <h1 class="titulo-seccion">
-            Listado de Evidencias
-        </h1>
+            <div class="section-card metric h-100">
 
-    </div>
-
-    <div class="col-4 text-end">
-
-        {% if perms.registration_validation.add_evidence %}
-
-        <a class="btn btn-success px-4 fw-semibold shadow-sm"
-           href="{% url 'registration:evidence_create' %}">
-            Agregar Evidencia
-        </a>
-
-        {% endif %}
-
-    </div>
-
-</div>
-
-
-<div class="row">
-
-    <div class="col-md-9">
-
-        <div class="bg-white p-3 rounded border shadow-sm">
-
-            <form method="get"
-                  class="row g-2 mb-4">
-
-                <div class="col-md-8">
-
-                    <input type="text"
-                           name="q"
-                           value="{{ query }}"
-                           class="form-control bg-light"
-                           placeholder="Buscar por código, actividad, meta, funcionario o enlace">
-
+                <div class="value">
+                    {{ total_evidences|default:"0" }}
                 </div>
 
-                <div class="col-md-4">
-
-                    {% if selected_review_status %}
-
-                    <input type="hidden"
-                           name="review_status"
-                           value="{{ selected_review_status }}">
-
-                    {% endif %}
-
-                    <button type="submit"
-                            class="btn btn-primary w-100 fw-semibold">
-                        Buscar
-                    </button>
-
+                <div class="label">
+                    Evidencias registradas
                 </div>
-
-            </form>
-
-
-            <div class="table-responsive">
-
-                <table class="table table-hover table-striped border mb-0">
-
-                    <thead class="table-dark-brand">
-
-                        <tr>
-                            <th>ID</th>
-                            <th>Código</th>
-                            <th>Actividad</th>
-                            <th>Funcionario</th>
-                            <th>Fecha</th>
-                            <th>Estado</th>
-                            <th>Archivo / Enlace</th>
-                            <th>Período</th>
-                            <th>Acciones</th>
-                        </tr>
-
-                    </thead>
-
-                    <tbody>
-
-                        {% for evidence in evidences %}
-
-                        <tr>
-
-                            <td>
-                                {{ evidence.evidence_id }}
-                            </td>
-
-                            <td>
-                                {{ evidence.code }}
-                            </td>
-
-                            <td>
-                                {{ evidence.activity }}
-                            </td>
-
-                            <td>
-                                {{ evidence.author }}
-                            </td>
-
-                            <td>
-                                {{ evidence.date|date:"d-m-Y H:i" }}
-                            </td>
-
-                            <td>
-
-                                <span class="badge bg-secondary">
-                                    {{ evidence.review_status }}
-                                </span>
-
-                            </td>
-
-                            <td>
-
-                                {% if evidence.file %}
-
-                                <div class="mb-1">
-
-                                    <a href="{{ evidence.file.url }}"
-                                       target="_blank"
-                                       rel="noopener noreferrer"
-                                       class="btn btn-outline-primary btn-sm">
-                                        Ver archivo
-                                    </a>
-
-                                </div>
-
-                                {% endif %}
-
-
-                                {% if evidence.file_link %}
-
-                                <div>
-
-                                    <a href="{{ evidence.file_link }}"
-                                       target="_blank"
-                                       rel="noopener noreferrer"
-                                       class="btn btn-outline-secondary btn-sm">
-                                        Ver enlace
-                                    </a>
-
-                                </div>
-
-                                {% endif %}
-
-
-                                {% if not evidence.file and not evidence.file_link %}
-
-                                <span class="text-muted">
-                                    Sin archivo
-                                </span>
-
-                                {% endif %}
-
-                            </td>
-
-                            <td>
-
-                                {{ evidence.activity.goal.period.start_date|date:"d-m-Y" }}
-                                al
-                                {{ evidence.activity.goal.period.end_date|date:"d-m-Y" }}
-
-                                {% if evidence.activity.goal.period.status == "Closed" %}
-
-                                <div class="mt-1">
-
-                                    <span class="badge bg-dark">
-                                        Cerrado
-                                    </span>
-
-                                </div>
-
-                                {% endif %}
-
-                            </td>
-
-                            <td>
-
-                                {% if evidence.activity.goal.period.status == "Closed" %}
-
-                                <span class="badge bg-secondary">
-                                    Solo lectura
-                                </span>
-
-                                {% else %}
-
-                                    {% if perms.registration_validation.change_evidence %}
-
-                                    <a href="{% url 'registration:evidence_update' evidence.evidence_id %}"
-                                       class="btn btn-warning btn-sm mb-1">
-                                        Modificar
-                                    </a>
-
-                                    {% endif %}
-
-
-                                    {% if perms.registration_validation.delete_evidence %}
-
-                                    <form id="delete-form-{{ evidence.evidence_id }}"
-                                          method="post"
-                                          action="{% url 'registration:evidence_delete' evidence.evidence_id %}"
-                                          class="d-none">
-
-                                        {% csrf_token %}
-
-                                    </form>
-
-                                    <button type="button"
-                                            class="btn btn-danger btn-sm mb-1"
-                                            onclick="confirmDeleteEvidence(
-                                                '{{ evidence.evidence_id }}',
-                                                '{{ evidence.code|escapejs }}'
-                                            )">
-                                        Eliminar
-                                    </button>
-
-                                    {% endif %}
-
-                                {% endif %}
-
-                            </td>
-
-                        </tr>
-
-
-                        {% empty %}
-
-                        <tr>
-
-                            <td colspan="9"
-                                class="text-center py-4 text-muted">
-                                No hay evidencias para mostrar.
-                            </td>
-
-                        </tr>
-
-                        {% endfor %}
-
-                    </tbody>
-
-                </table>
 
             </div>
 
-
-            {% if is_paginated %}
-
-            <nav class="mt-3">
-
-                <ul class="pagination justify-content-center">
-
-                    {% if page_obj.has_previous %}
-
-                    <li class="page-item">
-
-                        <a class="page-link"
-                           href="?page={{ page_obj.previous_page_number }}&q={{ query }}&review_status={{ selected_review_status }}">
-                            Anterior
-                        </a>
-
-                    </li>
-
-                    {% endif %}
+        </div>
 
 
-                    <li class="page-item active">
+        <div class="col-12 col-md-4">
 
-                        <span class="page-link">
-                            {{ page_obj.number }}
-                            de
-                            {{ page_obj.paginator.num_pages }}
-                        </span>
+            <div class="section-card metric h-100">
 
-                    </li>
+                <div class="value text-warning">
+                    {{ pending_evidences|default:"0" }}
+                </div>
+
+                <div class="label">
+                    Pendientes de revisión
+                </div>
+
+            </div>
+
+        </div>
 
 
-                    {% if page_obj.has_next %}
+        <div class="col-12 col-md-4">
 
-                    <li class="page-item">
+            <div class="section-card metric h-100">
 
-                        <a class="page-link"
-                           href="?page={{ page_obj.next_page_number }}&q={{ query }}&review_status={{ selected_review_status }}">
-                            Siguiente
-                        </a>
+                <div class="value text-success">
+                    {{ evidences_with_file|default:"0" }}
+                </div>
 
-                    </li>
+                <div class="label">
+                    Con archivo adjunto
+                </div>
 
-                    {% endif %}
-
-                </ul>
-
-            </nav>
-
-            {% endif %}
+            </div>
 
         </div>
 
     </div>
 
 
-    <div class="col-md-3">
+    <section class="section-card p-3 p-lg-4">
 
-        <form method="get"
-              class="card shadow-sm border-0">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
 
-            <div class="card-header text-white fw-semibold"
-                 style="background-color: #a60a17;">
-                Filtros
+            <div>
+
+                <h2 class="h5 mb-1 fw-bold">
+                    Listado de evidencias
+                </h2>
+
+                <p class="text-muted small mb-0">
+                    Consulta archivos, enlaces, responsables y estados de revisión.
+                </p>
+
             </div>
 
-            <div class="card-body bg-light">
 
-                {% if query %}
+            {% if perms.registration_validation.add_evidence %}
 
-                <input type="hidden"
-                       name="q"
-                       value="{{ query }}">
+            <a href="{% url 'registration:evidence_create' %}"
+               class="btn btn-outline-secondary btn-sm">
 
-                {% endif %}
+                <i class="bi bi-plus-lg me-1"></i>
+                Agregar evidencia
+
+            </a>
+
+            {% endif %}
+
+        </div>
 
 
-                <label class="fw-bold mb-1 text-secondary">
-                    Estado de revisión
+        <form method="get"
+              class="row g-3 align-items-end mb-3">
+
+            <div class="col-12 col-md-5">
+
+                <label class="filter-label"
+                       for="evidence-search">
+
+                    Buscar evidencia
+
                 </label>
 
-                <select name="review_status"
-                        class="form-select form-select-sm mb-3">
+                <input id="evidence-search"
+                       type="search"
+                       name="q"
+                       value="{{ query }}"
+                       class="form-control"
+                       placeholder="Código, actividad, meta o funcionario...">
+
+            </div>
+
+
+            <div class="col-12 col-md-3">
+
+                <label class="filter-label"
+                       for="evidence-status">
+
+                    Estado de revisión
+
+                </label>
+
+                <select id="evidence-status"
+                        name="review_status"
+                        class="form-select">
 
                     <option value="">
-                        Todos
+                        Todos los estados
                     </option>
 
                     {% for status in review_status_options %}
@@ -392,33 +162,352 @@
                             {% if selected_review_status == status %}
                             selected
                             {% endif %}>
+
                         {{ status }}
+
                     </option>
 
                     {% endfor %}
 
                 </select>
 
+            </div>
 
-                <div class="d-grid gap-2 mt-4">
 
-                    <button type="submit"
-                            class="btn btn-primary btn-sm fw-semibold">
-                        Filtrar
-                    </button>
+            <div class="col-12 col-md-2">
 
-                    <a href="{% url 'registration:evidence_list' %}"
-                       class="btn btn-outline-secondary btn-sm">
-                        Limpiar
-                    </a>
+                <button type="submit"
+                        class="btn btn-dark w-100">
 
-                </div>
+                    <i class="bi bi-funnel me-1"></i>
+                    Filtrar
+
+                </button>
+
+            </div>
+
+
+            <div class="col-12 col-md-2">
+
+                <a href="{% url 'registration:evidence_list' %}"
+                   class="btn btn-outline-secondary w-100">
+
+                    Limpiar
+
+                </a>
 
             </div>
 
         </form>
 
-    </div>
+        {% if not open_modal %}
+        <form method="post"
+              action="{% url 'registration:set_page_size' %}"
+              class="d-flex flex-wrap align-items-center gap-2 mb-3">
+
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+
+            <label for="evidence-page-size" class="form-label mb-0 small text-muted">
+                Registros por página
+            </label>
+            <select id="evidence-page-size"
+                    name="page_size"
+                    class="form-select form-select-sm w-auto">
+                {% for size in page_size_options %}
+                <option value="{{ size }}" {% if size == page_size %}selected{% endif %}>
+                    {{ size }}
+                </option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-secondary btn-sm">
+                Guardar preferencia
+            </button>
+
+        </form>
+        {% endif %}
+
+        <div class="table-responsive">
+
+            <table class="table table-hover align-middle mb-0">
+
+                <thead>
+
+                    <tr>
+                        <th>Código</th>
+                        <th>Actividad</th>
+                        <th>Funcionario</th>
+                        <th>Fecha</th>
+                        <th>Estado</th>
+                        <th>Archivo / Enlace</th>
+                        <th>Período</th>
+                        <th class="text-end">Acciones</th>
+                    </tr>
+
+                </thead>
+
+                <tbody>
+
+                    {% for evidence in evidences %}
+
+                    <tr>
+
+                        <td class="fw-semibold">
+                            {{ evidence.code }}
+                        </td>
+
+
+                        <td>
+                            {{ evidence.activity }}
+                        </td>
+
+
+                        <td>
+                            {{ evidence.author }}
+                        </td>
+
+
+                        <td class="text-muted small">
+                            {{ evidence.date|date:"d/m/Y H:i" }}
+                        </td>
+
+
+                        <td>
+
+                            {% if evidence.review_status|lower == "pending" or evidence.review_status|lower == "pendiente" %}
+
+                            <span class="status status-yellow">
+                                {{ evidence.review_status }}
+                            </span>
+
+                            {% else %}
+
+                            <span class="status status-muted">
+                                {{ evidence.review_status }}
+                            </span>
+
+                            {% endif %}
+
+                        </td>
+
+
+                        <td>
+
+                            {% if evidence.file %}
+
+                            <a href="{{ evidence.file.url }}"
+                               target="_blank"
+                               rel="noopener noreferrer"
+                               class="btn btn-sm btn-light border mb-1"
+                               title="Ver archivo">
+
+                                <i class="bi bi-paperclip me-1"></i>
+                                Archivo
+
+                            </a>
+
+                            {% endif %}
+
+
+                            {% if evidence.file_link %}
+
+                            <a href="{{ evidence.file_link }}"
+                               target="_blank"
+                               rel="noopener noreferrer"
+                               class="btn btn-sm btn-light border mb-1"
+                               title="Abrir enlace">
+
+                                <i class="bi bi-link-45deg me-1"></i>
+                                Enlace
+
+                            </a>
+
+                            {% endif %}
+
+
+                            {% if not evidence.file and not evidence.file_link %}
+
+                            <span class="text-muted small">
+                                Sin respaldo
+                            </span>
+
+                            {% endif %}
+
+                        </td>
+
+
+                        <td class="small">
+
+                            <div>
+                                {{ evidence.activity.goal.period.start_date|date:"d/m/Y" }}
+                                al
+                                {{ evidence.activity.goal.period.end_date|date:"d/m/Y" }}
+                            </div>
+
+                            {% if evidence.activity.goal.period.status == "Closed" %}
+
+                            <div class="mt-1">
+
+                                <span class="status status-red">
+                                    Cerrado
+                                </span>
+
+                            </div>
+
+                            {% endif %}
+
+                        </td>
+
+
+                        <td class="text-end">
+
+                            {% if evidence.activity.goal.period.status == "Closed" %}
+
+                            <span class="status status-muted">
+                                Solo lectura
+                            </span>
+
+                            {% else %}
+
+
+                                {% if perms.registration_validation.change_evidence %}
+
+                                <a href="{% url 'registration:evidence_update' evidence.evidence_id %}"
+                                   class="btn btn-sm btn-light border me-1"
+                                   title="Modificar evidencia">
+
+                                    <i class="bi bi-pencil"></i>
+
+                                    <span class="d-none d-xl-inline ms-1">
+                                        Modificar
+                                    </span>
+
+                                </a>
+
+                                {% endif %}
+
+
+                                {% if perms.registration_validation.delete_evidence %}
+
+                                <form id="delete-form-{{ evidence.evidence_id }}"
+                                      method="post"
+                                      action="{% url 'registration:evidence_delete' evidence.evidence_id %}"
+                                      class="d-none">
+
+                                    {% csrf_token %}
+
+                                </form>
+
+
+                                <button type="button"
+                                        class="btn btn-sm btn-light border text-danger"
+                                        title="Eliminar evidencia"
+                                        onclick="confirmDeleteEvidence(
+                                            '{{ evidence.evidence_id }}',
+                                            '{{ evidence.code|escapejs }}'
+                                        )">
+
+                                    <i class="bi bi-trash"></i>
+
+                                    <span class="d-none d-xl-inline ms-1">
+                                        Eliminar
+                                    </span>
+
+                                </button>
+
+                                {% endif %}
+
+
+                            {% endif %}
+
+                        </td>
+
+                    </tr>
+
+
+                    {% empty %}
+
+                    <tr>
+
+                        <td colspan="8"
+                            class="text-center py-5">
+
+                            <i class="bi bi-file-earmark-x fs-2 text-muted d-block mb-2"></i>
+
+                            <span class="text-muted">
+                                No hay evidencias para mostrar.
+                            </span>
+
+                        </td>
+
+                    </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+
+        {% if is_paginated %}
+
+        <nav class="mt-4">
+
+            <ul class="pagination justify-content-center mb-0">
+
+                {% if page_obj.has_previous %}
+
+                <li class="page-item">
+
+                    <a class="page-link"
+                       href="?page={{ page_obj.previous_page_number }}&q={{ query }}&review_status={{ selected_review_status }}">
+
+                        Anterior
+
+                    </a>
+
+                </li>
+
+                {% endif %}
+
+
+                <li class="page-item active">
+
+                    <span class="page-link">
+
+                        {{ page_obj.number }}
+                        de
+                        {{ page_obj.paginator.num_pages }}
+
+                    </span>
+
+                </li>
+
+
+                {% if page_obj.has_next %}
+
+                <li class="page-item">
+
+                    <a class="page-link"
+                       href="?page={{ page_obj.next_page_number }}&q={{ query }}&review_status={{ selected_review_status }}">
+
+                        Siguiente
+
+                    </a>
+
+                </li>
+
+                {% endif %}
+
+            </ul>
+
+        </nav>
+
+        {% endif %}
+
+    </section>
 
 </div>
 
@@ -436,15 +525,23 @@
 
 
 <script>
+
     function confirmDeleteEvidence(id, code) {
 
         Swal.fire({
+
             title: "¿Eliminar evidencia?",
+
             text: code,
+
             icon: "warning",
+
             showCancelButton: true,
+
             confirmButtonText: "Sí, eliminar",
+
             cancelButtonText: "Cancelar",
+
             confirmButtonColor: "#a60a17"
 
         }).then((result) => {
@@ -462,35 +559,35 @@
         });
 
     }
+
 </script>
 
 
 {% if messages %}
 
 <script>
+
     document.addEventListener(
         "DOMContentLoaded",
         function () {
 
-            /*
-             * El base.html muestra mensajes de Django
-             * mediante Bootstrap.
-             * En este módulo los quitamos para mostrarlos
-             * exclusivamente mediante SweetAlert2.
-             */
             document
                 .querySelectorAll(
                     ".alert-dismissible"
                 )
                 .forEach(
                     function (alertElement) {
+
                         alertElement.remove();
+
                     }
                 );
+
 
             {% for message in messages %}
 
             Swal.fire({
+
                 title: (
                     "{% if message.tags == 'success' %}"
                     + "Operación exitosa"
@@ -518,13 +615,16 @@
                 ),
 
                 confirmButtonText: "Aceptar",
+
                 confirmButtonColor: "#a60a17"
+
             });
 
             {% endfor %}
 
         }
     );
+
 </script>
 
 {% endif %}
@@ -533,6 +633,7 @@
 {% if open_modal %}
 
 <script>
+
     document.addEventListener(
         "DOMContentLoaded",
         function () {
@@ -541,6 +642,7 @@
                 document.getElementById(
                     "evidenceModal"
                 );
+
 
             if (
                 modalElement &&
@@ -558,6 +660,7 @@
 
         }
     );
+
 </script>
 
 {% endif %}
