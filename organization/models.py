@@ -66,8 +66,6 @@ class Employee(BaseModel):
     )
 
     name = models.CharField(max_length=150)
-    rut = models.CharField(max_length=12, null=True, blank=True, unique=True, verbose_name="RUT")
-    photo = models.ImageField(upload_to="employees/", null=True, blank=True, verbose_name="Foto de perfil")
     roles = models.TextField()
     status = models.CharField(max_length=50)
 

@@ -4,7 +4,6 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import Group
-from django.http import JsonResponse
 from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404, redirect, render
@@ -16,13 +15,10 @@ from .forms import (
     AccountEditForm,
     EmployeeForm,
     GroupForm,
-    MyAccountForm,
     PositionForm,
     ProfileLinkForm,
-    RoleForm,
 )
 from .models import UserProfile
-from .access import is_general_administrator
 from .services import sync_employee, sync_position, sync_profile
 
 
@@ -31,7 +27,7 @@ def administrator_required(view):
 
     @wraps(view)
     def wrapped(request, *args, **kwargs):
-        if not is_general_administrator(request.user):
+        if not request.user.is_superuser:
             raise PermissionDenied(
                 "Solo el administrador puede gestionar accesos."
             )
@@ -43,15 +39,30 @@ def administrator_required(view):
 
 @administrator_required
 def access_home(request):
-    """Muestra roles y cuentas para gestión de acceso."""
+    """Muestra grupos, cargos, funcionarios y cuentas."""
 
     return render(
         request,
         "accounts/access_home.html",
         {
-            "roles": Group.objects.order_by("name").select_related(
-                "role_scope"
-            ).prefetch_related("role_scope__delegations"),
+            "groups": Group.objects.order_by("name"),
+            "positions": PositionFunction.objects.filter(
+                deleted_at__isnull=True
+            ).order_by("position_name"),
+            "employees": (
+                Employee.objects.filter(
+                    deleted_at__isnull=True
+                )
+                .select_related("position", "delegation")
+                .order_by("name")
+            ),
+            "profiles": (
+                UserProfile.objects.filter(
+                    deleted_at__isnull=True
+                )
+                .select_related("user", "employee")
+                .order_by("user__username")
+            ),
             "users": get_user_model().objects.filter(
                 is_superuser=False
             ).order_by("username"),
@@ -59,13 +70,7 @@ def access_home(request):
     )
 
 
-def save_model_form(
-    request,
-    form,
-    title,
-    on_save=None,
-    template_name="accounts/manage_form.html",
-):
+def save_model_form(request, form, title, on_save=None):
     """Guarda el formulario y sus relaciones en una transacción."""
 
     if request.method == "POST" and form.is_valid():
@@ -91,7 +96,7 @@ def save_model_form(
 
     return render(
         request,
-        template_name,
+        "accounts/manage_form.html",
         {
             "form": form,
             "title": title,
@@ -101,7 +106,7 @@ def save_model_form(
 
 @administrator_required
 def group_form(request, pk=None):
-    """Crea o edita un rol y sus permisos."""
+    """Crea o edita un grupo y sus permisos."""
 
     group = (
         get_object_or_404(Group, pk=pk)
@@ -109,7 +114,7 @@ def group_form(request, pk=None):
         else None
     )
 
-    form = RoleForm(
+    form = GroupForm(
         request.POST if request.method == "POST" else None,
         instance=group,
     )
@@ -117,8 +122,7 @@ def group_form(request, pk=None):
     return save_model_form(
         request,
         form,
-        "Editar rol" if pk is not None else "Crear rol",
-        template_name="accounts/role_form.html",
+        "Editar grupo" if pk is not None else "Crear grupo",
     )
 
 
@@ -165,7 +169,6 @@ def employee_form(request, pk=None):
 
     form = EmployeeForm(
         request.POST if request.method == "POST" else None,
-        request.FILES if request.method == "POST" else None,
         instance=employee,
     )
 
@@ -182,8 +185,7 @@ def account_create(request):
     """Crea una cuenta y asigna los grupos elegidos."""
 
     form = AccountCreateForm(
-        request.POST if request.method == "POST" else None,
-        request.FILES if request.method == "POST" else None,
+        request.POST if request.method == "POST" else None
     )
 
     if request.method == "POST" and form.is_valid():
@@ -205,7 +207,6 @@ def account_create(request):
                     employee=employee,
                     employee_code=form.cleaned_data["employee_code"],
                     delegation=employee.delegation,
-                    avatar=form.cleaned_data.get("avatar"),
                 )
 
                 sync_profile(profile)
@@ -244,35 +245,16 @@ def account_edit(request, pk):
         is_superuser=False,
     )
 
-    modal_request = request.GET.get("modal") == "1" or request.POST.get("modal") == "1"
     form = AccountEditForm(
         request.POST if request.method == "POST" else None,
-        request.FILES if request.method == "POST" else None,
         instance=user,
     )
 
-    if request.method == "POST" and form.is_valid():
-        with transaction.atomic():
-            form.save()
-        if modal_request:
-            return JsonResponse({
-                "ok": True,
-                "message": f"La cuenta {user.username} se actualizó correctamente.",
-            })
-        messages.success(request, "Cuenta actualizada correctamente.")
-        return redirect("accounts:access_home")
-
-    if modal_request:
-        return render(request, "accounts/_account_edit_modal.html", {
-            "form": form,
-            "title": f"Editar cuenta: {user.username}",
-            "account": user,
-        })
-
-    return render(request, "accounts/manage_form.html", {
-        "form": form,
-        "title": f"Editar cuenta: {user.username}",
-    })
+    return save_model_form(
+        request,
+        form,
+        f"Editar cuenta: {user.username}",
+    )
 
 
 @administrator_required
@@ -295,27 +277,4 @@ def profile_link(request, pk):
         form,
         f"Vincular cuenta: {profile.user.username}",
         on_save=sync_profile,
-    )
-
-
-@login_required
-def my_account(request):
-    """Muestra datos de la cuenta y permite editar los campos personales."""
-    profile = UserProfile.objects.filter(user=request.user).select_related(
-        "employee", "delegation"
-    ).first()
-    form = MyAccountForm(
-        request.POST if request.method == "POST" else None,
-        request.FILES if request.method == "POST" else None,
-        instance=request.user,
-        profile=profile,
-    )
-    if request.method == "POST" and form.is_valid():
-        form.save()
-        messages.success(request, "Tu perfil se actualizó correctamente.")
-        return redirect("accounts:my_account")
-    return render(
-        request,
-        "accounts/my_account.html",
-        {"form": form, "profile": profile},
     )
