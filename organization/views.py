@@ -27,6 +27,7 @@ def _save_form(
 ):
     form = form_class(
         request.POST if request.method == "POST" else None,
+        request.FILES if request.method == "POST" else None,
         instance=instance,
         **form_kwargs,
     )
