@@ -1,0 +1,48 @@
+<div class="modal-header account-modal-header">
+    <div>
+        <h2 class="modal-title fs-5 fw-bold">{{ title }}</h2>
+        <p class="text-muted small mb-0">Actualiza los datos de acceso y el estado de la cuenta.</p>
+    </div>
+    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+</div>
+<div class="modal-body p-4">
+    <form method="post" action="{% url 'accounts:account_edit' account.pk %}?modal=1" class="account-modal-form">
+        {% csrf_token %}
+        <input type="hidden" name="modal" value="1">
+        {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+        <div class="row g-3">
+            {% for field in form %}
+            {% if field.name == "groups" %}
+            <div class="col-12">
+                <label class="form-label fw-semibold">{{ field.label }}</label>
+                <div class="account-role-list border rounded p-3">
+                    {{ field }}
+                </div>
+                {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+                {% if field.errors %}<div class="text-danger small mt-1">{{ field.errors }}</div>{% endif %}
+            </div>
+            {% elif field.name == "is_active" %}
+            <div class="col-12">
+                <div class="form-check form-switch p-3 ps-5 border rounded">
+                    {{ field }}
+                    <label class="form-check-label fw-semibold" for="{{ field.id_for_label }}">Cuenta activa</label>
+                    <div class="form-text">Desactivada: no podrá iniciar sesión. No elimina la cuenta ni sus registros.</div>
+                </div>
+                {% if field.errors %}<div class="text-danger small mt-1">{{ field.errors }}</div>{% endif %}
+            </div>
+            {% else %}
+            <div class="col-12 col-md-6">
+                {{ field.label_tag }}
+                {{ field }}
+                {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+                {% if field.errors %}<div class="text-danger small mt-1">{{ field.errors }}</div>{% endif %}
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+        <div class="d-flex justify-content-end gap-2 mt-4">
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" class="btn btn-organization"><i class="bi bi-check2-circle me-1"></i>Guardar cambios</button>
+        </div>
+    </form>
+</div>
