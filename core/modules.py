@@ -12,17 +12,31 @@ Cada compañero puede ajustar o agregar tarjetas de su módulo aquí:
 """
 
 MODULES = [
+    
     {
         "title": "Planificación",
         "cards": [
-            {"title": "Períodos", "icon": "bi-calendar-range",
-             "url": "planning:period_list",
-             "perm": "planning_measurements.view_period"},
-            {"title": "Metas", "icon": "bi-bullseye",
-             "url": "planning:goal_list",
-             "perm": "planning_measurements.view_goal"},
+            {
+                "title": "Períodos",
+                "icon": "bi-calendar-range",
+                "url": "planning:period_list",
+                "perm": "planning_measurements.view_period",
+            },
+            {
+                "title": "Metas",
+                "icon": "bi-bullseye",
+                "url": "planning:goal_list",
+                "perm": "planning_measurements.view_goal",
+            },
+            {
+                "title": "Catálogo de Ítems",
+                "icon": "bi-clipboard-check",
+                "url": "planning:item_list",
+                "perm": "planning_measurements.view_measurementitem",
+            },
         ],
     },
+
     {
         "title": "Organización",
         "cards": [

@@ -78,6 +78,46 @@
                             {% endfor %}
 
                         </div>
+                        
+                        <!-- INFORMACIÓN AUTOMÁTICA DEL ÍTEM -->
+                        <div id="itemDetails" class="card bg-light border-0 mt-3 d-none">
+                            <div class="card-body">
+
+                                <h6 class="fw-bold mb-3">
+                                    Información del ítem seleccionado
+                                </h6>
+
+                                <div class="row g-3">
+
+                                    <div class="col-md-4">
+                                        <strong>Código:</strong>
+                                        <div id="itemDetailCode">—</div>
+                                    </div>
+
+                                    <div class="col-md-4">
+                                        <strong>Tipo de medición:</strong>
+                                        <div id="itemDetailType">—</div>
+                                    </div>
+
+                                    <div class="col-md-4">
+                                        <strong>Unidad:</strong>
+                                        <div id="itemDetailUnit">—</div>
+                                    </div>
+
+                                    <div class="col-md-12">
+                                        <strong>Descripción:</strong>
+                                        <div id="itemDetailDescription">—</div>
+                                    </div>
+
+                                    <div class="col-md-12" id="itemFormulaContainer">
+                                        <strong>Fórmula:</strong>
+                                        <div id="itemDetailFormula">—</div>
+                                    </div>
+
+                                </div>
+                            </div>
+                        </div>
+
 
                         <!-- INFORMACIÓN DE LA META -->
                         {% if goal %}
@@ -137,6 +177,7 @@
 
 <!-- SCRIPT ORIGINAL: CARGA AUTOMÁTICA DEL CARGO -->
 {% include "planning/goal_position_script.html" %}
+{% include "planning/goal_item_script.html" %}
 
 <!-- ABRIR MODAL AUTOMÁTICAMENTE -->
 <script>

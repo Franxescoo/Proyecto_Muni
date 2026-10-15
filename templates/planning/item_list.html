@@ -1,0 +1,600 @@
+
+{% extends "planning/base.html" %}
+{% load i18n %}
+
+{% block titulo %}Catálogo de Ítems - La Serena{% endblock %}
+
+{% block estilos %}
+<style>
+    /* Diseño basado en Indicadores */
+
+    .monitor-shell {
+        max-width: 1480px;
+        margin: 0 auto;
+    }
+
+    .monitor-hero {
+        background: linear-gradient(135deg, #a60a17, #760710);
+        color: #fff;
+        border-radius: .65rem;
+        padding: 1.5rem 1.75rem;
+        box-shadow: 0 6px 18px rgba(166, 10, 23, .18);
+    }
+
+    .monitor-hero h1 {
+        font-size: clamp(1.35rem, 2vw, 1.85rem);
+        font-weight: 700;
+    }
+
+    .monitor-hero p {
+        color: rgba(255, 255, 255, .8);
+    }
+
+    .section-card {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: .65rem;
+        box-shadow: 0 3px 12px rgba(24, 33, 44, .04);
+    }
+
+    .metric {
+        border-left: 4px solid #a60a17;
+        padding: 1rem 1.1rem;
+        height: 100%;
+    }
+
+    .metric .value {
+        color: #23272b;
+        font-size: 1.55rem;
+        font-weight: 700;
+    }
+
+    .metric .label {
+        color: #6c757d;
+        font-size: .82rem;
+    }
+
+    .filter-label {
+        color: #56616b;
+        font-size: .78rem;
+        font-weight: 600;
+        margin-bottom: .35rem;
+    }
+
+    .items-table thead th {
+        color: #6c757d;
+        font-size: .72rem;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        white-space: nowrap;
+        vertical-align: middle;
+    }
+
+    .items-table tbody td {
+        vertical-align: middle;
+        font-size: .9rem;
+    }
+
+    .item-code {
+        color: #a60a17;
+        font-weight: 700;
+    }
+
+    .status {
+        border-radius: 999px;
+        padding: .35rem .65rem;
+        font-size: .75rem;
+        font-weight: 600;
+        display: inline-block;
+    }
+
+    .status-active {
+        background: #dff5e9;
+        color: #147a49;
+    }
+
+    .status-inactive {
+        background: #eef0f2;
+        color: #5f6870;
+    }
+
+    .type-badge {
+        background: #f3f4f6;
+        color: #374151;
+        border-radius: .4rem;
+        font-size: .78rem;
+        padding: .3rem .55rem;
+        display: inline-block;
+    }
+
+    .item-actions {
+        display: flex;
+        gap: .35rem;
+        flex-wrap: wrap;
+        align-items: center;
+        min-width: 185px;
+    }
+
+    .item-actions form {
+        margin: 0;
+    }
+
+    /* Mantener la presentación del modal existente */
+
+    #itemModal .modal-dialog {
+        max-height: calc(100dvh - 2rem);
+        margin-top: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    #itemModal .modal-content {
+        max-height: calc(100dvh - 2rem);
+    }
+
+    #itemModal .modal-body {
+        overflow-y: auto;
+    }
+</style>
+{% endblock %}
+
+
+{% block contenido %}
+
+<div class="monitor-shell pb-4">
+
+    <!-- CABECERA ROJA -->
+    <section class="monitor-hero mb-4
+                    d-flex flex-wrap align-items-center
+                    justify-content-between gap-3">
+
+        <div>
+            <div class="small text-uppercase fw-semibold opacity-75 mb-2">
+                PLANIFICACIÓN
+            </div>
+
+            <h1 class="mb-2">
+                Catálogo de Ítems
+            </h1>
+
+            <p class="mb-0">
+                Administra los ítems de medición utilizados
+                en las metas de desempeño.
+            </p>
+        </div>
+
+        <i class="bi bi-card-checklist display-5 opacity-75"
+           aria-hidden="true"></i>
+
+    </section>
+
+
+    <!-- TARJETAS DE RESUMEN -->
+    <div class="row g-3 mb-4">
+
+        <div class="col-12 col-md-4">
+            <div class="section-card metric">
+                <div class="value">
+                    {{ total_items|default:"0" }}
+                </div>
+                <div class="label">
+                    Ítems registrados
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-md-4">
+            <div class="section-card metric">
+                <div class="value text-success">
+                    {{ active_items|default:"0" }}
+                </div>
+                <div class="label">
+                    Ítems activos
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-md-4">
+            <div class="section-card metric">
+                <div class="value text-secondary">
+                    {{ inactive_items|default:"0" }}
+                </div>
+                <div class="label">
+                    Ítems inactivos visibles
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+
+    <!-- TARJETA PRINCIPAL -->
+    <section class="section-card p-3 p-lg-4">
+
+        <div class="d-flex flex-wrap justify-content-between
+                    align-items-center gap-3 mb-4">
+
+            <div>
+                <h2 class="h5 fw-bold mb-1">
+                    Registro de ítems
+                </h2>
+
+                <p class="text-muted small mb-0">
+                    Consulta, filtra y administra los ítems registrados.
+                </p>
+            </div>
+
+            {% if perms.planning_measurements.add_measurementitem %}
+            <a href="{% url 'planning:item_create' %}"
+               class="btn btn-outline-secondary btn-sm">
+
+                <i class="bi bi-plus-lg me-1"></i>
+                Nuevo ítem
+
+            </a>
+            {% endif %}
+
+        </div>
+
+
+        <!-- FILTROS -->
+        <form method="get" class="row g-3 align-items-end mb-4">
+
+            <div class="col-12 col-md-4">
+
+                <label for="item-search" class="filter-label">
+                    Buscar ítem
+                </label>
+
+                <input type="search"
+                       id="item-search"
+                       name="q"
+                       value="{{ query }}"
+                       class="form-control"
+                       placeholder="Código, nombre o descripción...">
+
+            </div>
+
+            <div class="col-12 col-md-3">
+
+                <label for="item-type" class="filter-label">
+                    Tipo de ítem
+                </label>
+
+                <select id="item-type"
+                        name="item_type"
+                        class="form-select">
+
+                    <option value="">Todos los tipos</option>
+
+                    <option value="quantitative"
+                        {% if selected_type == "quantitative" %}selected{% endif %}>
+                        Cuantitativo
+                    </option>
+
+                    <option value="percentage"
+                        {% if selected_type == "percentage" %}selected{% endif %}>
+                        Porcentual
+                    </option>
+
+                </select>
+
+            </div>
+
+            <div class="col-12 col-md-2">
+
+                <label for="item-status" class="filter-label">
+                    Estado
+                </label>
+
+                <select id="item-status"
+                        name="status"
+                        class="form-select">
+
+                    <option value="">Todos los estados</option>
+
+                    <option value="active"
+                        {% if selected_status == "active" %}selected{% endif %}>
+                        Activo
+                    </option>
+
+                    <option value="inactive"
+                        {% if selected_status == "inactive" %}selected{% endif %}>
+                        Inactivo
+                    </option>
+
+                </select>
+
+            </div>
+
+            <div class="col-12 col-md-2">
+
+                <button type="submit"
+                        class="btn btn-dark w-100">
+
+                    <i class="bi bi-funnel me-1"></i>
+                    Filtrar
+
+                </button>
+
+            </div>
+
+            <div class="col-12 col-md-1">
+
+                <a href="{% url 'planning:item_list' %}"
+                   class="btn btn-outline-secondary w-100"
+                   title="Limpiar filtros"
+                   aria-label="Limpiar filtros">
+
+                    <i class="bi bi-arrow-counterclockwise"></i>
+
+                </a>
+
+            </div>
+
+        </form>
+
+
+        <!-- REGISTROS POR PÁGINA -->
+        {% include "planning/_page_size.html" %}
+
+
+        <!-- TABLA DE ÍTEMS -->
+        <div class="table-responsive">
+
+            <table class="table table-hover items-table align-middle mb-0">
+
+                <thead>
+                    <tr>
+                        <th>Código</th>
+                        <th>Nombre</th>
+                        <th>Descripción</th>
+                        <th>Tipo</th>
+                        <th>Unidad</th>
+                        <th>Estado</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+
+                    {% for item in page %}
+
+                    <tr>
+
+                        <td>
+                            <span class="item-code">
+                                {{ item.code }}
+                            </span>
+                        </td>
+
+                        <td class="fw-semibold">
+                            {{ item.name }}
+                        </td>
+
+                        <td class="text-muted">
+                            {{ item.description|default:"Sin descripción"|truncatechars:65 }}
+                        </td>
+
+                        <td>
+                            <span class="type-badge">
+                                {{ item.get_item_type_display }}
+                            </span>
+                        </td>
+
+                        <td>
+                            {{ item.unit|default:"—" }}
+                        </td>
+
+                        <td>
+                            {% if item.is_active %}
+                                <span class="status status-active">
+                                    Activo
+                                </span>
+                            {% else %}
+                                <span class="status status-inactive">
+                                    Inactivo
+                                </span>
+                            {% endif %}
+                        </td>
+
+                        <td>
+
+                            <div class="item-actions">
+
+                                <a href="{% url 'planning:item_detail' item.pk %}"
+                                   class="btn btn-outline-secondary btn-sm">
+                                    Ver
+                                </a>
+
+                                {% if perms.planning_measurements.change_measurementitem %}
+
+                                <a href="{% url 'planning:item_edit' item.pk %}"
+                                   class="btn btn-outline-secondary btn-sm">
+                                    Editar
+                                </a>
+
+                                {% endif %}
+
+
+                                {% if user.is_superuser and item.is_active %}
+
+                                <form method="post"
+                                      action="{% url 'planning:item_delete' item.pk %}"
+                                      class="item-delete-form"
+                                      data-item-name="{{ item.name }}">
+
+                                    {% csrf_token %}
+
+                                    <button type="submit"
+                                            class="btn btn-outline-danger btn-sm">
+                                        Desactivar
+                                    </button>
+
+                                </form>
+
+                                {% endif %}
+
+                            </div>
+
+                        </td>
+
+                    </tr>
+
+                    {% empty %}
+
+                    <tr>
+                        <td colspan="7"
+                            class="text-center text-muted py-4">
+
+                            No se encontraron ítems con los filtros seleccionados.
+
+                        </td>
+                    </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+
+        <!-- PAGINACIÓN -->
+        <div class="d-flex flex-wrap justify-content-between
+                    align-items-center gap-2 mt-3">
+
+            <p class="text-muted small mb-0">
+                {{ page.paginator.count }} ítem(s) encontrado(s)
+            </p>
+
+            {% if page.has_other_pages %}
+
+            <nav aria-label="Paginación de ítems">
+
+                <ul class="pagination pagination-sm mb-0">
+
+                    {% if page.has_previous %}
+                    <li class="page-item">
+
+                        <a class="page-link"
+                           href="?{% if querystring %}{{ querystring }}&amp;{% endif %}page={{ page.previous_page_number }}">
+
+                            Anterior
+
+                        </a>
+
+                    </li>
+                    {% endif %}
+
+                    <li class="page-item disabled">
+
+                        <span class="page-link">
+                            Página {{ page.number }}
+                            de {{ page.paginator.num_pages }}
+                        </span>
+
+                    </li>
+
+                    {% if page.has_next %}
+                    <li class="page-item">
+
+                        <a class="page-link"
+                           href="?{% if querystring %}{{ querystring }}&amp;{% endif %}page={{ page.next_page_number }}">
+
+                            Siguiente
+
+                        </a>
+
+                    </li>
+                    {% endif %}
+
+                </ul>
+
+            </nav>
+
+            {% endif %}
+
+        </div>
+
+    </section>
+
+</div>
+
+
+<!-- MODAL EXISTENTE: CREAR, VER Y EDITAR -->
+{% include "planning/item_form.html" %}
+
+{% endblock %}
+
+
+
+{% block scripts %}
+
+<!-- CONFIRMACIÓN SWEETALERT2 -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+
+    document.querySelectorAll(".item-delete-form").forEach(function (form) {
+
+        form.addEventListener("submit", function (event) {
+
+            event.preventDefault();
+
+            const itemName = form.dataset.itemName;
+
+            Swal.fire({
+                title: "¿Desactivar ítem?",
+                text: `Se desactivará "${itemName}". No estará disponible para nuevas metas, pero se conservará en las anteriores.`,
+                icon: "warning",
+                showCancelButton: true,
+                confirmButtonText: "Sí, desactivar",
+                cancelButtonText: "Cancelar",
+                confirmButtonColor: "#a50012",
+                cancelButtonColor: "#6c757d",
+                reverseButtons: true,
+                focusCancel: true
+
+            }).then(function (result) {
+
+                if (result.isConfirmed) {
+                    form.submit();
+                }
+
+            });
+
+        });
+
+    });
+
+});
+</script>
+
+
+<!-- MODAL DE ÍTEMS -->
+{% if open_modal %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+
+    const element = document.getElementById("itemModal");
+
+    if (element && window.bootstrap) {
+
+        const modal = bootstrap.Modal.getOrCreateInstance(
+            element,
+            {
+                backdrop: "static",
+                keyboard: false
+            }
+        );
+
+        modal.show();
+    }
+
+});
+</script>
+{% endif %}
+
+{% endblock %}

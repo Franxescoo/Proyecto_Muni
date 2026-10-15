@@ -1,0 +1,128 @@
+
+{# Confirmaciones SweetAlert2 para eliminar uno o varios registros. #}
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.all.min.js"></script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const csrf = document.querySelector(
+        'input[name="csrfmiddlewaretoken"]'
+    );
+
+    // ELIMINACIÓN INDIVIDUAL
+    document.querySelectorAll("a[data-swal-delete]").forEach(function (link) {
+        link.addEventListener("click", async function (event) {
+            event.preventDefault();
+
+            const tipo = link.dataset.swalDelete;
+            const nombre = link.dataset.deleteLabel || "este registro";
+
+            const pregunta = `¿Eliminar ${tipo}?`;
+            const detalle = `Se archivará ${nombre}. Esta acción no se puede deshacer desde esta pantalla.`;
+
+            let confirmado;
+
+            if (window.Swal) {
+                const respuesta = await Swal.fire({
+                    title: pregunta,
+                    text: detalle,
+                    icon: "warning",
+                    showCancelButton: true,
+                    confirmButtonText: "Sí, eliminar",
+                    cancelButtonText: "Cancelar",
+                    confirmButtonColor: "#a60a17",
+                    reverseButtons: true
+                });
+
+                confirmado = respuesta.isConfirmed;
+            } else {
+                confirmado = window.confirm(
+                    `${pregunta}\n${detalle}`
+                );
+            }
+
+            if (!confirmado) return;
+
+            if (!csrf) {
+                // Utiliza la página original si falta el token CSRF.
+                window.location.assign(link.href);
+                return;
+            }
+
+            // Enviar POST a la vista existente de Django.
+            const form = document.createElement("form");
+            form.method = "POST";
+            form.action = link.href;
+
+            const token = document.createElement("input");
+            token.type = "hidden";
+            token.name = "csrfmiddlewaretoken";
+            token.value = csrf.value;
+
+            form.appendChild(token);
+            document.body.appendChild(form);
+            form.submit();
+        });
+    });
+
+    // ELIMINACIÓN MÚLTIPLE
+    document.querySelectorAll("form[data-swal-bulk-delete]").forEach(function (form) {
+        form.addEventListener("submit", async function (event) {
+            const action = form.querySelector(
+                'select[name="action"]'
+            );
+
+            if (!action || action.value !== "delete_selected") {
+                return;
+            }
+
+            event.preventDefault();
+
+            const seleccionados = form.querySelectorAll(
+                'input[name="_selected_action"]:checked'
+            ).length;
+
+            if (seleccionados === 0) {
+                if (window.Swal) {
+                    await Swal.fire({
+                        icon: "info",
+                        title: "Sin selección",
+                        text: "Selecciona al menos un registro."
+                    });
+                } else {
+                    window.alert(
+                        "Selecciona al menos un registro."
+                    );
+                }
+
+                return;
+            }
+
+            let confirmado;
+
+            if (window.Swal) {
+                const respuesta = await Swal.fire({
+                    title: "¿Eliminar registros seleccionados?",
+                    text: `Se archivarán ${seleccionados} registro(s).`,
+                    icon: "warning",
+                    showCancelButton: true,
+                    confirmButtonText: "Sí, eliminar",
+                    cancelButtonText: "Cancelar",
+                    confirmButtonColor: "#a60a17",
+                    reverseButtons: true
+                });
+
+                confirmado = respuesta.isConfirmed;
+            } else {
+                confirmado = window.confirm(
+                    `¿Archivar ${seleccionados} registro(s)?`
+                );
+            }
+
+            if (confirmado) {
+                form.submit();
+            }
+        });
+    });
+});
+</script>

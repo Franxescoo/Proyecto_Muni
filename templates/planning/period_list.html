@@ -1,106 +1,113 @@
 
 {% extends "planning/base.html" %}
+{% load i18n %}
 
 {% block titulo %}Períodos - La Serena{% endblock %}
 
 {% block estilos %}
 <style>
-    /* Colores institucionales */
-    :root {
-        --color-rojo-brand: #a60a17;
-        --color-verde-btn: #138d56;
+    .monitor-shell {
+        max-width: 1480px;
+        margin: 0 auto;
     }
 
-    .titulo-seccion {
-        color: #000;
-        font-weight: bold;
-        border-left: 6px solid var(--color-rojo-brand);
-        padding-left: 12px;
-        margin-top: 5px;
-        font-size: 1.8rem;
+    .monitor-hero {
+        background: linear-gradient(135deg, #a60a17, #760710);
+        color: #fff;
+        border-radius: .65rem;
+        padding: 1.5rem 1.75rem;
+        box-shadow: 0 6px 18px rgba(166, 10, 23, .18);
     }
 
-    .btn-primary {
-        background-color: var(--color-rojo-brand);
-        border-color: var(--color-rojo-brand);
-        color: white;
+    .monitor-hero h1 {
+        font-size: clamp(1.35rem, 2vw, 1.85rem);
     }
 
-    .btn-primary:hover {
-        background-color: #800711;
-        border-color: #800711;
-        color: white;
+    .monitor-hero p {
+        color: rgba(255, 255, 255, .78);
     }
 
-    .btn-success {
-        background-color: var(--color-verde-btn);
-        border-color: var(--color-verde-btn);
-        color: white;
+    .section-card {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: .65rem;
+        box-shadow: 0 3px 12px rgba(24, 33, 44, .04);
     }
 
-    .btn-success:hover {
-        background-color: #0e7044;
-        border-color: #0e7044;
-        color: white;
+    .metric {
+        border-left: 4px solid #a60a17;
+        padding: 1rem 1.1rem;
     }
 
-    .card-header-brand {
-        background-color: var(--color-rojo-brand);
-        color: white;
+    .metric .value {
+        font-size: 1.55rem;
+        font-weight: 700;
+        color: #23272b;
+    }
+
+    .metric .label {
+        color: #6c757d;
+        font-size: .82rem;
+    }
+
+    .table thead th {
+        color: #6c757d;
+        font-size: .72rem;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        white-space: nowrap;
+    }
+
+    .table tbody td {
+        vertical-align: middle;
+    }
+
+    .status {
+        border-radius: 999px;
+        font-size: .75rem;
         font-weight: 600;
+        padding: .35rem .65rem;
     }
 
-    /* Encabezado de tabla */
-    .table-dark-brand {
-        background-color: var(--color-rojo-brand) !important;
+    .status-green {
+        background: #dff5e9;
+        color: #147a49;
     }
 
-    .table-dark-brand th,
-    .table-dark-brand th a,
-    .table-dark-brand th span {
-        color: #000000 !important;
-        font-weight: bold;
-        text-decoration: none;
+    .status-red {
+        background: #fbe1e3;
+        color: #a60a17;
     }
 
-    /* Filtros laterales */
-    .filtro-lista a {
-        color: #495057;
-        text-decoration: none;
-        display: block;
-        padding: 5px 10px;
-        border-radius: 4px;
-        transition: background-color 0.2s;
+    .status-muted {
+        background: #eef0f2;
+        color: #5f6870;
     }
 
-    .filtro-lista a:hover {
-        background-color: #e9ecef;
+    .filter-label {
+        color: #56616b;
+        font-size: .78rem;
+        font-weight: 600;
+        margin-bottom: .35rem;
     }
 
-    .filtro-lista a.fw-bold {
-        background-color: var(--color-rojo-brand);
-        color: white;
-    }
-    
-    /* Ajustar el modal de períodos a la pantalla */
-    #periodModal .modal-dialog {
-        max-height: calc(100dvh - 2rem);
-        margin-top: 1rem;
-        margin-bottom: 1rem;
+    .period-actions {
+        display: flex;
+        gap: .35rem;
+        flex-wrap: wrap;
+        min-width: 170px;
     }
 
-    #periodModal .modal-content {
-        max-height: calc(100dvh - 2rem);
-        overflow: hidden;
+    .period-actions .btn {
+        font-size: .78rem;
     }
 
-    #periodModal .modal-body {
-        overflow-y: auto;
-        min-height: 0;
-        overscroll-behavior: contain;
+    .period-created {
+        min-width: 170px;
+        font-size: .85rem;
     }
-    
-    /* Modal de períodos: altura y desplazamiento */
+
+    /* Mantener los ajustes del modal */
     #periodModal .period-dialog {
         margin: 1rem auto;
         height: calc(100dvh - 2rem);
@@ -132,256 +139,354 @@
         overflow-y: auto;
         overscroll-behavior: contain;
     }
-
 </style>
 {% endblock %}
 
+
 {% block contenido %}
 
-<!-- TÍTULO Y BOTÓN AGREGAR -->
-<div class="row mb-4 align-items-center">
-    <div class="col-8">
-        <h1 class="titulo-seccion">Listado de Períodos</h1>
-    </div>
+<div class="monitor-shell pb-4">
 
-    <div class="col-4 text-end">
-        {% if perms.planning_measurements.add_period %}
-        <a class="btn btn-success px-4 fw-semibold shadow-sm"
-           href="{% url 'planning:period_create' %}">
-            <i class="bi bi-plus-lg"></i> Agregar Período
-        </a>
-        {% endif %}
-    </div>
-</div>
-
-<div class="row">
-
-    <!-- COLUMNA PRINCIPAL -->
-    <div class="col-md-9">
-        <div class="bg-white p-3 rounded border shadow-sm mb-4">
-
-            <!-- BUSCADOR -->
-            <form method="get" class="row g-2 mb-4">
-                <div class="col-md-9">
-                    <input type="text"
-                           name="q"
-                           value="{{ query }}"
-                           class="form-control bg-light"
-                           placeholder="Buscar por estado o versión de parámetros">
-                </div>
-
-                <div class="col-md-3">
-                    {% if selected_status %}
-                    <input type="hidden"
-                           name="status"
-                           value="{{ selected_status }}">
-                    {% endif %}
-
-                    <button type="submit"
-                            class="btn btn-primary w-100 fw-semibold">
-                        Buscar
-                    </button>
-                </div>
-            </form>
-
-            <!-- TABLA DE PERÍODOS -->
-            <form method="post">
-                {% csrf_token %}
-
-                {% if user.is_superuser %}
-                <div class="row g-2 mb-3 align-items-center">
-                    <div class="col-auto">
-                        <select name="action"
-                                class="form-select form-select-sm">
-                            <option value="">- Acción -</option>
-                            <option value="delete_selected">
-                                Eliminar seleccionados
-                            </option>
-                        </select>
-                    </div>
-
-                    <div class="col-auto">
-                        <button type="submit"
-                                class="btn btn-outline-secondary btn-sm">
-                            Ejecutar
-                        </button>
-                    </div>
-                </div>
-                {% endif %}
-
-                <div class="table-responsive">
-                    <table class="table table-hover table-striped border mb-0">
-
-                        <thead class="table-dark-brand">
-                            <tr>
-                                {% if user.is_superuser %}
-                                <th width="40">
-                                    <input type="checkbox"
-                                           class="form-check-input"
-                                           onclick="document.querySelectorAll('.sel').forEach(c => c.checked = this.checked)">
-                                </th>
-                                {% endif %}
-
-                                {% include "planning/_headers.html" %}
-                            </tr>
-                        </thead>
-
-                        <tbody>
-                            {% for period in page %}
-                            <tr>
-
-                                <!-- SELECCIÓN PARA ELIMINACIÓN MÚLTIPLE -->
-                                {% if user.is_superuser %}
-                                <td>
-                                    {% if period.status != "Closed" %}
-                                    <input type="checkbox"
-                                           class="form-check-input sel"
-                                           name="_selected_action"
-                                           value="{{ period.pk }}">
-                                    {% endif %}
-                                </td>
-                                {% endif %}
-
-                                <td>
-                                    <a href="{% url 'planning:period_edit' period.period_id %}"
-                                       class="fw-bold text-decoration-none">
-                                        {{ period.period_id }}
-                                    </a>
-                                </td>
-
-                                <td>{{ period.start_date|date:"d-m-Y" }}</td>
-                                <td>{{ period.end_date|date:"d-m-Y" }}</td>
-                                <td>{{ period.computable_days }}</td>
-
-                                <td>
-                                    <span class="badge bg-secondary">
-                                        {{ period.status }}
-                                    </span>
-                                </td>
-
-                                <td>{{ period.parameters_version }}</td>
-                                <td>{{ period.created_at|date:"d-m-Y H:i" }}</td>
-
-                                <!-- ACCIONES -->
-                                <td>
-                                    <div class="btn-group btn-group-sm">
-
-                                        <a class="btn btn-outline-info fw-semibold"
-                                           href="{% url 'planning:goal_list' %}?period={{ period.period_id }}">
-                                            Ver metas
-                                        </a>
-
-                                        {% if period.status == "Closed" %}
-
-                                        <!-- PERÍODO CERRADO: SOLO LECTURA -->
-                                        <a class="btn btn-outline-secondary"
-                                           href="{% url 'planning:period_edit' period.period_id %}">
-                                            Ver
-                                        </a>
-
-                                        {% else %}
-
-                                        <!-- PERÍODO ABIERTO -->
-                                        {% if perms.planning_measurements.change_period %}
-
-                                        <a class="btn btn-outline-warning text-dark fw-semibold"
-                                           href="{% url 'planning:period_edit' period.period_id %}">
-                                            Modificar
-                                        </a>
-
-                                        {% else %}
-
-                                        <a class="btn btn-outline-secondary"
-                                           href="{% url 'planning:period_edit' period.period_id %}">
-                                            Ver
-                                        </a>
-
-                                        {% endif %}
-
-                                        {% if user.is_superuser %}
-                                        <a class="btn btn-outline-danger"
-                                           href="{% url 'planning:period_delete' period.period_id %}">
-                                            Eliminar
-                                        </a>
-                                        {% endif %}
-
-                                        {% endif %}
-
-                                    </div>
-                                </td>
-                            </tr>
-
-                            {% empty %}
-                            <tr>
-                                <td colspan="9"
-                                    class="text-center py-5 text-muted">
-                                    No hay períodos para mostrar.
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-
-                    </table>
-                </div>
-            </form>
-
-            <!-- PAGINACIÓN -->
-            <div class="d-flex justify-content-between align-items-center mt-3">
-                <p class="text-muted mb-0 small">
-                    {{ page.paginator.count }} período(s) encontrado(s)
-                </p>
-
-                {% include "planning/_pagination.html" %}
+    <!-- CABECERA -->
+    <section class="monitor-hero mb-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
+        <div>
+            <div class="small text-uppercase fw-semibold opacity-75 mb-2">
+                PLANIFICACIÓN
             </div>
 
+            <h1 class="mb-2 fw-bold">
+                Gestión de períodos
+            </h1>
+
+            <p class="mb-0">
+                Administra los períodos de planificación,
+                sus estados y las metas asociadas.
+            </p>
         </div>
+
+        <div class="text-end">
+            <i class="bi bi-calendar-range display-5 opacity-75"
+               aria-hidden="true"></i>
+        </div>
+    </section>
+
+
+    <!-- TARJETAS DE RESUMEN -->
+    <div class="row g-3 mb-4">
+
+        <div class="col-12 col-md-4">
+            <div class="section-card metric h-100">
+                <div class="value">
+                    {{ total_periods|default:"0" }}
+                </div>
+                <div class="label">
+                    Períodos registrados
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-md-4">
+            <div class="section-card metric h-100">
+                <div class="value text-success">
+                    {{ active_periods|default:"0" }}
+                </div>
+                <div class="label">
+                    Períodos activos
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-md-4">
+            <div class="section-card metric h-100">
+                <div class="value text-danger">
+                    {{ closed_periods|default:"0" }}
+                </div>
+                <div class="label">
+                    Períodos cerrados
+                </div>
+            </div>
+        </div>
+
     </div>
 
-    <!-- COLUMNA LATERAL: FILTROS -->
-    <div class="col-md-3">
-        <div class="card shadow-sm border-0">
 
-            <div class="card-header card-header-brand">
-                <i class="bi bi-funnel"></i> Filtro Avanzado
+    <!-- TARJETA PRINCIPAL -->
+    <section class="section-card p-3 p-lg-4">
+
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <div>
+                <h2 class="h5 mb-1 fw-bold">
+                    Registro de períodos
+                </h2>
+
+                <p class="text-muted small mb-0">
+                    Consulta los períodos registrados y administra sus datos.
+                </p>
             </div>
 
-            <div class="card-body bg-light">
+            {% if perms.planning_measurements.add_period %}
+            <a href="{% url 'planning:period_create' %}"
+               class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-plus-lg me-1"></i>
+                Agregar período
+            </a>
+            {% endif %}
+        </div>
 
-                <div class="fw-bold mb-2 text-secondary small text-uppercase">
-                    Por estado
-                </div>
 
-                <ul class="list-unstyled filtro-lista">
+        <!-- FILTROS -->
+        <form method="get" class="row g-3 align-items-end mb-3">
 
-                    <li>
-                        <a href="?{% if query %}q={{ query }}{% endif %}"
-                           class="{% if not selected_status %}fw-bold{% endif %}">
-                            Todos
-                        </a>
-                    </li>
+            <div class="col-12 col-md-5">
+                <label class="filter-label" for="period-search">
+                    Buscar por estado o versión
+                </label>
+
+                <input id="period-search"
+                       name="q"
+                       value="{{ query }}"
+                       class="form-control"
+                       placeholder="Escribe para buscar..."
+                       type="search">
+            </div>
+
+            <div class="col-12 col-md-3">
+                <label class="filter-label" for="period-status">
+                    Estado
+                </label>
+
+                <select id="period-status"
+                        name="status"
+                        class="form-select">
+
+                    <option value="">Todos los estados</option>
 
                     {% for status in statuses %}
-                    <li>
-                        <a href="?status={{ status|urlencode }}{% if query %}&q={{ query }}{% endif %}"
-                           class="{% if status == selected_status %}fw-bold{% endif %}">
+                    <option value="{{ status }}"
+                            {% if selected_status == status %}selected{% endif %}>
+                        {% if status == "Active" %}
+                            Activo
+                        {% elif status == "Closed" %}
+                            Cerrado
+                        {% else %}
                             {{ status }}
-                        </a>
-                    </li>
+                        {% endif %}
+                    </option>
                     {% endfor %}
-
-                </ul>
+                </select>
             </div>
+
+            <div class="col-12 col-md-2">
+                <button class="btn btn-dark w-100" type="submit">
+                    <i class="bi bi-funnel me-1"></i>
+                    Filtrar
+                </button>
+            </div>
+
+            <div class="col-12 col-md-2">
+                <a href="{% url 'planning:period_list' %}"
+                   class="btn btn-outline-secondary w-100">
+                    Limpiar
+                </a>
+            </div>
+
+        </form>
+
+
+        <!-- REGISTROS POR PÁGINA -->
+        {% include "planning/_page_size.html" %}
+
+
+        <!-- ELIMINACIÓN MÚLTIPLE -->
+        <form method="post" data-swal-bulk-delete>
+            {% csrf_token %}
+
+            {% if perms.planning_measurements.delete_period %}
+            <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+
+                <select name="action"
+                        class="form-select form-select-sm"
+                        style="max-width: 220px;">
+
+                    <option value="">- Acción -</option>
+                    <option value="delete_selected">
+                        Eliminar seleccionados
+                    </option>
+                </select>
+
+                <button type="submit"
+                        class="btn btn-outline-secondary btn-sm">
+                    Ejecutar
+                </button>
+
+            </div>
+            {% endif %}
+
+
+            <!-- TABLA -->
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+
+                    <thead>
+                        <tr>
+                            {% if perms.planning_measurements.delete_period %}
+                            <th>
+                                <input type="checkbox"
+                                       class="form-check-input"
+                                       aria-label="Seleccionar todos"
+                                       onclick="document.querySelectorAll('.sel').forEach(c => c.checked = this.checked)">
+                            </th>
+                            {% endif %}
+
+                            {% include "planning/_headers.html" %}
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        {% for period in page %}
+
+                        <tr>
+                            {% if perms.planning_measurements.delete_period %}
+                            <td>
+                                <input type="checkbox"
+                                       class="form-check-input sel"
+                                       name="_selected_action"
+                                       value="{{ period.pk }}"
+                                       aria-label="Seleccionar período {{ period.pk }}">
+                            </td>
+                            {% endif %}
+
+                            <!-- INICIO -->
+                            <td>
+                                {{ period.start_date|date:"d-m-Y" }}
+                            </td>
+
+                            <!-- TÉRMINO -->
+                            <td>
+                                {{ period.end_date|date:"d-m-Y" }}
+                            </td>
+
+                            <!-- DÍAS COMPUTABLES -->
+                            <td>
+                                {{ period.computable_days }}
+                            </td>
+
+                            <!-- ESTADO -->
+                            <td>
+                                {% if period.status == "Active" %}
+                                    <span class="status status-green">
+                                        Activo
+                                    </span>
+                                {% elif period.status == "Closed" %}
+                                    <span class="status status-red">
+                                        Cerrado
+                                    </span>
+                                {% else %}
+                                    <span class="status status-muted">
+                                        {{ period.get_status_display }}
+                                    </span>
+                                {% endif %}
+                            </td>
+
+                            <!-- VERSIÓN -->
+                            <td>
+                                {{ period.parameters_version }}
+                            </td>
+
+                            <!-- FECHA DE CREACIÓN -->
+                            <td class="period-created">
+                                {% language 'es' %}
+                                {{ period.created_at|date:"H:i" }}
+                                —
+                                {{ period.created_at|date:"d \d\e F \d\e Y" }}
+                                {% endlanguage %}
+                            </td>
+
+                            <!-- ACCIONES -->
+                            <td>
+                                <div class="period-actions">
+
+                                    {% if perms.planning_measurements.view_goal %}
+                                    <a href="{% url 'planning:goal_list' %}?period={{ period.period_id }}"
+                                       class="btn btn-sm btn-outline-info">
+                                        Ver metas
+                                    </a>
+                                    {% endif %}
+
+                                    <!-- VER -->
+                                    <a href="{% url 'planning:period_edit' period.period_id %}?view=1"
+                                       class="btn btn-sm btn-outline-info">
+                                        <i class="bi bi-eye me-1"></i>
+                                        Ver
+                                    </a>
+
+                                    <!-- MODIFICAR -->
+                                    {% if perms.planning_measurements.change_period and period.status != "Closed" %}
+                                    <a href="{% url 'planning:period_edit' period.period_id %}"
+                                       class="btn btn-sm btn-outline-secondary">
+                                        <i class="bi bi-pencil me-1"></i>
+                                        Modificar
+                                    </a>
+                                    {% endif %}
+
+                                    <!-- ELIMINAR -->
+                                    {% if perms.planning_measurements.delete_period %}
+                                    <a href="{% url 'planning:period_delete' period.period_id %}"
+                                       class="btn btn-sm btn-outline-danger"
+                                       data-swal-delete="período">
+                                        <i class="bi bi-trash me-1"></i>
+                                        Eliminar
+                                    </a>
+                                    {% endif %}
+
+                                </div>
+                            </td>
+                        </tr>
+
+                        {% empty %}
+                        <tr>
+                            <td colspan="{% if perms.planning_measurements.delete_period %}8{% else %}7{% endif %}"
+                                class="text-center text-muted py-4">
+                                No hay períodos para mostrar.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+
+                </table>
+            </div>
+        </form>
+
+
+        <!-- PAGINACIÓN -->
+        <div class="d-flex flex-wrap justify-content-between align-items-center mt-3 gap-2">
+
+            <p class="text-muted small mb-0">
+                {{ page.paginator.count }} período(s) encontrado(s)
+            </p>
+
+            {% include "planning/_pagination.html" %}
+
         </div>
-    </div>
+
+    </section>
 
 </div>
+
+
+<!-- MODAL DE PERÍODOS -->
 {% include "planning/_period_modal.html" %}
 
 {% endblock %}
 
+
 {% block scripts %}
 
+<!-- CONFIRMACIONES SWEETALERT -->
+{% include "planning/_delete_swal.html" %}
+
 {% if open_modal %}
+
 {% include "planning/goal_position_script.html" %}
 
 <script>
@@ -390,9 +495,206 @@ document.addEventListener("DOMContentLoaded", function () {
     const el = document.getElementById("periodModal");
 
     if (el && window.bootstrap) {
-        new bootstrap.Modal(el).show();
+        bootstrap.Modal.getOrCreateInstance(el).show();
     }
 
+    // VENTANA PARA ASIGNAR Y QUITAR METAS
+    const pickerEl = document.getElementById("goalSelectionModal");
+
+    const formEl = document.querySelector(
+        "#periodModal .period-modal-form"
+    );
+
+    if (pickerEl && formEl && window.bootstrap) {
+
+        const parent = bootstrap.Modal.getOrCreateInstance(el);
+        const picker = bootstrap.Modal.getOrCreateInstance(pickerEl);
+
+        const selected = {
+            existing: new Set(),
+            remove: new Set()
+        };
+
+        let mode = "existing";
+        let opening = false;
+
+        const listExisting = document.getElementById(
+            "available-goals-list"
+        );
+
+        const listRemove = document.getElementById(
+            "removable-goals-list"
+        );
+
+        const help = document.getElementById(
+            "goal-selection-help"
+        );
+
+        const title = document.getElementById(
+            "goalSelectionTitle"
+        );
+
+        const hidden = document.getElementById(
+            "goal-selection-hidden"
+        );
+
+        const summary = document.getElementById(
+            "goal-selection-summary"
+        );
+
+        const search = document.getElementById(
+            "goal-selection-search"
+        );
+
+        // METAS PREVIAMENTE SELECCIONADAS
+        pickerEl.querySelectorAll(".available-goal-choice").forEach(input => {
+            if (input.checked) {
+                selected.existing.add(input.value);
+            }
+        });
+
+        pickerEl.querySelectorAll(".removable-goal-choice").forEach(input => {
+            if (input.checked) {
+                selected.remove.add(input.value);
+            }
+        });
+
+        // SINCRONIZAR DATOS CON EL FORMULARIO
+        function sync() {
+            hidden.replaceChildren();
+
+            [
+                ["existing", "existing_goal_ids"],
+                ["remove", "remove_goal_ids"]
+            ].forEach(([key, name]) => {
+
+                selected[key].forEach(value => {
+                    const input = document.createElement("input");
+                    input.type = "hidden";
+                    input.name = name;
+                    input.value = value;
+
+                    hidden.appendChild(input);
+                });
+
+            });
+
+            summary.textContent =
+                `${selected.existing.size} meta(s) para asignar; ` +
+                `${selected.remove.size} meta(s) para quitar al guardar.`;
+        }
+
+        // ABRIR LA VENTANA SECUNDARIA
+        function openPicker(which) {
+            mode = which;
+            opening = true;
+
+            title.textContent = which === "existing"
+                ? "Asignar metas existentes"
+                : "Quitar metas asociadas";
+
+            help.textContent = which === "existing"
+                ? "Selecciona metas para copiarlas al guardar el período. Las originales no se modificarán."
+                : "Selecciona metas para archivarlas al guardar el período. No puedes quitar metas con actividades o indicadores asociados.";
+
+            listExisting.hidden = which !== "existing";
+            listRemove.hidden = which !== "remove";
+            search.value = "";
+
+            pickerEl.querySelectorAll(".goal-choice-row").forEach(row => {
+                row.hidden = false;
+            });
+
+            parent.hide();
+        }
+
+        // ABRIR EL MODAL SECUNDARIO
+        el.addEventListener("hidden.bs.modal", () => {
+            if (opening) {
+                opening = false;
+                picker.show();
+            }
+        });
+
+        // REGRESAR AL MODAL PRINCIPAL
+        pickerEl.addEventListener("hidden.bs.modal", () => {
+            parent.show();
+        });
+
+        // BOTÓN ASIGNAR METAS
+        document.getElementById("show-existing-goals")
+            ?.addEventListener("click", () => {
+                openPicker("existing");
+            });
+
+        // BOTÓN QUITAR METAS
+        document.getElementById("show-remove-goals")
+            ?.addEventListener("click", () => {
+                openPicker("remove");
+            });
+
+        // CONFIRMAR O CANCELAR LA SELECCIÓN
+        function closePicker(commit) {
+
+            const cls = mode === "existing"
+                ? ".available-goal-choice"
+                : ".removable-goal-choice";
+
+            if (commit) {
+                selected[mode].clear();
+
+                pickerEl.querySelectorAll(cls).forEach(input => {
+                    if (input.checked) {
+                        selected[mode].add(input.value);
+                    }
+                });
+
+                sync();
+            } else {
+                pickerEl.querySelectorAll(cls).forEach(input => {
+                    input.checked = selected[mode].has(input.value);
+                });
+            }
+
+            picker.hide();
+        }
+
+        // BOTÓN CONFIRMAR
+        document.getElementById("goal-selection-apply")
+            ?.addEventListener("click", () => {
+                closePicker(true);
+            });
+
+        // BOTÓN CANCELAR
+        document.getElementById("goal-selection-cancel")
+            ?.addEventListener("click", () => {
+                closePicker(false);
+            });
+
+        // BOTÓN CERRAR
+        document.getElementById("goal-selection-close")
+            ?.addEventListener("click", () => {
+                closePicker(false);
+            });
+
+        // BUSCADOR DE METAS
+        search.addEventListener("input", () => {
+
+            const term = search.value.toLocaleLowerCase().trim();
+
+            const rows = mode === "existing"
+                ? listExisting.querySelectorAll(".goal-choice-row")
+                : listRemove.querySelectorAll(".goal-choice-row");
+
+            rows.forEach(row => {
+                row.hidden = !(row.dataset.search || "").includes(term);
+            });
+        });
+
+        sync();
+    }
+
+    // AGREGAR UNA META NUEVA AL FORMSET
     const add = document.getElementById("add-goal");
 
     if (add) {
@@ -413,8 +715,11 @@ document.addEventListener("DOMContentLoaded", function () {
             total.value = index + 1;
         });
     }
+
 });
 </script>
+
 {% endif %}
 
 {% endblock %}
+

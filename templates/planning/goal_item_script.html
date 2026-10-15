@@ -1,0 +1,72 @@
+
+<script>
+(function () {
+    function configurarItems() {
+        const modal = document.getElementById("goalModal");
+
+        if (!modal) return;
+
+        const itemSelect = modal.querySelector('[name="item"]');
+        const unitInput = modal.querySelector('[name="unit"]');
+        const detailsBox = modal.querySelector("#itemDetails");
+
+        if (!itemSelect || !unitInput || !detailsBox) return;
+
+        let items = {};
+
+        try {
+            items = JSON.parse(
+                itemSelect.getAttribute("data-item-details") || "{}"
+            );
+        } catch (error) {
+            console.error("Error al cargar los datos de ítems:", error);
+            return;
+        }
+
+        const code = modal.querySelector("#itemDetailCode");
+        const type = modal.querySelector("#itemDetailType");
+        const unit = modal.querySelector("#itemDetailUnit");
+        const description = modal.querySelector("#itemDetailDescription");
+        const formula = modal.querySelector("#itemDetailFormula");
+        const formulaContainer = modal.querySelector("#itemFormulaContainer");
+
+        function actualizarItem() {
+            const seleccionado = items[itemSelect.value];
+
+            if (!seleccionado) {
+                detailsBox.classList.add("d-none");
+                unitInput.value = "";
+                return;
+            }
+
+            unitInput.value = seleccionado.unidad || "";
+
+            code.textContent = seleccionado.codigo || "—";
+            type.textContent = seleccionado.tipo || "—";
+            unit.textContent = seleccionado.unidad || "Pendiente";
+            description.textContent =
+                seleccionado.descripcion || "Sin descripción";
+
+            if (seleccionado.formula) {
+                formula.textContent = seleccionado.formula;
+                formulaContainer.classList.remove("d-none");
+            } else {
+                formula.textContent = "";
+                formulaContainer.classList.add("d-none");
+            }
+
+            detailsBox.classList.remove("d-none");
+        }
+
+        itemSelect.addEventListener("change", actualizarItem);
+
+        actualizarItem();
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", configurarItems);
+    } else {
+        configurarItems();
+    }
+})();
+</script>

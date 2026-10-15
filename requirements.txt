@@ -88,3 +88,4 @@ uvicorn==0.49.0
 websockets==16.0
 Werkzeug==3.1.8
 yarl==1.24.5
+holidays==0.106
