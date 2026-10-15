@@ -98,7 +98,7 @@
                         <td>{{ account.profile.employee|default:"Sin funcionario" }}</td>
                         <td>{{ account.profile.delegation|default:"Sin delegación" }}</td>
                         <td>{% for role in account.groups.all %}<span class="badge text-bg-secondary me-1">{{ role.name }}</span>{% empty %}<span class="text-muted">Sin rol</span>{% endfor %}</td>
-                        <td>{% if account.is_active %}<span class="badge rounded-pill text-bg-success">Activa</span>{% else %}<span class="badge rounded-pill text-bg-secondary">Inactiva</span>{% endif %}</td>
+                        <td>{% if account.is_active %}<span class="badge rounded-pill text-bg-success">Activa</span>{% else %}<span class="badge rounded-pill text-bg-danger">Inactiva</span>{% endif %}</td>
                         <td class="text-end"><a class="btn btn-sm btn-outline-danger" href="{% url 'accounts:account_edit' account.pk %}" data-account-modal><i class="bi bi-pencil me-1"></i>Editar</a></td>
                     </tr>
                     {% empty %}
