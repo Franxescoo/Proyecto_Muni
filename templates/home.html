@@ -110,14 +110,12 @@
     <div class="row g-3">
         {% for card in section.cards %}
         <div class="col-12 col-md-6 col-xl-3">
-            
             {% if card.href %}
             <a class="tile tile-{{ card.color }}" href="{{ card.href }}">
                 <i class="bi bi-box-arrow-up-right open"></i>
                 <div class="circle"><i class="bi {{ card.icon }}"></i></div>
                 <div class="name">{{ card.title }}</div>
             </a>
-            
             {% else %}
             <div class="tile tile-{{ card.color }} disabled" title="Módulo en construcción">
                 {% if section.title != "Organización" %}
@@ -127,7 +125,6 @@
                 <div class="name">{{ card.title }}</div>
             </div>
             {% endif %}
-            
         </div>
         {% endfor %}
     </div>

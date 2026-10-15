@@ -22,7 +22,8 @@ def build_sections(user):
             ):
                 continue
             permission = card.get("perm")
-            if permission and not user.has_perm(permission):
+            is_monitoring = section["title"] == "Monitoreo y trazabilidad"
+            if permission and not is_monitoring and not user.has_perm(permission):
                 continue
             try:
                 href = reverse(card["url"])
