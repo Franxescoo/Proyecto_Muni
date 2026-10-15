@@ -8,7 +8,7 @@
         <div class="bg-white border rounded p-4">
             <h2 class="mb-4">{{ title }}</h2>
 
-            <form method="post">
+            <form method="post" enctype="multipart/form-data">
                 {% csrf_token %}
 
                 {% if form.non_field_errors %}
