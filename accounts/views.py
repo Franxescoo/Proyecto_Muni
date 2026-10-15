@@ -16,6 +16,7 @@ from .forms import (
     AccountEditForm,
     EmployeeForm,
     GroupForm,
+    MyAccountForm,
     PositionForm,
     ProfileLinkForm,
     RoleForm,
@@ -180,7 +181,8 @@ def account_create(request):
     """Crea una cuenta y asigna los grupos elegidos."""
 
     form = AccountCreateForm(
-        request.POST if request.method == "POST" else None
+        request.POST if request.method == "POST" else None,
+        request.FILES if request.method == "POST" else None,
     )
 
     if request.method == "POST" and form.is_valid():
@@ -202,6 +204,7 @@ def account_create(request):
                     employee=employee,
                     employee_code=form.cleaned_data["employee_code"],
                     delegation=employee.delegation,
+                    avatar=form.cleaned_data.get("avatar"),
                 )
 
                 sync_profile(profile)
@@ -243,6 +246,7 @@ def account_edit(request, pk):
     modal_request = request.GET.get("modal") == "1" or request.POST.get("modal") == "1"
     form = AccountEditForm(
         request.POST if request.method == "POST" else None,
+        request.FILES if request.method == "POST" else None,
         instance=user,
     )
 
@@ -290,4 +294,27 @@ def profile_link(request, pk):
         form,
         f"Vincular cuenta: {profile.user.username}",
         on_save=sync_profile,
+    )
+
+
+@login_required
+def my_account(request):
+    """Muestra datos de la cuenta y permite editar los campos personales."""
+    profile = UserProfile.objects.filter(user=request.user).select_related(
+        "employee", "delegation"
+    ).first()
+    form = MyAccountForm(
+        request.POST if request.method == "POST" else None,
+        request.FILES if request.method == "POST" else None,
+        instance=request.user,
+        profile=profile,
+    )
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "Tu perfil se actualizó correctamente.")
+        return redirect("accounts:my_account")
+    return render(
+        request,
+        "accounts/my_account.html",
+        {"form": form, "profile": profile},
     )
