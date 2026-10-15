@@ -139,6 +139,30 @@
 
                     {% if can_add_goal %}
                     <button type="button"
+                            id="show-existing-goals"
+                            class="btn btn-outline-primary btn-sm mb-4 fw-semibold me-2">
+                        <i class="bi bi-list-check"></i>
+                        Asignar metas existentes
+                    </button>
+                    {% endif %}
+
+                    {% if can_remove_goal and period %}
+                    <button type="button"
+                            id="show-remove-goals"
+                            class="btn btn-outline-danger btn-sm mb-4 fw-semibold me-2">
+                        <i class="bi bi-dash-circle"></i>
+                        Quitar metas asociadas
+                    </button>
+                    {% endif %}
+
+                    <div id="goal-selection-summary"
+                        class="small text-primary mb-2"
+                        aria-live="polite"></div>
+
+                    <div id="goal-selection-hidden"></div>
+
+                    {% if can_add_goal %}
+                    <button type="button"
                             id="add-goal"
                             class="btn btn-outline-success btn-sm mb-4 fw-semibold">
                         <i class="bi bi-plus-lg"></i>
@@ -202,4 +226,160 @@
         </div>
     </div>
 </div>
+{% if can_add_goal or can_remove_goal %}
+
+<div class="modal fade"
+     id="goalSelectionModal"
+     tabindex="-1"
+     aria-labelledby="goalSelectionTitle"
+     aria-hidden="true">
+
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+
+            <div class="modal-header">
+                <h5 class="modal-title" id="goalSelectionTitle">
+                    Metas existentes
+                </h5>
+
+                <button type="button"
+                        id="goal-selection-close"
+                        class="btn-close"
+                        aria-label="Cerrar"></button>
+            </div>
+
+            <div class="modal-body">
+
+                <p class="text-muted small"
+                   id="goal-selection-help"></p>
+
+                <input type="search"
+                       class="form-control mb-3"
+                       id="goal-selection-search"
+                       placeholder="Buscar meta o funcionario...">
+
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+
+                        <thead>
+                            <tr>
+                                <th>Seleccionar</th>
+                                <th>Ítem</th>
+                                <th>Funcionario</th>
+                                <th>Cargo</th>
+                                <th>Período</th>
+                                <th>Ponderación</th>
+                            </tr>
+                        </thead>
+
+                        <tbody id="available-goals-list">
+
+                            {% for source in available_goal_sources %}
+
+                            <tr class="goal-choice-row"
+                                data-search="{{ source.item|lower }} {{ source.employee.name|lower }} {{ source.position.position_name|lower }}">
+
+                                <td>
+                                    <input type="checkbox"
+                                           class="form-check-input available-goal-choice"
+                                           value="{{ source.pk }}"
+                                           {% if source.pk|stringformat:'s' in selected_existing_ids %}checked{% endif %}>
+                                </td>
+
+                                <td>{{ source.item }}</td>
+                                <td>{{ source.employee.name }}</td>
+                                <td>{{ source.position.position_name }}</td>
+
+                                <td>
+                                    {{ source.period.start_date|date:"d-m-Y" }}
+                                    —
+                                    {{ source.period.end_date|date:"d-m-Y" }}
+                                </td>
+
+                                <td>{{ source.weight }} %</td>
+
+                            </tr>
+
+                            {% empty %}
+
+                            <tr>
+                                <td colspan="6"
+                                    class="text-center text-muted">
+                                    No hay metas disponibles para copiar.
+                                </td>
+                            </tr>
+
+                            {% endfor %}
+
+                        </tbody>
+
+                        <tbody id="removable-goals-list" hidden>
+
+                            {% for f in formset %}
+
+                            {% if f.instance.pk %}
+
+                            <tr class="goal-choice-row"
+                                data-search="{{ f.instance.item|lower }} {{ f.instance.employee.name|lower }}">
+
+                                <td>
+                                    <input type="checkbox"
+                                           class="form-check-input removable-goal-choice"
+                                           value="{{ f.instance.pk }}"
+                                           {% if f.instance.pk|stringformat:'s' in selected_remove_ids %}checked{% endif %}>
+                                </td>
+
+                                <td>{{ f.instance.item }}</td>
+                                <td>{{ f.instance.employee.name }}</td>
+                                <td>{{ f.instance.position.position_name }}</td>
+
+                                <td>
+                                    {{ period.start_date|date:"d-m-Y" }}
+                                    —
+                                    {{ period.end_date|date:"d-m-Y" }}
+                                </td>
+
+                                <td>{{ f.instance.weight }} %</td>
+
+                            </tr>
+
+                            {% endif %}
+
+                            {% empty %}
+
+                            <tr>
+                                <td colspan="6" class="text-muted">
+                                    No hay metas asociadas.
+                                </td>
+                            </tr>
+
+                            {% endfor %}
+
+                        </tbody>
+
+                    </table>
+                </div>
+
+            </div>
+
+            <div class="modal-footer">
+
+                <button type="button"
+                        id="goal-selection-cancel"
+                        class="btn btn-outline-secondary">
+                    Volver
+                </button>
+
+                <button type="button"
+                        id="goal-selection-apply"
+                        class="btn btn-primary">
+                    Confirmar selección
+                </button>
+
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endif %}
 {% endif %}

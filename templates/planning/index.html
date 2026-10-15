@@ -50,5 +50,33 @@
         </div>
     </div>
     {% endif %}
+    
+    {% if perms.planning_measurements.view_measurementitem %}
+    <div class="col-md-4">
+        <div class="card mb-3">
+            <div class="card-body">
+                <h5 class="card-title">Catálogo de Ítems</h5>
+
+                <p class="card-text">
+                    Administra los ítems de medición de las metas.
+                </p>
+
+                <a class="btn btn-primary btn-sm"
+                href="{% url 'planning:item_list' %}">
+                    Ver ítems
+                </a>
+
+                {% if perms.planning_measurements.add_measurementitem %}
+                <a class="btn btn-success btn-sm"
+                href="{% url 'planning:item_create' %}">
+                    Agregar
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+
 </div>
 {% endblock %}

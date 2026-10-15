@@ -169,3 +169,72 @@ class Goal(BaseModel):
 
     def __str__(self):
         return f"Goal: {self.item} - {self.employee}"
+
+
+class MeasurementItem(BaseModel):
+    item_id = models.BigAutoField(primary_key=True)
+
+    code = models.CharField(
+        max_length=20,
+        unique=True,
+        verbose_name="Código"
+    )
+
+    name = models.CharField(
+        max_length=150,
+        verbose_name="Nombre"
+    )
+
+    description = models.TextField(
+        blank=True,
+        verbose_name="Descripción"
+    )
+
+    class ItemType(models.TextChoices):
+        QUANTITATIVE = "quantitative", "Cuantitativo"
+        PERCENTAGE = "percentage", "Porcentual"
+
+    item_type = models.CharField(
+        max_length=20,
+        choices=ItemType.choices,
+        default=ItemType.QUANTITATIVE,
+        verbose_name="Tipo de medición"
+    )
+
+    unit = models.CharField(
+        max_length=50,
+        blank=True,
+        verbose_name="Unidad de medida",
+    )
+
+    formula = models.TextField(
+        blank=True,
+        verbose_name="Descripción de la fórmula"
+    )
+
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="Activo"
+    )
+
+    class Meta:
+        verbose_name = "Ítem de medición"
+        verbose_name_plural = "Ítems de medición"
+        ordering = ["code"]
+
+    def clean(self):
+        super().clean()
+
+        if (
+            self.item_type == self.ItemType.PERCENTAGE
+            and not self.formula.strip()
+        ):
+            raise ValidationError({
+                "formula": (
+                    "Los ítems porcentuales deben tener "
+                    "una fórmula definida."
+                )
+            })
+
+    def __str__(self):
+        return f"{self.code} - {self.name}"

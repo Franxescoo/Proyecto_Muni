@@ -1,0 +1,43 @@
+
+<form method="post"
+      action="{% url 'planning:set_page_size' %}"
+      class="d-flex flex-wrap align-items-center gap-2 mb-3">
+
+    {% csrf_token %}
+
+    <input type="hidden"
+           name="next"
+           value="{{ request.get_full_path }}">
+
+    <label for="planningPageSize"
+           class="small fw-semibold text-secondary mb-0">
+        Registros por página
+    </label>
+
+    <select id="planningPageSize"
+            name="page_size"
+            class="form-select form-select-sm"
+            style="width: auto;">
+
+        <option value="10"
+            {% if request.session.planning_page_size == 10 %}selected{% endif %}>
+            10
+        </option>
+
+        <option value="25"
+            {% if not request.session.planning_page_size or request.session.planning_page_size == 25 %}selected{% endif %}>
+            25
+        </option>
+
+        <option value="50"
+            {% if request.session.planning_page_size == 50 %}selected{% endif %}>
+            50
+        </option>
+
+    </select>
+
+    <button type="submit"
+            class="btn btn-secondary btn-sm">
+        Guardar preferencia
+    </button>
+</form>

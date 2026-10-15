@@ -1,0 +1,109 @@
+
+{% if open_modal %}
+
+<div class="modal fade"
+     id="itemModal"
+     tabindex="-1"
+     aria-labelledby="itemModalLabel"
+     aria-hidden="true">
+
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+
+        <div class="modal-content">
+
+            <form method="post" action="{{ modal_action }}" novalidate>
+                {% csrf_token %}
+
+                <!-- ENCABEZADO -->
+                <div class="modal-header">
+
+                    <h5 class="modal-title" id="itemModalLabel">
+                        {{ title }}
+                    </h5>
+
+                    <a href="{% url 'planning:item_list' %}"
+                       class="btn-close"
+                       aria-label="Cerrar"></a>
+
+                </div>
+
+                <!-- CUERPO -->
+                <div class="modal-body">
+
+                    {% if form.non_field_errors %}
+                    <div class="alert alert-danger">
+                        {{ form.non_field_errors }}
+                    </div>
+                    {% endif %}
+
+                    <div class="row g-3">
+
+                        {% for field in form %}
+
+                        <div class="{% if field.name == 'description' or field.name == 'formula' %}col-12{% else %}col-md-6{% endif %}">
+
+                            {% if field.field.widget.input_type == 'checkbox' %}
+
+                            <div class="form-check mt-4">
+                                {{ field }}
+
+                                <label class="form-check-label"
+                                       for="{{ field.id_for_label }}">
+                                    {{ field.label }}
+                                </label>
+                            </div>
+
+                            {% else %}
+
+                            <label for="{{ field.id_for_label }}"
+                                   class="form-label">
+                                {{ field.label }}
+                            </label>
+
+                            {{ field }}
+
+                            {% endif %}
+
+                            {% if field.help_text %}
+                            <div class="form-text">
+                                {{ field.help_text }}
+                            </div>
+                            {% endif %}
+
+                            {% for error in field.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                            {% endfor %}
+
+                        </div>
+
+                        {% endfor %}
+
+                    </div>
+
+                </div>
+
+                <!-- BOTONES -->
+                <div class="modal-footer">
+
+                    <a href="{% url 'planning:item_list' %}"
+                       class="btn btn-outline-secondary">
+                        Cancelar
+                    </a>
+
+                    {% if not readonly %}
+                    <button type="submit" class="btn btn-primary">
+                        Guardar ítem
+                    </button>
+                    {% endif %}
+
+                </div>
+
+            </form>
+
+        </div>
+    </div>
+</div>
+
+{% endif %}

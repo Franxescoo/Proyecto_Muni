@@ -1,6 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db.models import Q
 from django.forms import inlineformset_factory
@@ -8,11 +8,21 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 from django.db import transaction
+from django.utils.http import url_has_allowed_host_and_scheme
 
 from organization.models import PositionFunction
 
-from .forms import GoalForm, GoalInlineForm, PeriodForm
-from .models import Goal, Period
+from .forms import (
+    GoalForm,
+    GoalInlineForm,
+    PeriodForm,
+    MeasurementItemForm,
+)
+from .models import Goal, Period, MeasurementItem
+from .calculations import (
+    InvalidPeriodWeights,
+    validate_period_weights,
+)
 
 PAGE_SIZE = 25
 PAGE_SIZE_OPTIONS = (10, 25, 50)
@@ -76,56 +86,97 @@ def scoped_goals(user):
     )
 
 
+
 def run_bulk_delete(request, queryset):
-    """Archiva registros únicamente de períodos abiertos."""
+    """Archiva registros seleccionados respetando los permisos."""
 
-    only_superuser(request.user)
-
-    ids = [
-        value
-        for value in request.POST.getlist("_selected_action")
-        if value.isdigit()
-    ]
-
-    if (
-        request.POST.get("action") != "delete_selected"
-        or not ids
-    ):
+    if request.POST.get("action") != "delete_selected":
         messages.warning(
             request,
-            "Seleccione al menos un registro y una acción."
+            "Selecciona una acción válida."
         )
         return
 
+    ids = request.POST.getlist("_selected_action")
+
+    if (
+        not ids
+        or len(ids) != len(set(ids))
+        or any(not value.isdecimal() for value in ids)
+    ):
+        messages.warning(
+            request,
+            "Selecciona registros válidos."
+        )
+        return
+    
+    # o usuarios con el permiso asignado mediante grupos.
+    if queryset.model is Period:
+        if not (
+            request.user.is_superuser
+            or request.user.has_perm("planning_measurements.delete_period")
+        ):
+            raise PermissionDenied(
+                "No tienes permiso para eliminar períodos."
+            )
+
+    elif queryset.model is Goal:
+        if not (
+            request.user.is_superuser
+            or request.user.has_perm("planning_measurements.delete_goal")
+        ):
+            raise PermissionDenied(
+                "No tienes permiso para eliminar metas."
+            )
+
+    else:
+        raise PermissionDenied(
+            "Esta acción no está disponible."
+        )
+
     with transaction.atomic():
-        selected = queryset.filter(
-            pk__in=ids
-        ).select_for_update()
+        selected = list(
+            queryset.filter(pk__in=ids).select_for_update()
+        )
+
+        if len(selected) != len(ids):
+            raise PermissionDenied(
+                "Algún registro no está disponible."
+            )
 
         if queryset.model is Period:
             for period in selected:
-                ensure_open_period(period)
+                if period.goals.filter(
+                    deleted_at__isnull=True
+                ).exists():
+                    raise PermissionDenied(
+                        "No se puede eliminar el período "
+                        f"{period.start_date} - {period.end_date} "
+                        "porque tiene metas asociadas."
+                    )
 
         elif queryset.model is Goal:
-            for goal in selected.select_related("period"):
-                ensure_open_period(goal.period)
-
-        else:
-            raise PermissionDenied(
-                "Esta operación no está habilitada para este módulo."
-            )
+            for goal in selected:
+                if goal.activities.exists() or goal.indicators.exists():
+                    raise PermissionDenied(
+                        f"No se puede eliminar la meta '{goal.item}' "
+                        "porque tiene actividades o indicadores asociados."
+                    )
 
         now = timezone.now()
 
-        updated = selected.update(
+        updated = queryset.filter(
+            pk__in=[obj.pk for obj in selected]
+        ).update(
             deleted_at=now,
-            updated_at=now,
+            updated_at=now
         )
 
     messages.success(
         request,
         f"{updated} registro(s) archivado(s) correctamente."
     )
+
 
 
 def build_headers(request, columns, order):
@@ -201,26 +252,45 @@ def index(request):
     return render(request, "planning/index.html", context)
 
 
+
 @login_required
 @require_POST
 def set_page_size(request):
-    """Guarda en la sesión la cantidad de registros por página."""
+    """Guarda la cantidad de registros por página."""
+
     try:
         size = int(request.POST.get("page_size", ""))
     except ValueError:
         size = None
+
     if size in PAGE_SIZE_OPTIONS:
         request.session["planning_page_size"] = size
-        messages.success(request, "Preferencia de visualización actualizada.")
+        messages.success(
+            request,
+            "Preferencia de visualización actualizada."
+        )
     else:
-        messages.error(request, "Valor no válido para registros por página.")
-    return redirect("planning:index")
+        messages.error(
+            request,
+            "Valor no válido para registros por página."
+        )
+
+    next_url = request.POST.get("next", "")
+
+    if next_url and url_has_allowed_host_and_scheme(
+        url=next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return redirect(next_url)
+
+    return redirect("planning:period_list")
+
 
 
 # ---------- PERÍODOS ----------
 
 PERIOD_COLUMNS = [
-    ("ID", "period_id"),
     ("Inicio", "start_date"),
     ("Término", "end_date"),
     ("Días computables", "computable_days"),
@@ -252,6 +322,158 @@ def disable_formset(formset, only_existing=False):
         for field in form.fields.values():
             field.disabled = True
 
+def available_goal_sources(user, period=None):
+    """Metas existentes que el usuario puede reutilizar."""
+
+    goals = scoped_goals(user).order_by(
+        "-period__start_date",
+        "item",
+        "pk",
+    )
+
+    if period and period.pk:
+        goals = goals.exclude(period=period)
+
+    return goals[:300]
+
+
+def apply_goal_assignments(request, period, *, may_add, may_remove):
+    """Copia o archiva metas durante el guardado del período."""
+
+    add_ids = request.POST.getlist("existing_goal_ids")
+    remove_ids = request.POST.getlist("remove_goal_ids")
+
+    for ids in (add_ids, remove_ids):
+        if (
+            len(ids) > 100
+            or len(ids) != len(set(ids))
+            or any(not value.isdecimal() for value in ids)
+        ):
+            raise ValidationError(
+                "Selecciona hasta 100 metas diferentes y válidas."
+            )
+
+    if add_ids and not may_add:
+        raise PermissionDenied(
+            "No tienes permiso para agregar metas."
+        )
+
+    if remove_ids and not may_remove:
+        raise PermissionDenied(
+            "No tienes permiso para quitar metas."
+        )
+
+    if not add_ids and not remove_ids:
+        return
+
+    ensure_open_period(period)
+
+    # Quitar metas mediante eliminación lógica.
+    if remove_ids:
+        targets = list(
+            scoped_goals(request.user)
+            .filter(period=period, pk__in=remove_ids)
+            .select_for_update()
+        )
+
+        if len(targets) != len(remove_ids):
+            raise ValidationError(
+                "Alguna meta seleccionada no pertenece al período."
+            )
+
+        for goal in targets:
+            if (
+                goal.activities.exists()
+                or goal.indicators.exists()
+            ):
+                raise ValidationError(
+                    f"No se puede quitar '{goal.item}' porque "
+                    "tiene actividades o indicadores asociados."
+                )
+
+        now = timezone.now()
+
+        Goal.objects.filter(
+            pk__in=[goal.pk for goal in targets]
+        ).update(
+            deleted_at=now,
+            updated_at=now,
+        )
+
+    # Copiar metas desde otros períodos.
+    if add_ids:
+        selected = list(
+            scoped_goals(request.user)
+            .filter(pk__in=add_ids)
+            .exclude(period=period)
+            .select_related("employee", "position")
+        )
+
+        if len(selected) != len(add_ids):
+            raise ValidationError(
+                "Alguna meta seleccionada no está disponible."
+            )
+
+        existing = set(
+            Goal.objects.filter(
+                period=period,
+                deleted_at__isnull=True,
+            ).values_list(
+                "employee_id",
+                "position_id",
+                "item",
+            )
+        )
+
+        for source in selected:
+            key = (
+                source.employee_id,
+                source.position_id,
+                source.item,
+            )
+
+            if key in existing:
+                raise ValidationError(
+                    f"La meta '{source.item}' ya existe "
+                    "para ese funcionario y cargo."
+                )
+
+            if (
+                source.employee.deleted_at is not None
+                or source.position.deleted_at is not None
+            ):
+                raise ValidationError(
+                    f"La meta '{source.item}' pertenece a un "
+                    "funcionario o cargo archivado."
+                )
+
+            existing.add(key)
+
+            catalog = MeasurementItem.objects.filter(
+                name=source.item,
+                is_active=True,
+                deleted_at__isnull=True,
+                unit=source.unit,
+            )
+
+            if catalog.count() != 1:
+                raise ValidationError(
+                    f"El ítem '{source.item}' no está activo "
+                    "o no coincide con el catálogo."
+                )
+
+            copied_goal = Goal(
+                period=period,
+                employee=source.employee,
+                position=source.position,
+                item=source.item,
+                objective_value=source.objective_value,
+                unit=source.unit,
+                weight=source.weight,
+            )
+
+            copied_goal.full_clean()
+            copied_goal.save()
 
 def get_period_list_context(request):
     periods = Period.objects.filter(
@@ -283,6 +505,9 @@ def get_period_list_context(request):
         request,
         periods.order_by(order)
     )
+    all_periods = Period.objects.filter(
+        deleted_at__isnull=True
+    )
 
     return {
         "page": page,
@@ -302,6 +527,15 @@ def get_period_list_context(request):
             .distinct()
         ),
         "querystring": querystring,
+                "total_periods": all_periods.count(),
+
+        "active_periods": all_periods.filter(
+            status=Period.Status.ACTIVE
+        ).count(),
+
+        "closed_periods": all_periods.filter(
+            status=Period.Status.CLOSED
+        ).count(),
     }
 
 
@@ -309,21 +543,49 @@ def get_period_list_context(request):
 
 @access("planning_measurements.view_period")
 def period_list(request):
-    periods = Period.objects.filter(
-        deleted_at__isnull=True
-    )
+    periods = Period.objects.filter(deleted_at__isnull=True)
 
     if request.method == "POST":
         run_bulk_delete(request, periods)
         return redirect(request.get_full_path())
 
-    context = get_period_list_context(request)
+    query = request.GET.get("q", "").strip()
+    if query:
+        periods = periods.filter(
+            Q(status__icontains=query) |
+            Q(parameters_version__icontains=query)
+        )
 
-    return render(
-        request,
-        "planning/period_list.html",
-        context
-    )
+    selected_status = request.GET.get("status", "")
+    if selected_status:
+        periods = periods.filter(status=selected_status)
+
+    order = resolve_order(request, PERIOD_COLUMNS, "-start_date")
+    page, querystring = paginate(request, periods.order_by(order))
+
+    base_periods = Period.objects.filter(deleted_at__isnull=True)
+
+    context = {
+        "page": page,
+        "headers": build_headers(request, PERIOD_COLUMNS, order),
+        "query": query,
+        "selected_status": selected_status,
+        "statuses": base_periods.order_by("status")
+        .values_list("status", flat=True)
+        .distinct(),
+        "querystring": querystring,
+
+        # NUEVO
+        "total_periods": base_periods.count(),
+        "active_periods": base_periods.filter(
+            Q(status="Active") | Q(status="Activo")
+        ).count(),
+        "closed_periods": base_periods.filter(
+            Q(status="Closed") | Q(status="Cerrado")
+        ).count(),
+    }
+
+    return render(request, "planning/period_list.html", context)
 
 
 
@@ -335,6 +597,7 @@ def render_period_form(
     period,
     readonly,
     can_add_goal,
+    can_remove_goal=False,
 ):
     context = get_period_list_context(request)
 
@@ -345,6 +608,25 @@ def render_period_form(
         "period": period,
         "readonly": readonly,
         "can_add_goal": can_add_goal and not readonly,
+        "can_remove_goal": can_remove_goal and not readonly,
+
+        "available_goal_sources": (
+            available_goal_sources(request.user, period)
+            if can_add_goal and not readonly
+            else []
+        ),
+
+        "selected_existing_ids": (
+            request.POST.getlist("existing_goal_ids")
+            if request.method == "POST"
+            else []
+        ),
+
+        "selected_remove_ids": (
+            request.POST.getlist("remove_goal_ids")
+            if request.method == "POST"
+            else []
+        ),
         "can_view_goals": request.user.has_perm(
             "planning_measurements.view_goal"
         ),
@@ -357,6 +639,7 @@ def render_period_form(
         "planning/period_list.html",
         context,
     )
+
 
 
 
@@ -390,21 +673,46 @@ def period_create(request):
         and form.is_valid()
         and formset.is_valid()
     ):
-        with transaction.atomic():
-            form.save()
-            formset.save()
+        try:
+            with transaction.atomic():
+                form.save()
+                formset.save()
+                if (
+                    request.POST.getlist("existing_goal_ids")
+                    and period.status == Period.Status.CLOSED
+                ):
+                    raise ValidationError(
+                        "Crea el período como Activo antes "
+                        "de asignar metas existentes."
+                    )
 
-        messages.success(
-            request,
-            "Período creado correctamente."
-        )
+                apply_goal_assignments(
+                    request,
+                    period,
+                    may_add=can_add_goal,
+                    may_remove=False,
+                )
 
-        return after_save(
-            request,
-            "planning:period_list",
-            "planning:period_create",
-            ("planning:period_edit", period.pk),
-        )
+                if form.cleaned_data["status"] == Period.Status.CLOSED:
+                    validate_period_weights(period)
+
+        except InvalidPeriodWeights as exc:
+            form.add_error("status", str(exc))
+        except ValidationError as exc:
+            form.add_error(None, exc)
+
+        else:
+            messages.success(
+                request,
+                "Período creado correctamente."
+            )
+
+            return after_save(
+                request,
+                "planning:period_list",
+                "planning:period_create",
+                ("planning:period_edit", period.pk),
+            )
 
     return render_period_form(
         request,
@@ -415,6 +723,8 @@ def period_create(request):
         False,
         can_add_goal,
     )
+
+
 
 
 @access("planning_measurements.view_period")
@@ -452,7 +762,10 @@ def period_edit(request, period_id):
         )
     )
 
-    if request.method == "POST" and not can_change:
+    if request.method == "POST" and (
+        not can_change
+        or request.GET.get("view") == "1"
+    ):
         raise PermissionDenied
 
     goals = (
@@ -476,7 +789,10 @@ def period_edit(request, period_id):
         form_kwargs={"user": user},
     )
 
-    readonly = not can_change
+    readonly = (
+        not can_change
+        or request.GET.get("view") == "1"
+    )
 
     if readonly:
         for field in form.fields.values():
@@ -495,25 +811,44 @@ def period_edit(request, period_id):
         and formset.is_valid()
         and form.is_valid()
     ):
-        with transaction.atomic():
-            # Guarda las metas mientras el período sigue activo.
-            if can_change_goal or can_add_goal:
-                formset.save()
+        try:
+            with transaction.atomic():
 
-            # Guarda el período al final, incluido su cierre.
-            form.save()
+                # Guardar las metas mientras el período
+                # todavía se encuentra abierto.
+                if can_change_goal or can_add_goal:
+                    formset.save()
+                    apply_goal_assignments(
+                        request,
+                        period,
+                        may_add=can_add_goal,
+                        may_remove=can_change_goal,
+                    )
 
-        messages.success(
-            request,
-            "Período modificado correctamente."
-        )
+                # Comprobar ponderadores antes del cierre.
+                if form.cleaned_data["status"] == Period.Status.CLOSED:
+                    validate_period_weights(period)
 
-        return after_save(
-            request,
-            "planning:period_list",
-            "planning:period_create",
-            ("planning:period_edit", period.pk),
-        )
+                # Guardar los cambios del período.
+                form.save()
+
+        except InvalidPeriodWeights as exc:
+            form.add_error("status", str(exc))
+        except ValidationError as exc:
+            form.add_error(None, exc)
+
+        else:
+            messages.success(
+                request,
+                "Período modificado correctamente."
+            )
+
+            return after_save(
+                request,
+                "planning:period_list",
+                "planning:period_create",
+                ("planning:period_edit", period.pk),
+            )
 
     return render_period_form(
         request,
@@ -523,35 +858,252 @@ def period_edit(request, period_id):
         period,
         readonly,
         can_add_goal,
+        can_change_goal,
+    )
+
+@access("planning_measurements.view_period")
+def period_assign_existing_goals(request, period_id):
+    """Copia metas existentes a un período, conservando las originales."""
+
+    if not request.user.has_perm("planning_measurements.add_goal"):
+        raise PermissionDenied
+
+    period = get_object_or_404(
+        Period,
+        pk=period_id,
+        deleted_at__isnull=True
+    )
+
+    ensure_open_period(period)
+
+    # Metas que el usuario puede consultar según su delegación.
+    sources = scoped_goals(request.user).exclude(period=period)
+
+    already_assigned = set(
+        scoped_goals(request.user)
+        .filter(period=period)
+        .values_list("employee_id", "position_id", "item")
+    )
+
+    available = [
+        goal
+        for goal in sources.order_by(
+            "-period__start_date", "item", "pk"
+        )
+        if (
+            goal.employee_id,
+            goal.position_id,
+            goal.item
+        ) not in already_assigned
+    ]
+
+    if request.method == "POST":
+        selected_ids = request.POST.getlist("goal_ids")
+
+        if (
+            not selected_ids
+            or len(selected_ids) > 100
+            or len(set(selected_ids)) != len(selected_ids)
+        ):
+            messages.error(
+                request,
+                "Selecciona entre 1 y 100 metas distintas."
+            )
+
+        elif not all(value.isdecimal() for value in selected_ids):
+            messages.error(
+                request,
+                "La selección contiene identificadores inválidos."
+            )
+
+        else:
+            with transaction.atomic():
+
+                locked_period = (
+                    Period.objects
+                    .select_for_update()
+                    .get(pk=period.pk)
+                )
+
+                ensure_open_period(locked_period)
+
+                selected = list(
+                    sources.filter(pk__in=selected_ids)
+                )
+
+                if len(selected) != len(selected_ids):
+                    messages.error(
+                        request,
+                        "Alguna meta seleccionada no está disponible."
+                    )
+
+                else:
+                    errors = []
+
+                    current = set(
+                        Goal.objects.filter(
+                            period=locked_period,
+                            deleted_at__isnull=True
+                        ).values_list(
+                            "employee_id",
+                            "position_id",
+                            "item"
+                        )
+                    )
+
+                    new_goals = []
+
+                    for source in selected:
+                        key = (
+                            source.employee_id,
+                            source.position_id,
+                            source.item
+                        )
+
+                        if key in current:
+                            errors.append(
+                                f"La meta '{source.item}' ya existe "
+                                "para ese funcionario."
+                            )
+                            continue
+
+                        current.add(key)
+
+                        item_exists = (
+                            MeasurementItem.objects.filter(
+                                name=source.item,
+                                deleted_at__isnull=True,
+                                is_active=True,
+                                unit=source.unit
+                            ).count() == 1
+                        )
+
+                        if not item_exists:
+                            errors.append(
+                                f"El ítem '{source.item}' no está "
+                                "activo, es ambiguo o cambió su unidad."
+                            )
+                            continue
+
+                        copy = Goal(
+                            period=locked_period,
+                            employee=source.employee,
+                            position=source.position,
+                            item=source.item,
+                            objective_value=source.objective_value,
+                            unit=source.unit,
+                            weight=source.weight
+                        )
+
+                        try:
+                            copy.full_clean()
+
+                        except ValidationError as exc:
+                            errors.append(
+                                f"{source.item}: "
+                                f"{', '.join(exc.messages)}"
+                            )
+
+                        else:
+                            new_goals.append(copy)
+
+                    if errors:
+                        for error in errors[:5]:
+                            messages.error(request, error)
+
+                        messages.error(
+                            request,
+                            "No se copió ninguna meta; "
+                            "revisa la selección."
+                        )
+
+                    else:
+                        for copy in new_goals:
+                            copy.save()
+
+                        messages.success(
+                            request,
+                            f"{len(new_goals)} meta(s) "
+                            "asignada(s) correctamente."
+                        )
+
+                        return redirect(
+                            "planning:period_edit",
+                            period_id=period.pk
+                        )
+
+    return render(
+        request,
+        "planning/period_assign_goals.html",
+        {
+            "period": period,
+            "available_goals": available,
+        }
     )
 
 
 
-@access("planning_measurements.view_period")
+@access("planning_measurements.delete_period")
 def period_delete(request, period_id):
-    only_superuser(request.user)
-    period = get_object_or_404(Period, pk=period_id, deleted_at__isnull=True)
-    ensure_open_period(period)
+    """Archiva un período abierto o cerrado si no tiene metas activas."""
+
+    if not (
+        request.user.is_superuser
+        or request.user.has_perm("planning_measurements.delete_period")
+    ):
+        raise PermissionDenied(
+            "No tienes permiso para eliminar períodos."
+        )
+
+    period = get_object_or_404(
+        Period,
+        pk=period_id,
+        deleted_at__isnull=True,
+    )
+
     if request.method == "POST":
-        now = timezone.now()
-        period.deleted_at = now  # eliminación lógica
-        period.save(update_fields=["deleted_at", "updated_at"])
-        messages.success(request, "Período eliminado correctamente.")
+        with transaction.atomic():
+            period = get_object_or_404(
+                Period.objects.select_for_update(),
+                pk=period_id,
+                deleted_at__isnull=True,
+            )
+
+            if period.goals.filter(deleted_at__isnull=True).exists():
+                raise PermissionDenied(
+                    "No se puede eliminar este período porque "
+                    "tiene metas asociadas. Debes conservar "
+                    "el historial de esas metas."
+                )
+
+            now = timezone.now()
+            period.deleted_at = now
+            period.save(
+                update_fields=["deleted_at", "updated_at"]
+            )
+
+        messages.success(
+            request,
+            "Período eliminado correctamente."
+        )
         return redirect("planning:period_list")
+
     return render(
         request,
         "planning/period_confirm_delete.html",
         {
             "period": period,
-            "goals_count": period.goals.filter(deleted_at__isnull=True).count(),
+            "goals_count": period.goals.filter(
+                deleted_at__isnull=True
+            ).count(),
         },
     )
+
 
 
 # ---------- METAS ----------
 
 GOAL_COLUMNS = [
-    ("ID", "goal_id"),
     ("Ítem", "item"),
     ("Período", "period__start_date"),
     ("Funcionario", "employee__name"),
@@ -573,6 +1125,15 @@ def goal_list(request):
         return redirect(request.get_full_path())
 
     base_goals = goals  # para armar las opciones de los filtros
+    total_goals = base_goals.count()
+
+    active_goals = base_goals.filter(
+        period__status=Period.Status.ACTIVE
+    ).count()
+
+    closed_goals = base_goals.filter(
+        period__status=Period.Status.CLOSED
+    ).count()
 
     query = request.GET.get("q", "").strip()
     if query:
@@ -603,6 +1164,9 @@ def goal_list(request):
         "selected_position": selected_position,
         "selected_unit": selected_unit,
         "querystring": querystring,
+        "total_goals": total_goals,
+        "active_goals": active_goals,
+        "closed_goals": closed_goals,
     }
     return render(request, "planning/goal_list.html", context)
 
@@ -636,11 +1200,17 @@ def goal_edit(request, goal_id):
         )
         and goal.period.status != Period.Status.CLOSED
     )
-    if request.method == "POST" and not can_change:
+    if request.method == "POST" and (
+        not can_change
+        or request.GET.get("view") == "1"
+    ):
         raise PermissionDenied
 
     form = GoalForm(request.POST or None, instance=goal, user=request.user)
-    readonly = not can_change
+    readonly = (
+        not can_change
+        or request.GET.get("view") == "1"
+    )
     if readonly:
         for field in form.fields.values():
             field.disabled = True
@@ -666,18 +1236,275 @@ def goal_edit(request, goal_id):
     )
 
 
+
 @access("planning_measurements.view_goal")
 def goal_delete(request, goal_id):
-    only_superuser(request.user)
-    goal = get_object_or_404(scoped_goals(request.user), pk=goal_id)
-    ensure_open_period(goal.period)
+    # Permite eliminar al superusuario o a quienes tengan
+    # el permiso delete_goal asignado directamente o mediante un grupo.
+    if not (
+        request.user.is_superuser
+        or request.user.has_perm("planning_measurements.delete_goal")
+    ):
+        raise PermissionDenied(
+            "No tienes permiso para eliminar metas."
+        )
+
+    # Respeta la delegación del usuario y excluye metas archivadas.
+    goal = get_object_or_404(
+        scoped_goals(request.user),
+        pk=goal_id
+    )
+
+    # No bloqueamos por estado cerrado: ese es el cambio solicitado.
+    # Protegemos las referencias de otros módulos.
+    if goal.activities.exists() or goal.indicators.exists():
+        raise PermissionDenied(
+            "No se puede eliminar esta meta porque tiene "
+            "actividades o indicadores asociados."
+        )
+
     if request.method == "POST":
-        goal.deleted_at = timezone.now()  # eliminación lógica
+        goal.deleted_at = timezone.now()
         goal.save(update_fields=["deleted_at", "updated_at"])
-        messages.success(request, "Meta eliminada correctamente.")
+
+        messages.success(
+            request,
+            "Meta eliminada correctamente."
+        )
         return redirect("planning:goal_list")
+
     return render(
         request,
         "planning/goal_confirm_delete.html",
         {"goal": goal},
     )
+
+
+
+# ---------- CATÁLOGO DE ÍTEMS ----------
+
+
+
+def get_item_list_context(request):
+    """Prepara filtros, contadores y paginación del catálogo."""
+
+    all_items = MeasurementItem.objects.filter(
+        deleted_at__isnull=True
+    )
+
+    # Contadores generales de ítems visibles.
+    total_items = all_items.count()
+
+    active_items = all_items.filter(
+        is_active=True
+    ).count()
+
+    inactive_items = all_items.filter(
+        is_active=False
+    ).count()
+
+    # Filtros.
+    query = request.GET.get("q", "").strip()
+    selected_type = request.GET.get("item_type", "")
+    selected_status = request.GET.get("status", "")
+
+    items = all_items
+
+    if query:
+        items = items.filter(
+            Q(code__icontains=query)
+            | Q(name__icontains=query)
+            | Q(description__icontains=query)
+        )
+
+    if selected_type in ("quantitative", "percentage"):
+        items = items.filter(
+            item_type=selected_type
+        )
+
+    if selected_status == "active":
+        items = items.filter(
+            is_active=True
+        )
+
+    elif selected_status == "inactive":
+        items = items.filter(
+            is_active=False
+        )
+
+    items = items.order_by("code")
+
+    page, querystring = paginate(request, items)
+
+    return {
+        "page": page,
+        "query": query,
+        "querystring": querystring,
+
+        "selected_type": selected_type,
+        "selected_status": selected_status,
+
+        "total_items": total_items,
+        "active_items": active_items,
+        "inactive_items": inactive_items,
+    }
+
+
+
+
+@access("planning_measurements.view_measurementitem")
+def item_list(request):
+    context = get_item_list_context(request)
+
+    return render(
+        request,
+        "planning/item_list.html",
+        context,
+    )
+
+
+
+
+@access("planning_measurements.add_measurementitem")
+def item_create(request):
+    """Crear ítems mediante una ventana modal."""
+
+    form = MeasurementItemForm(request.POST or None)
+
+    if request.method == "POST" and form.is_valid():
+        form.save()
+
+        messages.success(
+            request,
+            "Ítem creado correctamente."
+        )
+
+        return redirect("planning:item_list")
+
+    context = get_item_list_context(request)
+
+    context.update({
+        "form": form,
+        "title": "Nuevo ítem",
+        "readonly": False,
+        "open_modal": True,
+        "modal_action": request.path,
+    })
+
+    return render(
+        request,
+        "planning/item_list.html",
+        context,
+    )
+
+
+
+
+@access("planning_measurements.view_measurementitem")
+def item_detail(request, item_id):
+    """Mostrar un ítem en un modal de solo lectura."""
+
+    item = get_object_or_404(
+        MeasurementItem,
+        pk=item_id,
+        deleted_at__isnull=True,
+    )
+
+    form = MeasurementItemForm(instance=item)
+
+    for field in form.fields.values():
+        field.disabled = True
+
+    context = get_item_list_context(request)
+
+    context.update({
+        "form": form,
+        "title": "Detalle del ítem",
+        "readonly": True,
+        "open_modal": True,
+        "modal_action": request.path,
+    })
+
+    return render(
+        request,
+        "planning/item_list.html",
+        context,
+    )
+
+
+
+
+@access("planning_measurements.change_measurementitem")
+def item_edit(request, item_id):
+    """Modificar un ítem desde una ventana modal."""
+
+    item = get_object_or_404(
+        MeasurementItem,
+        pk=item_id,
+        deleted_at__isnull=True,
+    )
+
+    form = MeasurementItemForm(
+        request.POST or None,
+        instance=item,
+    )
+
+    if request.method == "POST" and form.is_valid():
+        form.save()
+
+        messages.success(
+            request,
+            "Ítem actualizado correctamente."
+        )
+
+        return redirect("planning:item_list")
+
+    context = get_item_list_context(request)
+
+    context.update({
+        "form": form,
+        "title": "Modificar ítem",
+        "readonly": False,
+        "open_modal": True,
+        "modal_action": request.path,
+    })
+
+    return render(
+        request,
+        "planning/item_list.html",
+        context,
+    )
+
+
+
+@access("planning_measurements.delete_measurementitem")
+@require_POST
+def item_delete(request, item_id):
+    """Desactiva un ítem sin eliminarlo físicamente."""
+
+    only_superuser(request.user)
+
+    item = get_object_or_404(
+        MeasurementItem,
+        pk=item_id,
+        deleted_at__isnull=True,
+    )
+
+    item.is_active = False
+    item.deleted_at = timezone.now()
+
+    item.save(
+        update_fields=[
+            "is_active",
+            "deleted_at",
+            "updated_at",
+        ]
+    )
+
+    messages.success(
+        request,
+        "Ítem desactivado correctamente."
+    )
+
+    return redirect("planning:item_list")
+
