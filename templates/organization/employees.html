@@ -1,0 +1,34 @@
+{% extends "organization/base.html" %}
+
+{% block organization_content %}
+<div class="row g-3 mb-4">
+    <div class="col-12 col-md-6"><div class="section-card metric h-100"><div class="value">{{ total_employees }}</div><div class="label">Funcionarios en el resultado</div></div></div>
+    <div class="col-12 col-md-6"><div class="section-card metric h-100"><div class="value text-success">{{ active_employees }}</div><div class="label">Con estado activo</div></div></div>
+</div>
+<section class="section-card p-3 p-lg-4">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+        <div><h2 class="h5 mb-1 fw-bold">Directorio de funcionarios</h2><p class="text-muted small mb-0">Funcionarios de las delegaciones habilitadas para tu cuenta.</p></div>
+        {% if perms.organization.add_employee %}<a class="btn btn-success" href="?modal=create"><i class="bi bi-plus-lg me-1"></i>Nuevo funcionario</a>{% endif %}
+    </div>
+    <form class="row g-3 align-items-end mb-3" method="get">
+        <div class="col-12 col-md-6"><label class="filter-label" for="employee-search">Buscar funcionario</label><input id="employee-search" name="q" value="{{ request.GET.q }}" class="form-control" placeholder="Nombre, función, cargo o delegación" type="search"></div>
+        <div class="col-12 col-md-3"><label class="filter-label" for="employee-status">Estado</label><select id="employee-status" name="status" class="form-select"><option value="">Todos los estados</option>{% for status in statuses %}<option value="{{ status }}" {% if request.GET.status == status %}selected{% endif %}>{{ status }}</option>{% endfor %}</select></div>
+        <div class="col-12 col-md-3"><button class="btn btn-dark w-100" type="submit"><i class="bi bi-funnel me-1"></i>Filtrar</button></div>
+    </form>
+    <div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr><th>Funcionario</th><th>Delegación</th><th>Cargo</th><th>Funciones</th><th>Estado</th><th class="text-end">Acciones</th></tr></thead><tbody>
+        {% for employee in employees %}
+        <tr>
+            <td class="fw-semibold">{{ employee.name }}</td>
+            <td>{{ employee.delegation.name }}</td><td>{{ employee.position.position_name }}</td><td>{{ employee.roles|truncatewords:18 }}</td>
+            <td><span class="organization-status {% if employee.status|lower == 'active' or employee.status|lower == 'activo' %}organization-status-active{% endif %}">{{ employee.status }}</span></td>
+            <td><div class="d-flex justify-content-end gap-1">
+                {% if perms.organization.change_employee %}<a class="btn btn-sm btn-light border" href="?modal=edit&amp;id={{ employee.pk }}" title="Modificar funcionario" aria-label="Modificar {{ employee.name }}"><i class="bi bi-pencil-square"></i></a>{% endif %}
+                {% if perms.organization.delete_employee %}<form method="post" action="{% url 'organization:employee_list' %}" data-organization-delete data-delete-label="al funcionario {{ employee.name }}">{% csrf_token %}<input type="hidden" name="action" value="delete"><input type="hidden" name="object_id" value="{{ employee.pk }}"><button class="btn btn-sm btn-outline-danger" type="submit" title="Eliminar funcionario" aria-label="Eliminar {{ employee.name }}"><i class="bi bi-trash3"></i></button></form>{% endif %}
+            </div></td>
+        </tr>
+        {% empty %}<tr><td colspan="6" class="text-center py-5"><i class="bi bi-people fs-2 text-muted d-block mb-2"></i><span class="text-muted">No hay funcionarios para mostrar.</span></td></tr>
+        {% endfor %}
+    </tbody></table></div>
+</section>
+{% include "organization/_record_modal.html" with form_route="organization:employee_list" %}
+{% endblock %}
