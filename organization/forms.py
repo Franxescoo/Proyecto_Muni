@@ -83,9 +83,10 @@ class EmployeeForm(BootstrapModelForm):
 
     class Meta:
         model = Employee
-        fields = ["name", "delegation", "position", "roles", "status"]
+        fields = ["name", "photo", "delegation", "position", "roles", "status"]
         labels = {
             "name": "Nombre",
+            "photo": "Foto de perfil",
             "delegation": "Delegación",
             "position": "Cargo y función",
             "roles": "Rol de acceso",
@@ -104,6 +105,8 @@ class EmployeeForm(BootstrapModelForm):
         current_role = getattr(self.instance, "roles", "")
         if current_role and current_role not in role_names:
             choices.append((current_role, f"{current_role} (rol actual no existente)"))
+        self.fields["photo"].required = False
+        self.fields["photo"].widget.attrs.update({"accept": "image/*"})
         self.fields["roles"].choices = choices
         if current_role:
             self.fields["roles"].initial = current_role
