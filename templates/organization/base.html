@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+
+{% block titulo %}{{ page_title }} · Organización{% endblock %}
+
+{% block estilos %}
+<style>
+    .organization-shell { max-width: 1480px; margin: 0 auto; }
+    .organization-hero { background: linear-gradient(135deg, #a60a17, #760710); border-radius: .65rem; box-shadow: 0 6px 18px rgba(166, 10, 23, .18); color: #fff; padding: 1.5rem 1.75rem; }
+    .organization-hero h1 { font-size: 1.85rem; }
+    .organization-hero p { color: rgba(255, 255, 255, .78); }
+    .section-card { background: #fff; border: 1px solid #e5e7eb; border-radius: .65rem; box-shadow: 0 3px 12px rgba(24, 33, 44, .04); }
+    .metric { border-left: 4px solid #a60a17; padding: 1rem 1.1rem; }
+    .metric .value { color: #23272b; font-size: 1.55rem; font-weight: 700; }
+    .metric .label { color: #6c757d; font-size: .82rem; }
+    .table thead th { color: #6c757d; font-size: .72rem; text-transform: uppercase; white-space: nowrap; }
+    .table tbody td { vertical-align: middle; }
+    .filter-label { color: #56616b; font-size: .78rem; font-weight: 600; margin-bottom: .35rem; }
+    .organization-status { background: #eef0f2; border-radius: 999px; color: #5f6870; font-size: .75rem; font-weight: 600; padding: .35rem .65rem; }
+    .organization-status-active { background: #dff5e9; color: #147a49; }
+    .organization-form-dialog { max-width: 760px; }
+    .organization-form-dialog .modal-body { max-height: min(68vh, 650px); overflow-y: auto; overscroll-behavior: contain; }
+    .organization-form-dialog .form-control, .organization-form-dialog .form-select { font-size: .9rem; min-height: 2.4rem; padding: .4rem .65rem; }
+    .organization-form-dialog textarea.form-control { max-height: 14rem; min-height: 5rem; overflow-y: auto; resize: vertical; }
+    .organization-choice-list { max-height: 16rem; overflow-y: auto; border: 1px solid #dee2e6; border-radius: .4rem; padding: .75rem; }
+    .organization-choice-list input[type="checkbox"] { accent-color: #138d56; margin-right: .45rem; }
+    .organization-role { background: #edf5f0; border-radius: .35rem; color: #176b43; display: inline-block; font-size: .78rem; font-weight: 600; margin: .1rem .15rem .1rem 0; padding: .25rem .5rem; }
+    .organization-photo-preview { align-items: center; background: #f1f3f5; border: 1px dashed #b8c0c8; border-radius: 50%; color: #7a858f; display: flex; height: 88px; justify-content: center; overflow: hidden; width: 88px; }
+    .organization-photo-preview i { font-size: 3rem; }
+    .organization-photo-preview img { height: 100%; object-fit: cover; width: 100%; }
+    .employee-photo-cell { width: 3.5rem; }
+    .employee-photo, .employee-photo-placeholder { align-items: center; border-radius: 50%; display: inline-flex; height: 2.65rem; justify-content: center; object-fit: cover; width: 2.65rem; }
+    .employee-photo-placeholder { background: #eef0f2; color: #7a858f; font-size: 1.4rem; }
+    @media (max-width: 767.98px) { .organization-hero { padding: 1.25rem; } .organization-hero h1 { font-size: 1.5rem; } }
+</style>
+{% endblock %}
+
+{% block top_links %}{% endblock %}
+
+{% block sidebar %}
+<aside class="workspace-sidebar" aria-label="Navegación de organización">
+    <div class="workspace-sidebar-header">
+        <i class="bi bi-list" aria-hidden="true"></i>
+        <strong>Organización</strong>
+        <i class="bi bi-chevron-down" aria-hidden="true"></i>
+    </div>
+    <nav class="nav flex-column">
+        <a class="nav-link" href="{% url 'home' %}"><i class="bi bi-house-door"></i><span>Inicio</span></a>
+        <a class="nav-link {% if active_page == 'employees' %}active{% endif %}" href="{% url 'organization:employee_list' %}"><i class="bi bi-people"></i><span>Funcionarios</span></a>
+        <a class="nav-link {% if active_page == 'delegations' %}active{% endif %}" href="{% url 'organization:delegation_list' %}"><i class="bi bi-building"></i><span>Delegaciones</span></a>
+        <a class="nav-link {% if active_page == 'positions' %}active{% endif %}" href="{% url 'organization:position_list' %}"><i class="bi bi-person-badge"></i><span>Cargos y funciones</span></a>
+        {% if user.is_superuser %}<a class="nav-link {% if active_page == 'roles' %}active{% endif %}" href="{% url 'organization:role_list' %}"><i class="bi bi-shield-lock"></i><span>Roles y Permisos</span></a>{% endif %}
+    </nav>
+</aside>
+{% endblock %}
+
+{% block contenido %}
+<div class="organization-shell pb-4">
+    <section class="organization-hero mb-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
+        <div>
+            <div class="small text-uppercase fw-semibold opacity-75 mb-2">Organización</div>
+            <h1 class="mb-2 fw-bold">{{ page_title }}</h1>
+            <p class="mb-0">{{ page_description }}</p>
+        </div>
+        <i class="bi {{ page_icon }} display-5 opacity-75" aria-hidden="true"></i>
+    </section>
+    {% block organization_content %}{% endblock %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ modal_open|json_script:"organization-modal-open" }}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    function showOrganizationAlert(options) {
+        if (window.Swal) {
+            return window.Swal.fire(options);
+        }
+        window.alert(`${options.title}\n${options.text || ""}`);
+        return Promise.resolve({ isConfirmed: true });
+    }
+
+    const modalState = document.getElementById("organization-modal-open");
+    const modal = document.getElementById("organization-record-modal");
+
+    if (modalState && modal && JSON.parse(modalState.textContent)) {
+        bootstrap.Modal.getOrCreateInstance(modal).show();
+        if (modal.dataset.hasErrors === "true") {
+            showOrganizationAlert({
+                title: "Hay campos por corregir",
+                text: "Revisa los mensajes junto a cada campo antes de guardar.",
+                icon: "error",
+                confirmButtonColor: "#a60a17"
+            });
+        }
+    }
+
+    const profilePhotoInput = document.querySelector("[data-profile-photo-input]");
+    const profilePhotoPreview = document.querySelector("#employee-photo-preview img");
+    const profilePhotoPlaceholder = document.querySelector("#employee-photo-preview i");
+    if (profilePhotoInput && profilePhotoPreview && profilePhotoPlaceholder) {
+        profilePhotoInput.addEventListener("change", function () {
+            const file = profilePhotoInput.files && profilePhotoInput.files[0];
+            if (!file) {
+                profilePhotoPreview.removeAttribute("src");
+                profilePhotoPreview.hidden = true;
+                profilePhotoPlaceholder.hidden = false;
+                return;
+            }
+            if (!file.type.startsWith("image/")) {
+                profilePhotoInput.value = "";
+                showOrganizationAlert({
+                    title: "Formato de imagen no válido",
+                    text: "Selecciona un archivo de imagen.",
+                    icon: "error",
+                    confirmButtonColor: "#a60a17"
+                });
+                return;
+            }
+            profilePhotoPreview.src = URL.createObjectURL(file);
+            profilePhotoPreview.hidden = false;
+            profilePhotoPlaceholder.hidden = true;
+        });
+    }
+
+    document.querySelectorAll("#organization-record-modal form").forEach(function (form) {
+        let editConfirmed = false;
+        form.addEventListener("submit", function (event) {
+            if (!form.checkValidity()) {
+                event.preventDefault();
+                form.classList.add("was-validated");
+                const firstInvalid = form.querySelector(":invalid");
+                if (firstInvalid) {
+                    firstInvalid.focus();
+                }
+
+                showOrganizationAlert({
+                    title: "Completa los campos obligatorios",
+                    text: "Corrige los campos marcados para poder guardar.",
+                    icon: "error",
+                    confirmButtonColor: "#a60a17"
+                });
+                return;
+            }
+
+            if (form.dataset.action !== "edit" || editConfirmed) {
+                return;
+            }
+
+            event.preventDefault();
+            const title = form.dataset.editConfirmation;
+            if (window.Swal) {
+                Swal.fire({
+                    title: title,
+                    text: "Los cambios se guardarán en este registro.",
+                    icon: "question",
+                    showCancelButton: true,
+                    confirmButtonText: "Sí, modificar",
+                    cancelButtonText: "Seguir editando",
+                    confirmButtonColor: "#138d56",
+                    cancelButtonColor: "#6c757d",
+                    reverseButtons: true
+                }).then(function (result) {
+                    if (result.isConfirmed) {
+                        editConfirmed = true;
+                        form.requestSubmit();
+                    }
+                });
+            } else if (window.confirm(`${title}\nLos cambios se guardarán en este registro.`)) {
+                editConfirmed = true;
+                form.requestSubmit();
+            }
+        });
+    });
+
+    document.querySelectorAll("main .alert[role='alert']").forEach(function (alert) {
+        const category = ["success", "error", "warning", "info"].find(function (type) {
+            return alert.classList.contains(`alert-${type}`);
+        }) || "info";
+
+        showOrganizationAlert({
+            toast: true,
+            position: "top-end",
+            icon: category,
+            title: alert.textContent.trim(),
+            showConfirmButton: false,
+            timer: 3200,
+            timerProgressBar: true
+        });
+        if (window.Swal) {
+            alert.remove();
+        }
+    });
+
+    document.querySelectorAll("[data-organization-delete]").forEach(function (form) {
+        form.addEventListener("submit", async function (event) {
+            event.preventDefault();
+            const name = form.dataset.deleteLabel || "este registro";
+            const detail = form.dataset.deleteDetail || `Se archivará ${name}. Esta acción no se puede deshacer desde esta pantalla.`;
+            let confirmed;
+
+            if (window.Swal) {
+                const result = await Swal.fire({
+                    title: "¿Eliminar registro?",
+                    text: detail,
+                    icon: "warning",
+                    showCancelButton: true,
+                    confirmButtonText: "Sí, eliminar",
+                    cancelButtonText: "Cancelar",
+                    confirmButtonColor: "#a60a17",
+                    cancelButtonColor: "#6c757d",
+                    reverseButtons: true,
+                    focusCancel: true
+                });
+                confirmed = result.isConfirmed;
+            } else {
+                confirmed = window.confirm(`¿Eliminar registro? ${detail}`);
+            }
+
+            if (confirmed) {
+                form.submit();
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

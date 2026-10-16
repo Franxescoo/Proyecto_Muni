@@ -7,6 +7,7 @@ from django.contrib.auth.models import Group
 from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 
 from organization.models import Employee, PositionFunction
 
@@ -14,12 +15,16 @@ from .forms import (
     AccountCreateForm,
     AccountEditForm,
     EmployeeForm,
-    GroupForm,
     PositionForm,
     ProfileLinkForm,
 )
 from .models import UserProfile
-from .services import sync_employee, sync_position, sync_profile
+from .services import (
+    sync_employee,
+    sync_position,
+    sync_profile,
+    sync_user_groups,
+)
 
 
 def administrator_required(view):
@@ -106,24 +111,11 @@ def save_model_form(request, form, title, on_save=None):
 
 @administrator_required
 def group_form(request, pk=None):
-    """Crea o edita un grupo y sus permisos."""
-
-    group = (
-        get_object_or_404(Group, pk=pk)
-        if pk is not None
-        else None
-    )
-
-    form = GroupForm(
-        request.POST if request.method == "POST" else None,
-        instance=group,
-    )
-
-    return save_model_form(
-        request,
-        form,
-        "Editar grupo" if pk is not None else "Crear grupo",
-    )
+    """Envía la gestión de roles al espacio dedicado de Organización."""
+    url = reverse("organization:role_list")
+    if pk is not None:
+        return redirect(f"{url}?modal=edit&id={pk}")
+    return redirect(f"{url}?modal=create")
 
 
 @administrator_required
@@ -201,6 +193,7 @@ def account_create(request):
                 user.groups.set(form.cleaned_data["groups"])
 
                 employee = form.cleaned_data["employee"]
+                employee.assigned_groups.set(form.cleaned_data["groups"])
 
                 profile = UserProfile.objects.create(
                     user=user,
@@ -254,7 +247,14 @@ def account_edit(request, pk):
         request,
         form,
         f"Editar cuenta: {user.username}",
+        on_save=sync_user_groups,
     )
+
+
+def sync_profile_access(profile):
+    sync_profile(profile)
+    if profile.employee_id:
+        sync_employee(profile.employee)
 
 
 @administrator_required
@@ -277,5 +277,5 @@ def profile_link(request, pk):
         request,
         form,
         f"Vincular cuenta: {profile.user.username}",
-        on_save=sync_profile,
+        on_save=sync_profile_access,
     )

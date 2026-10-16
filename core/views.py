@@ -17,6 +17,8 @@ def build_sections(user):
         for card in section["cards"]:
             permission = card.get("perm")
             is_monitoring = section["title"] == "Monitoreo y trazabilidad"
+            if card.get("admin_only") and not user.is_superuser:
+                continue
             if permission and not is_monitoring and not user.has_perm(permission):
                 continue
             try:
