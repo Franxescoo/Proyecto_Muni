@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -35,13 +36,12 @@ jobs:
         env:
           AWS_HOST: ${{ secrets.AWS_HOST }}
           AWS_USER: ${{ secrets.AWS_USER }}
-          DEPLOY_SHA: ${{ github.sha }}
         run: |
           set -e
           ssh -o StrictHostKeyChecking=yes \
             -i ~/.ssh/id_ed25519 \
             "$AWS_USER@$AWS_HOST" \
-            "DEPLOY_SHA=$DEPLOY_SHA bash -se" <<'EOF'
+            'bash -se' <<'EOF'
           set -e
 
           cd /home/ec2-user/Proyecto_Muni
@@ -50,10 +50,9 @@ jobs:
           git diff --quiet
           git diff --cached --quiet
 
-          # Descargar y desplegar el commit correspondiente
+          # Descargar y desplegar la ultima version de main
           git fetch origin main
-          git merge --ff-only "$DEPLOY_SHA"
-          test "$(git rev-parse HEAD)" = "$DEPLOY_SHA"
+          git merge --ff-only origin/main
 
           # Instalar dependencias de AWS
           .venv/bin/python -m pip install -r requirements-aws.txt
