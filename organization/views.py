@@ -108,7 +108,7 @@ def _handle_mutations(
 		instance = None
 		if modal_action == "edit":
 			instance = get_object_or_404(records, pk=instance_id)
-		form = form_class(request.POST, instance=instance)
+		form = form_class(request.POST, request.FILES, instance=instance)
 		_limit_form_choices(form, request.user)
 		if form.is_valid():
 			saved = form.save()

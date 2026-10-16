@@ -1,11 +1,16 @@
 from datetime import date
+from io import BytesIO
+from tempfile import TemporaryDirectory
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
-from django.test import TestCase
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase, override_settings
 from django.urls import reverse
+from PIL import Image
 
 from accounts.models import UserProfile
+from accounts.services import sync_employee
 from core.views import build_sections
 
 from .models import (
@@ -208,6 +213,64 @@ class OrganizationListTests(TestCase):
 		self.assertIn(role, user.groups.all())
 		self.assertIn(role, self.employee.assigned_groups.all())
 
+	def test_employee_creation_stores_optional_profile_photo(self):
+		image_content = BytesIO()
+		Image.new("RGB", (2, 2), color="red").save(
+			image_content,
+			format="PNG",
+		)
+		photo = SimpleUploadedFile(
+			"perfil.png",
+			image_content.getvalue(),
+			content_type="image/png",
+		)
+
+		with TemporaryDirectory() as media_root:
+			with override_settings(MEDIA_ROOT=media_root):
+				response = self.client.post(
+					reverse("organization:employee_list"),
+					{
+						"action": "create",
+						"name": "Funcionario con fotografía",
+						"delegation": self.delegation.pk,
+						"position": self.position.pk,
+						"roles": "Atención ciudadana",
+						"status": "Active",
+						"profile_photo": photo,
+					},
+				)
+				self.assertRedirects(
+					response,
+					reverse("organization:employee_list"),
+				)
+				employee = Employee.objects.get(
+					name="Funcionario con fotografía"
+				)
+				self.assertEqual(employee.profile_photo.name, "profile_photos/perfil.png")
+				listing = self.client.get(
+					reverse("organization:employee_list")
+				)
+				self.assertContains(
+					listing,
+					'alt="Foto de Funcionario con fotografía"',
+				)
+				user = get_user_model().objects.create_user(
+					username="photo_linked_account",
+					password="test-password-123",
+				)
+				profile = UserProfile.objects.create(
+					user=user,
+					employee=employee,
+					employee_code="ORG-PHOTO-LINK-001",
+					delegation=self.delegation,
+				)
+				sync_employee(employee)
+				profile.refresh_from_db()
+				self.assertEqual(
+					profile.profile_photo.name,
+					employee.profile_photo.name,
+				)
+
 	def test_linking_profile_applies_employee_roles_to_account(self):
 		role = Group.objects.create(name="Rol al vincular")
 		OrganizationRole.objects.create(
@@ -349,6 +412,11 @@ class OrganizationListTests(TestCase):
 
 	def test_employee_actions_follow_status_column_and_edit_has_confirmation(self):
 		response = self.client.get(reverse("organization:employee_list"))
+		self.assertContains(
+			response,
+			'<th scope="col"><span class="visually-hidden">Foto de perfil</span></th>',
+		)
+		self.assertContains(response, 'class="employee-photo-placeholder"')
 		self.assertContains(response, '<th class="text-end">Acciones</th>')
 
 		edit_response = self.client.get(
@@ -358,6 +426,14 @@ class OrganizationListTests(TestCase):
 		self.assertContains(edit_response, "¿Desea modificar el Funcionario?")
 		self.assertContains(edit_response, 'data-action="edit"')
 		self.assertContains(edit_response, "data-edit-confirmation=")
+
+	def test_employee_photo_form_uses_multipart_and_preview_hook(self):
+		response = self.client.get(
+			reverse("organization:employee_list"),
+			{"modal": "create"},
+		)
+		self.assertContains(response, 'enctype="multipart/form-data"')
+		self.assertContains(response, "data-profile-photo-input")
 
 	def test_employee_list_is_limited_to_users_delegation(self):
 		user = get_user_model().objects.create_user(

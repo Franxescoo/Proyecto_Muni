@@ -180,11 +180,19 @@ class EmployeeForm(AccountsEmployeeForm):
             "roles",
             "status",
             "assigned_groups",
+            "profile_photo",
         ]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         _configure_status_choices(self)
+        self.fields["profile_photo"].help_text = "Opcional. PNG, JPG o WebP."
+        self.fields["profile_photo"].widget.attrs.update(
+            {
+                "accept": "image/png,image/jpeg,image/webp",
+                "data-profile-photo-input": "",
+            }
+        )
         if self.instance.pk:
             current_group_ids = self.instance.assigned_groups.values_list(
                 "pk", flat=True

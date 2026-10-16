@@ -95,6 +95,12 @@ class Employee(BaseModel):
     name = models.CharField(max_length=150)
     roles = models.TextField()
     status = models.CharField(max_length=50)
+    profile_photo = models.ImageField(
+        upload_to="profile_photos/",
+        blank=True,
+        null=True,
+        verbose_name="Foto de perfil",
+    )
 
     class Meta:
         verbose_name = "Employee"

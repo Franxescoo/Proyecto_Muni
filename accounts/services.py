@@ -20,6 +20,9 @@ def sync_employee(employee):
 
     for profile in profiles:
         profile.user.groups.set(employee.assigned_groups.all())
+        if employee.profile_photo and not profile.profile_photo:
+            profile.profile_photo = employee.profile_photo
+            profile.save(update_fields=["profile_photo", "updated_at"])
         sync_profile(profile)
 
 

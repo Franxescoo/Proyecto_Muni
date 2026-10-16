@@ -177,7 +177,8 @@ def account_create(request):
     """Crea una cuenta y asigna los grupos elegidos."""
 
     form = AccountCreateForm(
-        request.POST if request.method == "POST" else None
+        request.POST if request.method == "POST" else None,
+        request.FILES if request.method == "POST" else None,
     )
 
     if request.method == "POST" and form.is_valid():
@@ -200,6 +201,7 @@ def account_create(request):
                     employee=employee,
                     employee_code=form.cleaned_data["employee_code"],
                     delegation=employee.delegation,
+                    profile_photo=employee.profile_photo,
                 )
 
                 sync_profile(profile)
