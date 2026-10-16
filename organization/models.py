@@ -18,6 +18,26 @@ class Delegation(BaseModel):
         return self.name
 
 
+class OrganizationRole(models.Model):
+    group = models.OneToOneField(
+        "auth.Group",
+        on_delete=models.CASCADE,
+        related_name="organization_role",
+    )
+    delegation = models.ForeignKey(
+        Delegation,
+        on_delete=models.PROTECT,
+        related_name="organization_roles",
+    )
+
+    class Meta:
+        verbose_name = "Organization role"
+        verbose_name_plural = "Organization roles"
+
+    def __str__(self):
+        return f"{self.group.name} - {self.delegation.name}"
+
+
 class PositionFunction(BaseModel):
     position_id = models.BigAutoField(primary_key=True)
     position_name = models.CharField(max_length=150)
@@ -52,6 +72,13 @@ class PositionFunction(BaseModel):
 
 class Employee(BaseModel):
     employee_id = models.BigAutoField(primary_key=True)
+
+    assigned_groups = models.ManyToManyField(
+        "auth.Group",
+        blank=True,
+        related_name="assigned_employees",
+        verbose_name="Roles asignados",
+    )
 
     delegation = models.ForeignKey(
         Delegation,

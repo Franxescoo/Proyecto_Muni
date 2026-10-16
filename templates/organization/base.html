@@ -21,6 +21,9 @@
     .organization-form-dialog .modal-body { max-height: min(68vh, 650px); overflow-y: auto; overscroll-behavior: contain; }
     .organization-form-dialog .form-control, .organization-form-dialog .form-select { font-size: .9rem; min-height: 2.4rem; padding: .4rem .65rem; }
     .organization-form-dialog textarea.form-control { max-height: 14rem; min-height: 5rem; overflow-y: auto; resize: vertical; }
+    .organization-choice-list { max-height: 16rem; overflow-y: auto; border: 1px solid #dee2e6; border-radius: .4rem; padding: .75rem; }
+    .organization-choice-list input[type="checkbox"] { accent-color: #138d56; margin-right: .45rem; }
+    .organization-role { background: #edf5f0; border-radius: .35rem; color: #176b43; display: inline-block; font-size: .78rem; font-weight: 600; margin: .1rem .15rem .1rem 0; padding: .25rem .5rem; }
     @media (max-width: 767.98px) { .organization-hero { padding: 1.25rem; } .organization-hero h1 { font-size: 1.5rem; } }
 </style>
 {% endblock %}
@@ -39,6 +42,7 @@
         <a class="nav-link {% if active_page == 'employees' %}active{% endif %}" href="{% url 'organization:employee_list' %}"><i class="bi bi-people"></i><span>Funcionarios</span></a>
         <a class="nav-link {% if active_page == 'delegations' %}active{% endif %}" href="{% url 'organization:delegation_list' %}"><i class="bi bi-building"></i><span>Delegaciones</span></a>
         <a class="nav-link {% if active_page == 'positions' %}active{% endif %}" href="{% url 'organization:position_list' %}"><i class="bi bi-person-badge"></i><span>Cargos y funciones</span></a>
+        {% if user.is_superuser %}<a class="nav-link {% if active_page == 'roles' %}active{% endif %}" href="{% url 'organization:role_list' %}"><i class="bi bi-shield-lock"></i><span>Roles y Permisos</span></a>{% endif %}
     </nav>
 </aside>
 {% endblock %}
@@ -158,7 +162,7 @@ document.addEventListener("DOMContentLoaded", function () {
         form.addEventListener("submit", async function (event) {
             event.preventDefault();
             const name = form.dataset.deleteLabel || "este registro";
-            const detail = `Se archivará ${name}. Esta acción no se puede deshacer desde esta pantalla.`;
+            const detail = form.dataset.deleteDetail || `Se archivará ${name}. Esta acción no se puede deshacer desde esta pantalla.`;
             let confirmed;
 
             if (window.Swal) {

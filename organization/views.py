@@ -1,13 +1,17 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
+from django.contrib.auth.models import Group
 from django.core.exceptions import PermissionDenied
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
+from accounts.services import sync_employee
+
 from .forms import (
 	DelegationForm,
 	EmployeeForm,
+	OrganizationRoleForm,
 	PositionForm,
 	mark_invalid_fields,
 )
@@ -62,6 +66,12 @@ def _limit_form_choices(form, user):
 			pk=_delegation_id(user),
 			deleted_at__isnull=True,
 		)
+		form.fields["assigned_groups"].disabled = True
+		form.fields["assigned_groups"].queryset = (
+			form.instance.assigned_groups.all()
+			if form.instance.pk
+			else Group.objects.none()
+		)
 
 
 def _handle_mutations(
@@ -101,7 +111,9 @@ def _handle_mutations(
 		form = form_class(request.POST, instance=instance)
 		_limit_form_choices(form, request.user)
 		if form.is_valid():
-			form.save()
+			saved = form.save()
+			if isinstance(form, EmployeeForm):
+				sync_employee(saved)
 			verb = "creado" if modal_action == "create" else "actualizado"
 			messages.success(
 				request,
@@ -141,10 +153,97 @@ def _handle_mutations(
 	}
 
 
+@login_required
+def role_list(request):
+	if not request.user.is_superuser:
+		raise PermissionDenied(
+			"Solo el administrador puede gestionar roles y permisos."
+		)
+
+	groups = Group.objects.select_related(
+		"organization_role__delegation"
+	).annotate(
+		permission_count=Count("permissions", distinct=True),
+		account_count=Count("user", distinct=True),
+		employee_count=Count("assigned_employees", distinct=True),
+	).order_by("name")
+	form = None
+	modal_action = ""
+	object_id = ""
+	modal_open = False
+
+	if request.method == "POST":
+		modal_action = request.POST.get("action", "")
+		object_id = request.POST.get("object_id", "")
+		if modal_action == "delete":
+			group = get_object_or_404(Group, pk=object_id)
+			if group.positions.exists():
+				messages.error(
+					request,
+					"No se puede eliminar este rol mientras esté asignado a un cargo.",
+				)
+				return redirect("organization:role_list")
+			group.delete()
+			messages.success(
+				request,
+				"Rol eliminado y desasignado de cuentas y funcionarios.",
+			)
+			return redirect("organization:role_list")
+
+		if modal_action not in ("create", "edit"):
+			messages.error(request, "La operación solicitada no es válida.")
+			return redirect("organization:role_list")
+
+		instance = None
+		if modal_action == "edit":
+			instance = get_object_or_404(Group, pk=object_id)
+		form = OrganizationRoleForm(request.POST, group=instance)
+		if form.is_valid():
+			form.save()
+			messages.success(
+				request,
+				"Rol y permisos guardados correctamente.",
+			)
+			return redirect("organization:role_list")
+		mark_invalid_fields(form)
+		modal_open = True
+	else:
+		modal_action = request.GET.get("modal", "")
+		object_id = request.GET.get("id", "")
+		if modal_action == "create":
+			form = OrganizationRoleForm()
+			modal_open = True
+		elif modal_action == "edit":
+			group = get_object_or_404(Group, pk=object_id)
+			form = OrganizationRoleForm(group=group)
+			modal_open = True
+
+	context = {
+		"roles": groups,
+		"total_roles": groups.count(),
+		"total_role_permissions": sum(
+			role.permission_count for role in groups
+		),
+		"form": form,
+		"modal_open": modal_open,
+		"modal_action": modal_action,
+		"modal_title": "Crear rol" if modal_action == "create" else "Modificar rol",
+		"edit_confirmation": "¿Desea modificar el rol y sus permisos?",
+		"object_id": object_id if modal_action == "edit" else "",
+		"active_page": "roles",
+		"page_title": "Roles y Permisos",
+		"page_description": "Crea roles y define los permisos que se asignarán a funcionarios y cuentas.",
+		"page_icon": "bi-shield-lock",
+	}
+	return render(request, "organization/roles.html", context)
+
+
 @organization_access("organization.view_employee")
 def employee_list(request):
 	records = _scoped_queryset(
-		Employee.objects.select_related("delegation", "position"),
+		Employee.objects.select_related("delegation", "position").prefetch_related(
+			"assigned_groups"
+		),
 		request.user,
 		"delegation_id",
 	)

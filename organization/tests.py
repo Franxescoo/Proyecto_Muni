@@ -1,13 +1,19 @@
 from datetime import date
 
 from django.contrib.auth import get_user_model
-from django.contrib.auth.models import Permission
+from django.contrib.auth.models import Group, Permission
 from django.test import TestCase
 from django.urls import reverse
 
 from accounts.models import UserProfile
+from core.views import build_sections
 
-from .models import Delegation, Employee, PositionFunction
+from .models import (
+	Delegation,
+	Employee,
+	OrganizationRole,
+	PositionFunction,
+)
 
 
 class OrganizationListTests(TestCase):
@@ -30,7 +36,7 @@ class OrganizationListTests(TestCase):
 			validity_start=date(2026, 1, 1),
 			validity_end=date(2026, 12, 31),
 		)
-		Employee.objects.create(
+		self.employee = Employee.objects.create(
 			name="Funcionario Centro",
 			delegation=self.delegation,
 			position=self.position,
@@ -76,6 +82,270 @@ class OrganizationListTests(TestCase):
 				self.assertContains(response, "?modal=create")
 				self.assertContains(response, "data-organization-delete")
 				self.assertContains(response, "?modal=edit&amp;id=")
+
+	def test_roles_permissions_card_is_only_visible_to_superusers(self):
+		organization_section = next(
+			section
+			for section in build_sections(self.admin)
+			if section["title"] == "Organización"
+		)
+		roles_card = next(
+			card
+			for card in organization_section["cards"]
+			if card["title"] == "Roles y Permisos"
+		)
+		self.assertEqual(roles_card["href"], reverse("organization:role_list"))
+
+		user = get_user_model().objects.create_user(
+			username="organization_manager",
+			password="test-password-123",
+		)
+		user.user_permissions.set(
+			Permission.objects.filter(
+				content_type__app_label="organization",
+				codename__in=[
+					"view_employee",
+					"view_delegation",
+					"view_positionfunction",
+				],
+			)
+		)
+		sections = build_sections(user)
+		organization_section = next(
+			section
+			for section in sections
+			if section["title"] == "Organización"
+		)
+		self.assertNotIn(
+			"Roles y Permisos",
+			[card["title"] for card in organization_section["cards"]],
+		)
+
+	def test_role_page_is_admin_only_and_manages_permissions(self):
+		role_url = reverse("organization:role_list")
+		user = get_user_model().objects.create_user(
+			username="non_admin",
+			password="test-password-123",
+		)
+		self.client.force_login(user)
+		self.assertEqual(self.client.get(role_url).status_code, 403)
+
+		self.client.force_login(self.admin)
+		self.assertEqual(self.client.get(role_url).status_code, 200)
+		permission = Permission.objects.get(
+			content_type__app_label="organization",
+			codename="view_employee",
+		)
+		response = self.client.post(
+			role_url,
+			{
+				"action": "create",
+				"name": "Gestor Territorial",
+				"delegation": self.delegation.pk,
+				"permissions": [permission.pk],
+			},
+		)
+		self.assertRedirects(response, role_url)
+		role = Group.objects.get(name="Gestor Territorial")
+		self.assertIn(permission, role.permissions.all())
+
+		response = self.client.post(
+			role_url,
+			{
+				"action": "edit",
+				"object_id": role.pk,
+				"name": "Gestor de Delegación",
+				"delegation": self.delegation.pk,
+				"permissions": [permission.pk],
+			},
+		)
+		self.assertRedirects(response, role_url)
+		role.refresh_from_db()
+		self.assertEqual(role.name, "Gestor de Delegación")
+
+		response = self.client.post(
+			role_url,
+			{"action": "delete", "object_id": role.pk},
+		)
+		self.assertRedirects(response, role_url)
+		self.assertFalse(Group.objects.filter(pk=role.pk).exists())
+
+		protected_role = Group.objects.create(name="Rol protegido")
+		OrganizationRole.objects.create(
+			group=protected_role,
+			delegation=self.delegation,
+		)
+		PositionFunction.objects.filter(pk=self.position.pk).update(
+			group=protected_role
+		)
+		response = self.client.post(
+			role_url,
+			{"action": "delete", "object_id": protected_role.pk},
+		)
+		self.assertRedirects(response, role_url)
+		self.assertTrue(Group.objects.filter(pk=protected_role.pk).exists())
+
+	def test_account_creation_assigns_selected_role_to_linked_employee(self):
+		role = Group.objects.create(name="Cuenta territorial")
+		OrganizationRole.objects.create(
+			group=role,
+			delegation=self.delegation,
+		)
+		response = self.client.post(
+			reverse("accounts:account_create"),
+			{
+				"username": "new_role_account",
+				"email": "new-role@example.com",
+				"employee": self.employee.pk,
+				"employee_code": "ORG-NEW-ACCOUNT-001",
+				"groups": [role.pk],
+				"password1": "Org-Role-Test-9271!",
+				"password2": "Org-Role-Test-9271!",
+			},
+		)
+		self.assertRedirects(response, reverse("accounts:access_home"))
+		user = get_user_model().objects.get(username="new_role_account")
+		self.assertIn(role, user.groups.all())
+		self.assertIn(role, self.employee.assigned_groups.all())
+
+	def test_linking_profile_applies_employee_roles_to_account(self):
+		role = Group.objects.create(name="Rol al vincular")
+		OrganizationRole.objects.create(
+			group=role,
+			delegation=self.delegation,
+		)
+		self.employee.assigned_groups.add(role)
+		user = get_user_model().objects.create_user(
+			username="profile_to_link",
+			password="test-password-123",
+		)
+		profile = UserProfile.objects.create(
+			user=user,
+			employee_code="ORG-LINK-PROFILE-001",
+		)
+
+		response = self.client.post(
+			reverse("accounts:profile_link", args=[profile.pk]),
+			{"employee": self.employee.pk},
+		)
+
+		self.assertRedirects(response, reverse("accounts:access_home"))
+		self.assertIn(role, user.groups.all())
+
+	def test_employee_roles_sync_with_linked_account_in_both_directions(self):
+		role = Group.objects.create(name="Analista con acceso")
+		other_role = Group.objects.create(name="Revisor")
+		OrganizationRole.objects.create(
+			group=role,
+			delegation=self.delegation,
+		)
+		OrganizationRole.objects.create(
+			group=other_role,
+			delegation=self.delegation,
+		)
+		user = get_user_model().objects.create_user(
+			username="linked_employee",
+			password="test-password-123",
+		)
+		UserProfile.objects.create(
+			user=user,
+			employee=self.employee,
+			employee_code="ORG-LINK-001",
+			delegation=self.delegation,
+		)
+
+		employee_url = reverse("organization:employee_list")
+		response = self.client.post(
+			employee_url,
+			{
+				"action": "edit",
+				"object_id": self.employee.pk,
+				"name": self.employee.name,
+				"delegation": self.delegation.pk,
+				"position": self.position.pk,
+				"roles": self.employee.roles,
+				"status": self.employee.status,
+				"assigned_groups": [role.pk],
+			},
+		)
+		self.assertRedirects(response, employee_url)
+		self.assertQuerySetEqual(user.groups.all(), [role], transform=lambda item: item)
+
+		response = self.client.post(
+			reverse("accounts:account_edit", args=[user.pk]),
+			{
+				"username": user.username,
+				"email": "linked@example.com",
+				"is_active": "on",
+				"groups": [other_role.pk],
+			},
+		)
+		self.assertRedirects(response, reverse("accounts:access_home"))
+		self.employee.refresh_from_db()
+		self.assertQuerySetEqual(
+			self.employee.assigned_groups.all(),
+			[other_role],
+			transform=lambda item: item,
+		)
+
+	def test_employee_cannot_receive_role_from_another_delegation(self):
+		role = Group.objects.create(name="Rol del Sur")
+		OrganizationRole.objects.create(
+			group=role,
+			delegation=self.other_delegation,
+		)
+
+		response = self.client.post(
+			reverse("organization:employee_list"),
+			{
+				"action": "create",
+				"name": "Funcionario con ámbito cruzado",
+				"delegation": self.delegation.pk,
+				"position": self.position.pk,
+				"roles": "Análisis territorial",
+				"status": "Active",
+				"assigned_groups": [role.pk],
+			},
+		)
+
+		self.assertEqual(response.status_code, 200)
+		self.assertIn(
+			"assigned_groups",
+			response.context["form"].errors,
+		)
+		self.assertFalse(
+			Employee.objects.filter(
+				name="Funcionario con ámbito cruzado"
+			).exists()
+		)
+
+	def test_account_cannot_receive_role_from_another_delegation(self):
+		role = Group.objects.create(name="Cuenta del Sur")
+		OrganizationRole.objects.create(
+			group=role,
+			delegation=self.other_delegation,
+		)
+
+		response = self.client.post(
+			reverse("accounts:account_create"),
+			{
+				"username": "wrong_delegation_account",
+				"email": "wrong-role@example.com",
+				"employee": self.employee.pk,
+				"employee_code": "ORG-WRONG-ROLE-001",
+				"groups": [role.pk],
+				"password1": "Org-Role-Test-9271!",
+				"password2": "Org-Role-Test-9271!",
+			},
+		)
+
+		self.assertEqual(response.status_code, 200)
+		self.assertIn("groups", response.context["form"].errors)
+		self.assertFalse(
+			get_user_model().objects.filter(
+				username="wrong_delegation_account"
+			).exists()
+		)
 
 	def test_employee_actions_follow_status_column_and_edit_has_confirmation(self):
 		response = self.client.get(reverse("organization:employee_list"))

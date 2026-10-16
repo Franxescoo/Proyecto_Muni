@@ -49,6 +49,9 @@ MODULES = [
             {"title": "Cargos y funciones", "icon": "bi-person-badge",
              "url": "organization:position_list",
              "perm": "organization.view_positionfunction"},
+              {"title": "Roles y Permisos", "icon": "bi-shield-lock",
+             "url": "organization:role_list",
+               "admin_only": True},
         ],
     },
     {

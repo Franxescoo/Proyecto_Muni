@@ -1,5 +1,8 @@
 from django import forms
+from django.contrib.auth.models import Group, Permission
 from django.core.exceptions import ValidationError
+from django.db.models import Q
+from django.db import transaction
 
 from accounts.forms import (
     BootstrapMixin,
@@ -7,7 +10,7 @@ from accounts.forms import (
     PositionForm as AccountsPositionForm,
 )
 
-from .models import Delegation, PositionFunction
+from .models import Delegation, OrganizationRole, PositionFunction
 
 STATUS_CHOICES = (
     ("", "Selecciona un estado"),
@@ -33,6 +36,75 @@ def mark_invalid_fields(form):
         if "is-invalid" not in classes:
             classes.append("is-invalid")
         field.widget.attrs["class"] = " ".join(classes)
+
+
+class OrganizationRoleForm(BootstrapMixin, forms.Form):
+    name = forms.CharField(
+        label="Nombre del rol",
+        max_length=150,
+        min_length=3,
+    )
+    delegation = forms.ModelChoiceField(
+        label="Delegación",
+        queryset=Delegation.objects.filter(
+            deleted_at__isnull=True
+        ).order_by("name"),
+    )
+    permissions = forms.ModelMultipleChoiceField(
+        label="Permisos",
+        queryset=Permission.objects.filter(
+            content_type__app_label__in=[
+                "organization",
+                "planning_measurements",
+                "registration_validation",
+                "monitoring_traceability",
+            ],
+        ).select_related("content_type").order_by(
+            "content_type__app_label",
+            "content_type__model",
+            "codename",
+        ),
+        widget=forms.CheckboxSelectMultiple,
+        required=False,
+        help_text="Selecciona las acciones permitidas para este rol.",
+    )
+
+    def __init__(self, *args, **kwargs):
+        self.group = kwargs.pop("group", None)
+        initial = dict(kwargs.pop("initial", {}))
+        bound_data = args[0] if args else kwargs.get("data")
+        if self.group and bound_data is None:
+            initial.setdefault("name", self.group.name)
+            initial.setdefault("permissions", self.group.permissions.all())
+            role = OrganizationRole.objects.filter(
+                group=self.group
+            ).select_related("delegation").first()
+            if role:
+                initial.setdefault("delegation", role.delegation_id)
+        kwargs["initial"] = initial
+        super().__init__(*args, **kwargs)
+        self.apply_bootstrap()
+
+    def clean_name(self):
+        name = self.cleaned_data["name"].strip()
+        duplicate = Group.objects.filter(name__iexact=name)
+        if self.group:
+            duplicate = duplicate.exclude(pk=self.group.pk)
+        if duplicate.exists():
+            raise ValidationError("Ya existe un rol con ese nombre.")
+        return name
+
+    def save(self):
+        with transaction.atomic():
+            group = self.group or Group()
+            group.name = self.cleaned_data["name"]
+            group.save()
+            group.permissions.set(self.cleaned_data["permissions"])
+            OrganizationRole.objects.update_or_create(
+                group=group,
+                defaults={"delegation": self.cleaned_data["delegation"]},
+            )
+        return group
 
 
 class DelegationForm(BootstrapMixin, forms.ModelForm):
@@ -92,13 +164,44 @@ class DelegationForm(BootstrapMixin, forms.ModelForm):
 
 class EmployeeForm(AccountsEmployeeForm):
     status = forms.ChoiceField(choices=STATUS_CHOICES, label="Estado")
+    assigned_groups = forms.ModelMultipleChoiceField(
+        label="Roles asignados",
+        queryset=Group.objects.order_by("name"),
+        widget=forms.CheckboxSelectMultiple,
+        required=False,
+        help_text="Los permisos de estos roles se aplican a la cuenta vinculada.",
+    )
 
     class Meta(AccountsEmployeeForm.Meta):
-        pass
+        fields = [
+            "name",
+            "delegation",
+            "position",
+            "roles",
+            "status",
+            "assigned_groups",
+        ]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         _configure_status_choices(self)
+        if self.instance.pk:
+            current_group_ids = self.instance.assigned_groups.values_list(
+                "pk", flat=True
+            )
+            self.fields["assigned_groups"].queryset = Group.objects.filter(
+                Q(organization_role__delegation_id=self.instance.delegation_id)
+                | Q(pk__in=current_group_ids)
+            ).order_by("name")
+        else:
+            self.fields["assigned_groups"].queryset = Group.objects.filter(
+                organization_role__isnull=False
+            ).select_related(
+                "organization_role__delegation"
+            ).order_by(
+                "organization_role__delegation__name",
+                "name",
+            )
 
     def clean_name(self):
         name = self.cleaned_data["name"].strip()
@@ -115,6 +218,31 @@ class EmployeeForm(AccountsEmployeeForm):
                 "La descripción de funciones debe tener al menos 3 caracteres."
             )
         return roles
+
+    def clean_assigned_groups(self):
+        groups = self.cleaned_data["assigned_groups"]
+        delegation = self.cleaned_data.get("delegation")
+        if delegation is None:
+            return groups
+
+        existing_ids = set()
+        if self.instance.pk:
+            existing_ids = set(
+                self.instance.assigned_groups.values_list("pk", flat=True)
+            )
+
+        for group in groups:
+            role = OrganizationRole.objects.filter(group=group).first()
+            if role is None:
+                if group.pk not in existing_ids:
+                    raise ValidationError(
+                        "Asigna primero este rol a una delegación."
+                    )
+            elif role.delegation_id != delegation.pk:
+                raise ValidationError(
+                    "Solo puedes asignar roles de la delegación del funcionario."
+                )
+        return groups
 
 
 class PositionForm(AccountsPositionForm):
