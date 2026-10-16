@@ -182,8 +182,7 @@
 
     /* =========================================
        MODALES RESPONSIVOS
-       Solución general para formularios donde
-       <form> contiene header, body y footer.
+       Se conserva la corrección anterior
        ========================================= */
 
     .modal .modal-dialog {
@@ -198,12 +197,6 @@
         overflow: hidden;
     }
 
-    /*
-       El formulario necesita comportarse como
-       un contenedor flex para que el contenido
-       pueda desplazarse sin ocultar los botones.
-    */
-
     .modal .modal-dialog .modal-content > form {
         display: flex;
         flex-direction: column;
@@ -213,9 +206,7 @@
         overflow: hidden;
     }
 
-    /*
-       Cabecera visible y sin compresión.
-    */
+    /* Cabecera fija */
 
     .modal .modal-dialog .modal-content > form > .modal-header {
         flex: 0 0 auto;
@@ -223,10 +214,7 @@
         z-index: 2;
     }
 
-    /*
-       Solamente el cuerpo del formulario
-       tendrá desplazamiento vertical.
-    */
+    /* Contenido desplazable */
 
     .modal .modal-dialog .modal-content > form > .modal-body {
         flex: 1 1 auto;
@@ -236,9 +224,7 @@
         overscroll-behavior: contain;
     }
 
-    /*
-       Pie del formulario siempre accesible.
-    */
+    /* Botones inferiores visibles */
 
     .modal .modal-dialog .modal-content > form > .modal-footer {
         display: flex;
@@ -252,21 +238,13 @@
         z-index: 2;
     }
 
-    /*
-       Compatibilidad con modales que no
-       contienen un formulario envolvente.
-    */
+    /* Compatibilidad con otros modales */
 
     .modal .modal-dialog .modal-content > .modal-body {
         min-height: 0;
         overflow-y: auto;
         overflow-x: hidden;
     }
-
-    /*
-       Evita que mensajes de error o textos
-       largos deformen el ancho del modal.
-    */
 
     .modal .modal-body {
         overflow-wrap: anywhere;
@@ -359,8 +337,9 @@
 
     </div>
 
-
     <nav aria-label="Navegación de Registro y validación">
+
+        <!-- Inicio -->
 
         <a class="nav-link"
            href="{% url 'home' %}">
@@ -372,6 +351,8 @@
 
         </a>
 
+
+        <!-- Actividades -->
 
         {% if perms.registration_validation.view_activity %}
 
@@ -388,6 +369,8 @@
         {% endif %}
 
 
+        <!-- Evidencias -->
+
         {% if perms.registration_validation.view_evidence %}
 
         <a class="nav-link{% if request.resolver_match.url_name == 'evidence_list' or request.resolver_match.url_name == 'evidence_create' or request.resolver_match.url_name == 'evidence_update' %} active{% endif %}"
@@ -403,6 +386,8 @@
         {% endif %}
 
 
+        <!-- Validaciones -->
+
         {% if perms.registration_validation.view_validation %}
 
         <a class="nav-link{% if request.resolver_match.url_name == 'validation_list' or request.resolver_match.url_name == 'validation_create' or request.resolver_match.url_name == 'validation_update' %} active{% endif %}"
@@ -417,6 +402,42 @@
 
         {% endif %}
 
+
+        <!-- Tipos de atención -->
+
+        {% if perms.registration_validation.view_attentiontype %}
+
+        <a class="nav-link{% if request.resolver_match.url_name == 'attention_type_list' or request.resolver_match.url_name == 'attention_type_create' or request.resolver_match.url_name == 'attention_type_update' %} active{% endif %}"
+           href="{% url 'registration:attention_type_list' %}">
+
+            <i class="bi bi-card-checklist"
+               aria-hidden="true"></i>
+
+            Tipos de atención
+
+        </a>
+
+        {% endif %}
+
+
+        <!-- Sub Atención: NUEVA OPCIÓN -->
+
+        {% if perms.registration_validation.view_subattention %}
+
+        <a class="nav-link{% if request.resolver_match.url_name == 'sub_attention_list' or request.resolver_match.url_name == 'sub_attention_create' or request.resolver_match.url_name == 'sub_attention_update' %} active{% endif %}"
+           href="{% url 'registration:sub_attention_list' %}">
+
+            <i class="bi bi-diagram-3"
+               aria-hidden="true"></i>
+
+            Sub Atención
+
+        </a>
+
+        {% endif %}
+
+
+        <!-- Gestión de accesos -->
 
         {% if user.is_superuser %}
 
@@ -457,6 +478,14 @@
         const validationEditPattern =
             /^\/registration\/validations\/\d+\/edit\/?$/;
 
+        const attentionTypeEditPattern =
+            /^\/registration\/attention-types\/\d+\/edit\/?$/;
+
+        /* Nuevo: edición de Sub Atención */
+
+        const subAttentionEditPattern =
+            /^\/registration\/sub-attentions\/\d+\/edit\/?$/;
+
 
         const isFormPage =
             currentPath ===
@@ -465,20 +494,25 @@
                 "{% url 'registration:evidence_create' %}"
             || currentPath ===
                 "{% url 'registration:validation_create' %}"
+            || currentPath ===
+                "{% url 'registration:attention_type_create' %}"
+            || currentPath ===
+                "{% url 'registration:sub_attention_create' %}"
             || activityEditPattern.test(currentPath)
             || evidenceEditPattern.test(currentPath)
-            || validationEditPattern.test(currentPath);
+            || validationEditPattern.test(currentPath)
+            || attentionTypeEditPattern.test(currentPath)
+            || subAttentionEditPattern.test(currentPath);
 
 
         if (!isFormPage) {
             return;
         }
 
+
         /*
-         * Conservamos el comportamiento actual:
-         * evitar que Chrome muestre brevemente
-         * un modal antiguo al regresar mediante
-         * el historial del navegador.
+         * Conservamos el comportamiento anterior
+         * del historial del navegador.
          */
 
         window.addEventListener(

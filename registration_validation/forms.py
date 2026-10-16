@@ -1,25 +1,26 @@
-
 from django import forms
 from django.core.validators import FileExtensionValidator
-
-from organization.models import Employee
+from django.db.models import Q
+from organization.models import Delegation, Employee
 from planning_measurements.models import Goal, Period
-
 from .models import (
     Activity,
     Evidence,
     Validation,
+    AttentionType,
+    SubAttention,
+    AttentionEntry,
     MIN_EVIDENCE_FILES,
     MAX_EVIDENCE_FILES,
     MAX_EVIDENCE_TOTAL_SIZE,
     EVIDENCE_ALLOWED_EXTENSIONS,
 )
 
-
 # ---------------------------------------------------------
+
 # Estilos reutilizables
-# ---------------------------------------------------------
 
+# ---------------------------------------------------------
 
 class BootstrapMixin:
     """Agrega clases de Bootstrap a los campos del formulario."""
@@ -28,24 +29,20 @@ class BootstrapMixin:
         for field in self.fields.values():
             if isinstance(field.widget, forms.Select):
                 css_class = "form-select"
-
             elif isinstance(field.widget, forms.CheckboxInput):
                 css_class = "form-check-input"
-
             else:
                 css_class = "form-control"
-
             field.widget.attrs["class"] = css_class
 
-
 # ---------------------------------------------------------
+
 # Campos para múltiples archivos
-# ---------------------------------------------------------
 
+# ---------------------------------------------------------
 
 class MultipleFileInput(forms.ClearableFileInput):
     allow_multiple_selected = True
-
 
 class MultipleFileField(forms.FileField):
     """
@@ -60,23 +57,19 @@ class MultipleFileField(forms.FileField):
                     "Debes seleccionar archivos."
                 )
             return []
-
         if not isinstance(data, (list, tuple)):
             data = [data]
-
         cleaned_files = []
-
         for uploaded_file in data:
             cleaned_file = super().clean(uploaded_file)
             cleaned_files.append(cleaned_file)
-
         return cleaned_files
 
-
 # ---------------------------------------------------------
+
 # Formulario de Actividades
-# ---------------------------------------------------------
 
+# ---------------------------------------------------------
 
 class ActivityForm(BootstrapMixin, forms.ModelForm):
     STATUS_CHOICES = [
@@ -84,15 +77,12 @@ class ActivityForm(BootstrapMixin, forms.ModelForm):
         ("In progress", "En progreso"),
         ("Completed", "Completada"),
     ]
-
     status = forms.ChoiceField(
         label="Estado",
         choices=STATUS_CHOICES,
     )
-
     class Meta:
         model = Activity
-
         fields = [
             "goal",
             "author",
@@ -103,7 +93,6 @@ class ActivityForm(BootstrapMixin, forms.ModelForm):
             "phone",
             "status",
         ]
-
         labels = {
             "goal": "Meta",
             "author": "Funcionario",
@@ -114,23 +103,16 @@ class ActivityForm(BootstrapMixin, forms.ModelForm):
             "phone": "Teléfono",
             "status": "Estado",
         }
-
         widgets = {
             "date": forms.DateInput(
-                attrs={
-                    "type": "date",
-                },
+                attrs={"type": "date"},
                 format="%Y-%m-%d",
             ),
             "request_problem": forms.Textarea(
-                attrs={
-                    "rows": 3,
-                },
+                attrs={"rows": 3},
             ),
             "action": forms.Textarea(
-                attrs={
-                    "rows": 3,
-                },
+                attrs={"rows": 3},
             ),
             "contact": forms.TextInput(
                 attrs={
@@ -144,14 +126,8 @@ class ActivityForm(BootstrapMixin, forms.ModelForm):
             ),
         }
 
-    def __init__(
-        self,
-        *args,
-        user=None,
-        **kwargs,
-    ):
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
-
         goals = (
             Goal.objects
             .filter(
@@ -165,7 +141,6 @@ class ActivityForm(BootstrapMixin, forms.ModelForm):
             )
             .order_by("item")
         )
-
         employees = (
             Employee.objects
             .filter(
@@ -177,78 +152,61 @@ class ActivityForm(BootstrapMixin, forms.ModelForm):
             )
             .order_by("name")
         )
-
         if user is not None and not user.is_superuser:
             profile = getattr(user, "profile", None)
-
             delegation_id = (
                 profile.delegation_id
                 if profile is not None
                 else None
             )
-
             if delegation_id is None:
                 goals = goals.none()
                 employees = employees.none()
-
             else:
                 goals = goals.filter(
                     employee__delegation_id=delegation_id,
                 )
-
                 employees = employees.filter(
                     delegation_id=delegation_id,
                 )
-
         self.fields["goal"].queryset = goals
         self.fields["author"].queryset = employees
-
         self._apply_bootstrap()
 
     def clean(self):
         cleaned_data = super().clean()
-
         goal = cleaned_data.get("goal")
-
         if goal is not None:
             period = goal.period
-
             if period.deleted_at is not None:
                 raise forms.ValidationError(
                     "No se puede registrar o modificar "
                     "una actividad asociada a un período "
                     "archivado."
                 )
-
             if period.status == Period.Status.CLOSED:
                 raise forms.ValidationError(
                     "No se puede registrar o modificar "
                     "una actividad asociada a un período "
                     "cerrado."
                 )
-
         return cleaned_data
 
-
 # ---------------------------------------------------------
+
 # Formulario de Evidencias
-# ---------------------------------------------------------
 
+# ---------------------------------------------------------
 
 class EvidenceForm(BootstrapMixin, forms.ModelForm):
     date = forms.DateTimeField(
         label="Fecha y hora",
-        input_formats=[
-            "%Y-%m-%dT%H:%M",
-        ],
+        input_formats=["%Y-%m-%dT%H:%M"],
         widget=forms.DateTimeInput(
-            attrs={
-                "type": "datetime-local",
-            },
+            attrs={"type": "datetime-local"},
             format="%Y-%m-%dT%H:%M",
         ),
     )
-
     new_files = MultipleFileField(
         label="Archivos de evidencia",
         required=False,
@@ -269,10 +227,8 @@ class EvidenceForm(BootstrapMixin, forms.ModelForm):
             "Formatos permitidos: PDF, JPG, JPEG, PNG, DOC y DOCX."
         ),
     )
-
     class Meta:
         model = Evidence
-
         fields = [
             "code",
             "activity",
@@ -281,7 +237,6 @@ class EvidenceForm(BootstrapMixin, forms.ModelForm):
             "date",
             "review_status",
         ]
-
         labels = {
             "code": "Código",
             "activity": "Actividad",
@@ -290,33 +245,20 @@ class EvidenceForm(BootstrapMixin, forms.ModelForm):
             "date": "Fecha y hora",
             "review_status": "Estado de revisión",
         }
-
         widgets = {
             "code": forms.TextInput(
-                attrs={
-                    "placeholder": "Ej.: EVID-001",
-                },
+                attrs={"placeholder": "Ej.: EVID-001"},
             ),
             "file_link": forms.TextInput(
-                attrs={
-                    "placeholder": "https://...",
-                },
+                attrs={"placeholder": "https://..."},
             ),
             "review_status": forms.TextInput(
-                attrs={
-                    "placeholder": "Ej.: Pending",
-                },
+                attrs={"placeholder": "Ej.: Pending"},
             ),
         }
 
-    def __init__(
-        self,
-        *args,
-        user=None,
-        **kwargs,
-    ):
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
-
         activities = (
             Activity.objects
             .filter(
@@ -336,7 +278,6 @@ class EvidenceForm(BootstrapMixin, forms.ModelForm):
                 "activity_id",
             )
         )
-
         employees = (
             Employee.objects
             .filter(
@@ -348,89 +289,65 @@ class EvidenceForm(BootstrapMixin, forms.ModelForm):
             )
             .order_by("name")
         )
-
         if user is not None and not user.is_superuser:
             profile = getattr(user, "profile", None)
-
             delegation_id = (
                 profile.delegation_id
                 if profile is not None
                 else None
             )
-
             if delegation_id is None:
                 activities = activities.none()
                 employees = employees.none()
-
             else:
                 activities = activities.filter(
                     author__delegation_id=delegation_id,
                 )
-
                 employees = employees.filter(
                     delegation_id=delegation_id,
                 )
-
         self.fields["activity"].queryset = activities
         self.fields["author"].queryset = employees
-
         self.fields["file_link"].required = False
-
-        # La vista utilizará esta colección al guardar
-        # para eliminar los adjuntos seleccionados.
+        # Archivos que se seleccionan para quitar.
         self.files_to_remove = []
-
         # Archivos que ya pertenecen a esta evidencia.
         self.existing_evidence_files = []
-
         if self.instance.pk:
             self.existing_evidence_files = list(
                 self.instance.files.filter(
                     deleted_at__isnull=True,
                 )
             )
-
         self._apply_bootstrap()
 
     def clean(self):
         cleaned_data = super().clean()
-
         activity = cleaned_data.get("activity")
         uploaded_files = cleaned_data.get("new_files", [])
-
         if activity is not None:
             period = activity.goal.period
-
             if period.deleted_at is not None:
                 raise forms.ValidationError(
                     "No se puede registrar o modificar "
                     "una evidencia asociada a un período "
                     "archivado."
                 )
-
             if period.status == Period.Status.CLOSED:
                 raise forms.ValidationError(
                     "No se puede registrar o modificar "
                     "una evidencia asociada a un período "
                     "cerrado."
                 )
-
-        # Si hubo errores al validar los archivos nuevos,
-        # no continuamos con el cálculo de cantidad y peso.
         if "new_files" in self.errors:
             return cleaned_data
-
-        # Los IDs enviados para eliminar adjuntos serán
-        # comprobados contra los archivos de ESTA evidencia.
         raw_ids = (
             self.data.getlist("remove_file_ids")
             if hasattr(self.data, "getlist")
             else self.data.get("remove_file_ids", [])
         )
-
         if isinstance(raw_ids, str):
             raw_ids = [raw_ids]
-
         try:
             ids_to_remove = {
                 int(value) for value in raw_ids
@@ -439,125 +356,93 @@ class EvidenceForm(BootstrapMixin, forms.ModelForm):
             raise forms.ValidationError(
                 "La selección de archivos a eliminar no es válida."
             )
-
         existing_by_id = {
             item.pk: item
             for item in self.existing_evidence_files
         }
-
         if not ids_to_remove.issubset(existing_by_id.keys()):
             raise forms.ValidationError(
                 "Se seleccionó un archivo que no pertenece "
                 "a esta evidencia."
             )
-
         self.files_to_remove = [
             existing_by_id[file_id]
             for file_id in ids_to_remove
         ]
-
         remaining_files = [
             item
             for item in self.existing_evidence_files
             if item.pk not in ids_to_remove
         ]
-
-        # Compatibilidad temporal con el campo único
-        # antiguo Evidence.file.
-        #
-        # Evitamos contar dos veces un archivo si ya
-        # está representado en EvidenceFile.
+        # Compatibilidad con el antiguo Evidence.file.
         legacy_file = None
-
         if self.instance.pk and self.instance.file:
             legacy_file = self.instance.file
-
         all_existing_names = {
             item.file.name
             for item in self.existing_evidence_files
         }
-
         if (
             legacy_file
             and legacy_file.name in all_existing_names
         ):
             legacy_file = None
-
-        # Se cuentan los archivos que quedarán guardados
-        # después de la operación.
         final_count = (
             len(remaining_files)
             + len(uploaded_files)
             + (1 if legacy_file else 0)
         )
-
         if final_count < MIN_EVIDENCE_FILES:
             raise forms.ValidationError(
                 "La evidencia debe tener al menos "
                 f"{MIN_EVIDENCE_FILES} archivos. "
                 f"Actualmente quedaría con {final_count}."
             )
-
         if final_count > MAX_EVIDENCE_FILES:
             raise forms.ValidationError(
                 "La evidencia puede tener como máximo "
                 f"{MAX_EVIDENCE_FILES} archivos. "
                 f"Actualmente quedaría con {final_count}."
             )
-
-        # El límite de 50 MB corresponde a la suma:
-        # archivos conservados + archivos nuevos +
-        # archivo antiguo, cuando corresponda.
         total_size = sum(
             uploaded_file.size
             for uploaded_file in uploaded_files
         )
-
         try:
             for existing_file in remaining_files:
                 total_size += existing_file.file.size
-
             if legacy_file:
                 total_size += legacy_file.size
-
         except (OSError, ValueError):
             raise forms.ValidationError(
                 "No fue posible comprobar el tamaño de "
                 "uno de los archivos existentes. "
                 "Revisa los archivos de esta evidencia."
             )
-
         if total_size > MAX_EVIDENCE_TOTAL_SIZE:
             raise forms.ValidationError(
                 "La suma de todos los archivos no puede "
                 "superar los 50 MB."
             )
-
         return cleaned_data
 
-
 # ---------------------------------------------------------
+
 # Formulario de Validaciones
-# ---------------------------------------------------------
 
+# ---------------------------------------------------------
 
 class ValidationForm(BootstrapMixin, forms.ModelForm):
     date = forms.DateTimeField(
         label="Fecha y hora",
-        input_formats=[
-            "%Y-%m-%dT%H:%M",
-        ],
+        input_formats=["%Y-%m-%dT%H:%M"],
         widget=forms.DateTimeInput(
-            attrs={
-                "type": "datetime-local",
-            },
+            attrs={"type": "datetime-local"},
             format="%Y-%m-%dT%H:%M",
         ),
     )
-
     class Meta:
         model = Validation
-
         fields = [
             "evidence",
             "verifier",
@@ -567,7 +452,6 @@ class ValidationForm(BootstrapMixin, forms.ModelForm):
             "result",
             "version",
         ]
-
         labels = {
             "evidence": "Evidencia",
             "verifier": "Funcionario verificador",
@@ -577,12 +461,9 @@ class ValidationForm(BootstrapMixin, forms.ModelForm):
             "result": "Resultado",
             "version": "Versión",
         }
-
         widgets = {
             "decision": forms.TextInput(
-                attrs={
-                    "placeholder": "Ingrese la decisión",
-                },
+                attrs={"placeholder": "Ingrese la decisión"},
             ),
             "observation": forms.Textarea(
                 attrs={
@@ -594,25 +475,15 @@ class ValidationForm(BootstrapMixin, forms.ModelForm):
                 },
             ),
             "result": forms.TextInput(
-                attrs={
-                    "placeholder": "Ingrese el resultado",
-                },
+                attrs={"placeholder": "Ingrese el resultado"},
             ),
             "version": forms.NumberInput(
-                attrs={
-                    "min": 1,
-                },
+                attrs={"min": 1},
             ),
         }
 
-    def __init__(
-        self,
-        *args,
-        user=None,
-        **kwargs,
-    ):
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
-
         evidences = (
             Evidence.objects
             .filter(
@@ -634,7 +505,6 @@ class ValidationForm(BootstrapMixin, forms.ModelForm):
                 "evidence_id",
             )
         )
-
         employees = (
             Employee.objects
             .filter(
@@ -646,60 +516,443 @@ class ValidationForm(BootstrapMixin, forms.ModelForm):
             )
             .order_by("name")
         )
-
         if user is not None and not user.is_superuser:
             profile = getattr(user, "profile", None)
-
             delegation_id = (
                 profile.delegation_id
                 if profile is not None
                 else None
             )
-
             if delegation_id is None:
                 evidences = evidences.none()
                 employees = employees.none()
-
             else:
                 evidences = evidences.filter(
                     activity__author__delegation_id=delegation_id,
                 )
-
                 employees = employees.filter(
                     delegation_id=delegation_id,
                 )
-
         self.fields["evidence"].queryset = evidences
         self.fields["verifier"].queryset = employees
-
         self.fields["observation"].required = False
-
         self.fields["version"].help_text = (
             "Número de versión de la validación."
         )
-
         self._apply_bootstrap()
 
     def clean(self):
         cleaned_data = super().clean()
-
         evidence = cleaned_data.get("evidence")
-
         if evidence is not None:
             period = evidence.activity.goal.period
-
             if period.deleted_at is not None:
                 raise forms.ValidationError(
                     "No se puede registrar o modificar "
                     "una validación asociada a un período "
                     "archivado."
                 )
-
             if period.status == Period.Status.CLOSED:
                 raise forms.ValidationError(
                     "No se puede registrar o modificar "
                     "una validación asociada a un período "
                     "cerrado."
+                )
+        return cleaned_data
+
+# ---------------------------------------------------------
+
+# Formulario de Tipo de Atención
+
+# ---------------------------------------------------------
+
+class AttentionTypeForm(BootstrapMixin, forms.ModelForm):
+    STATUS_CHOICES = [
+        ("True", "Activo"),
+        ("False", "Inactivo"),
+    ]
+    status = forms.TypedChoiceField(
+        label="Estado",
+        choices=STATUS_CHOICES,
+        coerce=lambda value: value == "True",
+        empty_value=None,
+        required=True,
+    )
+    class Meta:
+        model = AttentionType
+        fields = [
+            "code",
+            "name",
+            "description",
+            "status",
+        ]
+        labels = {
+            "code": "Código",
+            "name": "Nombre",
+            "description": "Descripción",
+            "status": "Estado",
+        }
+        widgets = {
+            "code": forms.TextInput(
+                attrs={
+                    "placeholder": "Ej.: AT-001",
+                    "maxlength": 50,
+                },
+            ),
+            "name": forms.TextInput(
+                attrs={
+                    "placeholder": "Nombre del tipo de atención",
+                    "maxlength": 150,
+                },
+            ),
+            "description": forms.Textarea(
+                attrs={
+                    "rows": 3,
+                    "placeholder": (
+                        "Descripción del tipo de atención (opcional)"
+                    ),
+                },
+            ),
+        }
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["description"].required = False
+        self._apply_bootstrap()
+
+    def clean_code(self):
+        code = self.cleaned_data["code"].strip()
+        if (
+            AttentionType.objects
+            .filter(code__iexact=code)
+            .exclude(pk=self.instance.pk)
+            .exists()
+        ):
+            raise forms.ValidationError(
+                "Ya existe un tipo de atención con este código."
+            )
+        return code
+
+    def clean_name(self):
+        name = self.cleaned_data["name"].strip()
+        if not name:
+            raise forms.ValidationError(
+                "Debes ingresar el nombre del tipo de atención."
+            )
+        return name
+
+    def clean_description(self):
+        return self.cleaned_data.get(
+            "description", ""
+        ).strip()
+
+# ---------------------------------------------------------
+
+# Formulario de Sub Atención - NUEVO
+
+# ---------------------------------------------------------
+
+class SubAttentionForm(BootstrapMixin, forms.ModelForm):
+    STATUS_CHOICES = [
+        ("True", "Activo"),
+        ("False", "Inactivo"),
+    ]
+    status = forms.TypedChoiceField(
+        label="Estado",
+        choices=STATUS_CHOICES,
+        coerce=lambda value: value == "True",
+        empty_value=None,
+        required=True,
+    )
+    class Meta:
+        model = SubAttention
+        fields = [
+            "code",
+            "name",
+            "attention_type",
+            "status",
+        ]
+        labels = {
+            "code": "Código",
+            "name": "Nombre",
+            "attention_type": "Tipo de atención asociado",
+            "status": "Estado",
+        }
+        widgets = {
+            "code": forms.TextInput(
+                attrs={
+                    "placeholder": "Ej.: SUB-001",
+                    "maxlength": 50,
+                },
+            ),
+            "name": forms.TextInput(
+                attrs={
+                    "placeholder": "Nombre de la subatención",
+                    "maxlength": 150,
+                },
+            ),
+        }
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        allowed_types = Q(
+            deleted_at__isnull=True,
+            status=True,
+        )
+        # Si una subatención existente está vinculada
+        # a un tipo desactivado posteriormente,
+        # se permite conservar esa relación al editar.
+        if self.instance.pk and self.instance.attention_type_id:
+            allowed_types |= Q(
+                pk=self.instance.attention_type_id
+            )
+        self.fields["attention_type"].queryset = (
+            AttentionType.objects
+            .filter(allowed_types)
+            .order_by("name", "attention_type_id")
+        )
+        self.fields["attention_type"].empty_label = (
+            "Seleccione un tipo de atención"
+        )
+        self.fields["attention_type"].help_text = (
+            "Solo se pueden crear nuevas asociaciones "
+            "con tipos de atención activos y no eliminados."
+        )
+        self._apply_bootstrap()
+
+    def clean_code(self):
+        code = self.cleaned_data["code"].strip()
+        if (
+            SubAttention.objects
+            .filter(code__iexact=code)
+            .exclude(pk=self.instance.pk)
+            .exists()
+        ):
+            raise forms.ValidationError(
+                "Ya existe una subatención con este código."
+            )
+        return code
+
+    def clean_name(self):
+        name = self.cleaned_data["name"].strip()
+        if not name:
+            raise forms.ValidationError(
+                "Debes ingresar el nombre de la subatención."
+            )
+        return name
+
+    def clean_attention_type(self):
+        attention_type = self.cleaned_data["attention_type"]
+        previous_type_id = (
+            self.instance.attention_type_id
+            if self.instance.pk
+            else None
+        )
+        if (
+            attention_type.deleted_at is not None
+            or not attention_type.status
+        ) and attention_type.pk != previous_type_id:
+            raise forms.ValidationError(
+                "Solo puedes seleccionar un tipo de atención "
+                "activo y no eliminado."
+            )
+        return attention_type
+
+
+# ---------------------------------------------------------
+# Formulario de Ingreso de Atención
+# ---------------------------------------------------------
+
+class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
+    """Registra solicitudes con relaciones y delegación validadas."""
+
+    class Meta:
+        model = AttentionEntry
+        fields = [
+            "requester",
+            "attention_type",
+            "sub_attention",
+            "description",
+            "delegation",
+            "responsible_employee",
+        ]
+        labels = {
+            "requester": "Solicitante",
+            "attention_type": "Tipo de atención",
+            "sub_attention": "Subatención",
+            "description": "Descripción de la solicitud",
+            "delegation": "Delegación responsable",
+            "responsible_employee": "Funcionario responsable",
+        }
+        widgets = {
+            "requester": forms.TextInput(attrs={
+                "placeholder": "Nombre de quien realiza la solicitud",
+                "maxlength": 150,
+            }),
+            "description": forms.Textarea(attrs={
+                "rows": 4,
+                "placeholder": "Describe la solicitud de atención",
+            }),
+        }
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        existing = bool(self.instance.pk)
+
+        # Solo relaciones activas y no archivadas para nuevos registros.
+        type_condition = Q(deleted_at__isnull=True, status=True)
+        sub_condition = Q(
+            deleted_at__isnull=True,
+            status=True,
+            attention_type__deleted_at__isnull=True,
+            attention_type__status=True,
+        )
+        # Algunas versiones del módulo Organización no archivan
+        # delegaciones. Evitamos consultar un campo inexistente.
+        delegation_has_deleted_at = any(
+            field.name == "deleted_at" for field in Delegation._meta.fields
+        )
+        delegation_condition = (
+            Q(deleted_at__isnull=True) if delegation_has_deleted_at else Q()
+        )
+        employee_condition = Q(deleted_at__isnull=True)
+        if delegation_has_deleted_at:
+            employee_condition &= Q(delegation__deleted_at__isnull=True)
+
+        # En edición se permite conservar relaciones históricas que
+        # después hayan quedado inactivas o archivadas, sin crear otras.
+        if existing:
+            if self.instance.attention_type_id:
+                type_condition |= Q(pk=self.instance.attention_type_id)
+            if self.instance.sub_attention_id:
+                sub_condition |= Q(pk=self.instance.sub_attention_id)
+            if self.instance.delegation_id and delegation_has_deleted_at:
+                delegation_condition |= Q(pk=self.instance.delegation_id)
+            if self.instance.responsible_employee_id:
+                employee_condition |= Q(pk=self.instance.responsible_employee_id)
+
+        attention_types = AttentionType.objects.filter(type_condition)
+        sub_attentions = SubAttention.objects.filter(sub_condition)
+        delegations = Delegation.objects.filter(delegation_condition)
+        employees = Employee.objects.filter(employee_condition)
+
+        # Los usuarios normales solo trabajan en su delegación.
+        if user is not None and not user.is_superuser:
+            profile = getattr(user, "profile", None)
+            delegation_id = (
+                profile.delegation_id if profile is not None else None
+            )
+            if delegation_id is None:
+                delegations = delegations.none()
+                employees = employees.none()
+            else:
+                delegations = delegations.filter(pk=delegation_id)
+                employees = employees.filter(delegation_id=delegation_id)
+
+        self.fields["attention_type"].queryset = attention_types.order_by(
+            "name", "attention_type_id"
+        )
+        self.fields["sub_attention"].queryset = sub_attentions.select_related(
+            "attention_type"
+        ).order_by("name", "sub_attention_id")
+        self.fields["delegation"].queryset = delegations.order_by("pk")
+        self.fields["responsible_employee"].queryset = employees.select_related(
+            "delegation"
+        ).order_by("name")
+
+        self.fields["attention_type"].empty_label = "Seleccione un tipo de atención"
+        self.fields["sub_attention"].empty_label = "Seleccione una subatención"
+        self.fields["delegation"].empty_label = "Seleccione una delegación"
+        self.fields["responsible_employee"].empty_label = "Seleccione un funcionario"
+
+        self.fields["sub_attention"].help_text = (
+            "La subatención debe pertenecer al tipo de atención seleccionado."
+        )
+        self.fields["responsible_employee"].help_text = (
+            "El funcionario debe pertenecer a la delegación elegida."
+        )
+
+        # registration_date se genera automáticamente en el modelo.
+        self._apply_bootstrap()
+
+    def clean_requester(self):
+        requester = self.cleaned_data["requester"].strip()
+        if not requester:
+            raise forms.ValidationError("Ingresa el nombre del solicitante.")
+        return requester
+
+    def clean_description(self):
+        description = self.cleaned_data["description"].strip()
+        if not description:
+            raise forms.ValidationError("Ingresa una descripción de la solicitud.")
+        return description
+
+    def clean(self):
+        cleaned_data = super().clean()
+        attention_type = cleaned_data.get("attention_type")
+        sub_attention = cleaned_data.get("sub_attention")
+        delegation = cleaned_data.get("delegation")
+        employee = cleaned_data.get("responsible_employee")
+
+        # Permitir conservar una relación histórica solo si no cambió.
+        if attention_type is not None:
+            old_type_id = self.instance.attention_type_id if self.instance.pk else None
+            if (
+                attention_type.deleted_at is not None or not attention_type.status
+            ) and attention_type.pk != old_type_id:
+                self.add_error(
+                    "attention_type",
+                    "Selecciona un tipo de atención activo y no eliminado.",
+                )
+
+        if sub_attention is not None:
+            old_sub_id = self.instance.sub_attention_id if self.instance.pk else None
+            if (
+                sub_attention.deleted_at is not None
+                or not sub_attention.status
+                or sub_attention.attention_type.deleted_at is not None
+                or not sub_attention.attention_type.status
+            ) and sub_attention.pk != old_sub_id:
+                self.add_error(
+                    "sub_attention",
+                    "Selecciona una subatención activa de un tipo vigente.",
+                )
+            if (
+                attention_type is not None
+                and sub_attention.attention_type_id != attention_type.pk
+            ):
+                self.add_error(
+                    "sub_attention",
+                    "La subatención no pertenece al tipo de atención seleccionado.",
+                )
+
+        if delegation is not None:
+            old_delegation_id = self.instance.delegation_id if self.instance.pk else None
+            if (
+                getattr(delegation, "deleted_at", None) is not None
+                and delegation.pk != old_delegation_id
+            ):
+                self.add_error(
+                    "delegation", "Selecciona una delegación no eliminada."
+                )
+
+        if employee is not None:
+            old_employee_id = (
+                self.instance.responsible_employee_id if self.instance.pk else None
+            )
+            if (
+                employee.deleted_at is not None
+                or getattr(employee.delegation, "deleted_at", None) is not None
+            ) and employee.pk != old_employee_id:
+                self.add_error(
+                    "responsible_employee",
+                    "Selecciona un funcionario activo en una delegación vigente.",
+                )
+            if delegation is not None and employee.delegation_id != delegation.pk:
+                self.add_error(
+                    "responsible_employee",
+                    "El funcionario no pertenece a la delegación seleccionada.",
                 )
 
         return cleaned_data

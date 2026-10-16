@@ -20,16 +20,23 @@ from django.views.generic import (
     ListView,
     UpdateView,
 )
+from organization.models import Delegation
 from planning_measurements.models import Period
 from .forms import (
     ActivityForm,
+    AttentionTypeForm,
+    AttentionEntryForm,
+    SubAttentionForm,
     EvidenceForm,
     ValidationForm,
 )
 from .models import (
     Activity,
+    AttentionEntry,
+    AttentionType,
     Evidence,
     EvidenceFile,
+    SubAttention,
     Validation,
 )
 
@@ -1486,3 +1493,647 @@ class ValidationDeleteView(
         return HttpResponseRedirect(
             self.get_success_url(),
         )
+
+# ---------------------------------------------------------
+# Tipo de Atención: catálogo general
+# ---------------------------------------------------------
+
+
+def scoped_attention_types():
+    """Retorna tipos no archivados; el acceso se controla con permisos."""
+    return AttentionType.objects.filter(deleted_at__isnull=True)
+
+
+def filtered_attention_types(request):
+    """Búsqueda por código, nombre o descripción y filtro de estado."""
+    types = scoped_attention_types()
+    query = request.GET.get("q", "").strip()
+    selected_status = request.GET.get("status", "").strip()
+
+    if query:
+        types = types.filter(
+            Q(code__icontains=query)
+            | Q(name__icontains=query)
+            | Q(description__icontains=query)
+        )
+
+    if selected_status == "active":
+        types = types.filter(status=True)
+    elif selected_status == "inactive":
+        types = types.filter(status=False)
+
+    return types.order_by("name", "attention_type_id")
+
+
+def attention_type_metrics():
+    types = scoped_attention_types()
+    return {
+        "total_attention_types": types.count(),
+        "active_attention_types": types.filter(status=True).count(),
+        "inactive_attention_types": types.filter(status=False).count(),
+    }
+
+
+class AttentionTypePermissionMixin(
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+):
+    """Protege cada operación mediante permisos Django específicos."""
+    login_url = "login"
+    raise_exception = True
+
+    def handle_no_permission(self):
+        if self.request.user.is_authenticated:
+            raise PermissionDenied(
+                "No tienes permisos para realizar esta operación."
+            )
+        return redirect_to_login(
+            self.request.get_full_path(),
+            self.get_login_url(),
+            self.get_redirect_field_name(),
+        )
+
+
+class AttentionTypeScopeMixin:
+    """Evita modificar o eliminar tipos archivados."""
+
+    def get_queryset(self):
+        return scoped_attention_types()
+
+
+class AttentionTypeFormMixin:
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["user"] = self.request.user
+        return kwargs
+
+
+class AttentionTypePageContextMixin:
+    """Presenta errores del formulario en el modal, junto al listado."""
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["attention_types"] = filtered_attention_types(self.request)
+        context["query"] = self.request.GET.get("q", "").strip()
+        context["selected_status"] = self.request.GET.get(
+            "status", ""
+        ).strip()
+        context.update(attention_type_metrics())
+        context.update(registration_page_size_context(self.request))
+        context["open_modal"] = True
+        return context
+
+
+class AttentionTypeListView(
+    AttentionTypePermissionMixin,
+    RegistrationPaginationMixin,
+    ListView,
+):
+    model = AttentionType
+    permission_required = "registration_validation.view_attentiontype"
+    template_name = "registration_validation/attention_type_list.html"
+    context_object_name = "attention_types"
+
+    def get_queryset(self):
+        return filtered_attention_types(self.request)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["query"] = self.request.GET.get("q", "").strip()
+        context["selected_status"] = self.request.GET.get(
+            "status", ""
+        ).strip()
+        context.update(attention_type_metrics())
+        return context
+
+
+class AttentionTypeCreateView(
+    AttentionTypePermissionMixin,
+    AttentionTypeFormMixin,
+    AttentionTypePageContextMixin,
+    CreateView,
+):
+    model = AttentionType
+    form_class = AttentionTypeForm
+    permission_required = "registration_validation.add_attentiontype"
+    template_name = "registration_validation/attention_type_list.html"
+    success_url = reverse_lazy("registration:attention_type_list")
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        messages.success(self.request, "Tipo de atención creado correctamente.")
+        return response
+
+
+class AttentionTypeUpdateView(
+    AttentionTypePermissionMixin,
+    AttentionTypeScopeMixin,
+    AttentionTypeFormMixin,
+    AttentionTypePageContextMixin,
+    UpdateView,
+):
+    model = AttentionType
+    form_class = AttentionTypeForm
+    permission_required = "registration_validation.change_attentiontype"
+    template_name = "registration_validation/attention_type_list.html"
+    pk_url_kwarg = "attention_type_id"
+    success_url = reverse_lazy("registration:attention_type_list")
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        messages.success(
+            self.request,
+            "Tipo de atención actualizado correctamente.",
+        )
+        return response
+
+
+class AttentionTypeDeleteView(
+    AttentionTypePermissionMixin,
+    AttentionTypeScopeMixin,
+    DeleteView,
+):
+    model = AttentionType
+    permission_required = "registration_validation.delete_attentiontype"
+    pk_url_kwarg = "attention_type_id"
+    success_url = reverse_lazy("registration:attention_type_list")
+    http_method_names = ["post"]
+
+    def form_valid(self, form):
+        # No archivamos un tipo que ya se usa en subatenciones
+        # o ingresos. Así conservamos la integridad del catálogo.
+        has_subattentions = SubAttention.objects.filter(
+            attention_type=self.object
+        ).exists()
+        has_entries = AttentionEntry.objects.filter(
+            attention_type=self.object
+        ).exists()
+
+        if has_subattentions or has_entries:
+            messages.error(
+                self.request,
+                "No se puede eliminar este tipo de atención porque "
+                "tiene subatenciones o ingresos asociados. "
+                "Puedes cambiar su estado a Inactivo.",
+            )
+            return HttpResponseRedirect(self.get_success_url())
+
+        self.object.deleted_at = timezone.now()
+        self.object.save(update_fields=["deleted_at", "updated_at"])
+        messages.success(
+            self.request,
+            "Tipo de atención eliminado correctamente.",
+        )
+        return HttpResponseRedirect(self.get_success_url())
+
+# ---------------------------------------------------------
+# Sub Atención: catálogo de subatenciones
+# ---------------------------------------------------------
+
+
+def scoped_sub_attentions():
+    """Retorna únicamente subatenciones que no están eliminadas."""
+    return (
+        SubAttention.objects
+        .filter(deleted_at__isnull=True)
+        .select_related("attention_type")
+    )
+
+
+def filtered_sub_attentions(request):
+    """Aplica búsqueda y filtro de estado al catálogo."""
+    sub_attentions = scoped_sub_attentions()
+    query = request.GET.get("q", "").strip()
+    selected_status = request.GET.get("status", "").strip()
+
+    if query:
+        sub_attentions = sub_attentions.filter(
+            Q(code__icontains=query)
+            | Q(name__icontains=query)
+            | Q(attention_type__code__icontains=query)
+            | Q(attention_type__name__icontains=query)
+        )
+
+    if selected_status == "active":
+        sub_attentions = sub_attentions.filter(status=True)
+    elif selected_status == "inactive":
+        sub_attentions = sub_attentions.filter(status=False)
+
+    return sub_attentions.order_by("name", "sub_attention_id")
+
+
+def sub_attention_metrics():
+    """Contadores generales, sin incluir registros eliminados."""
+    sub_attentions = scoped_sub_attentions()
+    return {
+        "total_sub_attentions": sub_attentions.count(),
+        "active_sub_attentions": sub_attentions.filter(status=True).count(),
+        "inactive_sub_attentions": sub_attentions.filter(status=False).count(),
+    }
+
+
+class SubAttentionPermissionMixin(
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+):
+    """Exige el permiso correspondiente a cada operación CRUD."""
+
+    login_url = "login"
+    raise_exception = True
+
+    def handle_no_permission(self):
+        if self.request.user.is_authenticated:
+            raise PermissionDenied(
+                "No tienes permisos para realizar esta operación."
+            )
+        return redirect_to_login(
+            self.request.get_full_path(),
+            self.get_login_url(),
+            self.get_redirect_field_name(),
+        )
+
+
+class SubAttentionScopeMixin:
+    """Impide editar o eliminar una subatención archivada."""
+
+    def get_queryset(self):
+        return scoped_sub_attentions()
+
+
+class SubAttentionFormMixin:
+    """Mantiene el contrato de formularios que reciben request.user."""
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["user"] = self.request.user
+        return kwargs
+
+
+class SubAttentionPageContextMixin:
+    """Reutiliza el listado al mostrar el modal de crear o editar."""
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["sub_attentions"] = filtered_sub_attentions(self.request)
+        context["query"] = self.request.GET.get("q", "").strip()
+        context["selected_status"] = self.request.GET.get(
+            "status", ""
+        ).strip()
+        context.update(sub_attention_metrics())
+        context.update(registration_page_size_context(self.request))
+        context["open_modal"] = True
+        return context
+
+
+class SubAttentionListView(
+    SubAttentionPermissionMixin,
+    RegistrationPaginationMixin,
+    ListView,
+):
+    model = SubAttention
+    permission_required = "registration_validation.view_subattention"
+    template_name = "registration_validation/sub_attention_list.html"
+    context_object_name = "sub_attentions"
+
+    def get_queryset(self):
+        return filtered_sub_attentions(self.request)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["query"] = self.request.GET.get("q", "").strip()
+        context["selected_status"] = self.request.GET.get(
+            "status", ""
+        ).strip()
+        context.update(sub_attention_metrics())
+        return context
+
+
+class SubAttentionCreateView(
+    SubAttentionPermissionMixin,
+    SubAttentionFormMixin,
+    SubAttentionPageContextMixin,
+    CreateView,
+):
+    model = SubAttention
+    form_class = SubAttentionForm
+    permission_required = "registration_validation.add_subattention"
+    template_name = "registration_validation/sub_attention_list.html"
+    success_url = reverse_lazy("registration:sub_attention_list")
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        messages.success(
+            self.request,
+            "Subatención creada correctamente.",
+        )
+        return response
+
+
+class SubAttentionUpdateView(
+    SubAttentionPermissionMixin,
+    SubAttentionScopeMixin,
+    SubAttentionFormMixin,
+    SubAttentionPageContextMixin,
+    UpdateView,
+):
+    model = SubAttention
+    form_class = SubAttentionForm
+    permission_required = "registration_validation.change_subattention"
+    template_name = "registration_validation/sub_attention_list.html"
+    pk_url_kwarg = "sub_attention_id"
+    success_url = reverse_lazy("registration:sub_attention_list")
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        messages.success(
+            self.request,
+            "Subatención actualizada correctamente.",
+        )
+        return response
+
+
+class SubAttentionDeleteView(
+    SubAttentionPermissionMixin,
+    SubAttentionScopeMixin,
+    DeleteView,
+):
+    model = SubAttention
+    permission_required = "registration_validation.delete_subattention"
+    pk_url_kwarg = "sub_attention_id"
+    success_url = reverse_lazy("registration:sub_attention_list")
+    http_method_names = ["post"]
+
+    def form_valid(self, form):
+        # Protegemos referencias históricas, incluso si el ingreso
+        # asociado fue eliminado lógicamente.
+        has_entries = AttentionEntry.objects.filter(
+            sub_attention=self.object
+        ).exists()
+
+        if has_entries:
+            messages.error(
+                self.request,
+                "No se puede eliminar esta subatención porque "
+                "tiene ingresos asociados. Puedes cambiar "
+                "su estado a Inactivo.",
+            )
+            return HttpResponseRedirect(self.get_success_url())
+
+        self.object.deleted_at = timezone.now()
+        self.object.save(update_fields=["deleted_at", "updated_at"])
+        messages.success(
+            self.request,
+            "Subatención eliminada correctamente.",
+        )
+        return HttpResponseRedirect(self.get_success_url())
+
+# ---------------------------------------------------------
+# Ingreso de Atención: solicitudes registradas
+# ---------------------------------------------------------
+
+
+def scoped_attention_entries(user):
+    """Limita los ingresos visibles a la delegación del usuario.
+
+    Los superusuarios pueden consultar todas las delegaciones.
+    Los ingresos eliminados lógicamente nunca aparecen en el CRUD.
+    """
+    entries = (
+        AttentionEntry.objects
+        .filter(deleted_at__isnull=True)
+        .select_related(
+            "attention_type",
+            "sub_attention",
+            "delegation",
+            "responsible_employee",
+            "responsible_employee__delegation",
+        )
+    )
+
+    if user.is_superuser:
+        return entries
+
+    profile = getattr(user, "profile", None)
+    delegation_id = (
+        profile.delegation_id if profile is not None else None
+    )
+
+    if delegation_id is None:
+        return entries.none()
+
+    return entries.filter(delegation_id=delegation_id)
+
+
+def filtered_attention_entries(request):
+    """Aplica búsqueda y filtros, respetando siempre la delegación."""
+    entries = scoped_attention_entries(request.user)
+    query = request.GET.get("q", "").strip()
+    selected_type = request.GET.get("attention_type", "").strip()
+    selected_delegation = request.GET.get("delegation", "").strip()
+
+    if query:
+        entries = entries.filter(
+            Q(requester__icontains=query)
+            | Q(description__icontains=query)
+            | Q(attention_type__name__icontains=query)
+            | Q(attention_type__code__icontains=query)
+            | Q(sub_attention__name__icontains=query)
+            | Q(sub_attention__code__icontains=query)
+            | Q(responsible_employee__name__icontains=query)
+            | Q(delegation__name__icontains=query)
+        )
+
+    if selected_type.isdecimal() and len(selected_type) <= 18:
+        entries = entries.filter(attention_type_id=int(selected_type))
+
+    if selected_delegation.isdecimal() and len(selected_delegation) <= 18:
+        entries = entries.filter(delegation_id=int(selected_delegation))
+
+    return entries.order_by("-registration_date", "-attention_entry_id")
+
+
+def attention_entry_metrics(user):
+    """Entrega indicadores calculados solamente sobre ingresos visibles."""
+    entries = scoped_attention_entries(user)
+    today = timezone.localdate()
+    return {
+        "total_attention_entries": entries.count(),
+        "month_attention_entries": entries.filter(
+            registration_date__year=today.year,
+            registration_date__month=today.month,
+        ).count(),
+        "latest_attention_entry_date": (
+            entries.order_by("-registration_date")
+            .values_list("registration_date", flat=True)
+            .first()
+        ),
+    }
+
+
+def attention_entry_filter_context(request):
+    """Opciones del listado que no amplían la visibilidad del usuario."""
+    visible_entries = scoped_attention_entries(request.user)
+    type_ids = visible_entries.values_list(
+        "attention_type_id", flat=True
+    ).distinct()
+    delegation_ids = visible_entries.values_list(
+        "delegation_id", flat=True
+    ).distinct()
+
+    return {
+        "query": request.GET.get("q", "").strip(),
+        "selected_attention_type": request.GET.get(
+            "attention_type", ""
+        ).strip(),
+        "selected_delegation": request.GET.get(
+            "delegation", ""
+        ).strip(),
+        "attention_type_options": (
+            AttentionType.objects.filter(pk__in=type_ids)
+            .order_by("name", "attention_type_id")
+        ),
+        "delegation_options": (
+            Delegation.objects.filter(pk__in=delegation_ids)
+            .order_by("name", "pk")
+        ),
+    }
+
+
+class AttentionEntryPermissionMixin(
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+):
+    """Exige los permisos de Django para el ingreso de atención."""
+
+    login_url = "login"
+    raise_exception = True
+
+    def handle_no_permission(self):
+        if self.request.user.is_authenticated:
+            raise PermissionDenied(
+                "No tienes permisos para realizar esta operación."
+            )
+        return redirect_to_login(
+            self.request.get_full_path(),
+            self.get_login_url(),
+            self.get_redirect_field_name(),
+        )
+
+
+class AttentionEntryScopeMixin:
+    """Protege las operaciones sobre ingresos ya existentes."""
+
+    def get_queryset(self):
+        return scoped_attention_entries(self.request.user)
+
+
+class AttentionEntryFormMixin:
+    """Pasa el usuario autenticado al formulario para restringir opciones."""
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["user"] = self.request.user
+        return kwargs
+
+
+class AttentionEntryPageContextMixin:
+    """Reutiliza el listado cuando se abre el formulario modal."""
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["attention_entries"] = filtered_attention_entries(
+            self.request
+        )
+        context.update(attention_entry_filter_context(self.request))
+        context.update(attention_entry_metrics(self.request.user))
+        context.update(registration_page_size_context(self.request))
+        context["open_modal"] = True
+        return context
+
+
+class AttentionEntryListView(
+    AttentionEntryPermissionMixin,
+    RegistrationPaginationMixin,
+    ListView,
+):
+    model = AttentionEntry
+    permission_required = "registration_validation.view_attentionentry"
+    template_name = "registration_validation/attention_entry_list.html"
+    context_object_name = "attention_entries"
+
+    def get_queryset(self):
+        return filtered_attention_entries(self.request)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update(attention_entry_filter_context(self.request))
+        context.update(attention_entry_metrics(self.request.user))
+        return context
+
+
+class AttentionEntryCreateView(
+    AttentionEntryPermissionMixin,
+    AttentionEntryFormMixin,
+    AttentionEntryPageContextMixin,
+    CreateView,
+):
+    model = AttentionEntry
+    form_class = AttentionEntryForm
+    permission_required = "registration_validation.add_attentionentry"
+    template_name = "registration_validation/attention_entry_list.html"
+    success_url = reverse_lazy("registration:attention_entry_list")
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        messages.success(
+            self.request,
+            "Ingreso de atención registrado correctamente.",
+        )
+        return response
+
+
+class AttentionEntryUpdateView(
+    AttentionEntryPermissionMixin,
+    AttentionEntryScopeMixin,
+    AttentionEntryFormMixin,
+    AttentionEntryPageContextMixin,
+    UpdateView,
+):
+    model = AttentionEntry
+    form_class = AttentionEntryForm
+    permission_required = "registration_validation.change_attentionentry"
+    template_name = "registration_validation/attention_entry_list.html"
+    pk_url_kwarg = "attention_entry_id"
+    success_url = reverse_lazy("registration:attention_entry_list")
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        messages.success(
+            self.request,
+            "Ingreso de atención actualizado correctamente.",
+        )
+        return response
+
+
+class AttentionEntryDeleteView(
+    AttentionEntryPermissionMixin,
+    AttentionEntryScopeMixin,
+    DeleteView,
+):
+    model = AttentionEntry
+    permission_required = "registration_validation.delete_attentionentry"
+    pk_url_kwarg = "attention_entry_id"
+    success_url = reverse_lazy("registration:attention_entry_list")
+    http_method_names = ["post"]
+
+    def form_valid(self, form):
+        # La eliminación es lógica: se conserva el historial y
+        # las relaciones con el catálogo de tipos y subatenciones.
+        self.object.deleted_at = timezone.now()
+        self.object.save(update_fields=["deleted_at", "updated_at"])
+        messages.success(
+            self.request,
+            "Ingreso de atención eliminado correctamente.",
+        )
+        return HttpResponseRedirect(self.get_success_url())
+
