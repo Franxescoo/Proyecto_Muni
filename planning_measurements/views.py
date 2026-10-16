@@ -468,6 +468,7 @@ def apply_goal_assignments(request, period, *, may_add, may_remove):
                 position=source.position,
                 item=source.item,
                 objective_value=source.objective_value,
+                required_evidence_count=source.required_evidence_count,
                 unit=source.unit,
                 weight=source.weight,
             )
@@ -991,6 +992,7 @@ def period_assign_existing_goals(request, period_id):
                             position=source.position,
                             item=source.item,
                             objective_value=source.objective_value,
+                            required_evidence_count=source.required_evidence_count,
                             unit=source.unit,
                             weight=source.weight
                         )
@@ -1109,6 +1111,7 @@ GOAL_COLUMNS = [
     ("Funcionario", "employee__name"),
     ("Cargo", "position__position_name"),
     ("Valor objetivo", "objective_value"),
+    ("Evidencias requeridas", "required_evidence_count"),
     ("Unidad", "unit"),
     ("Ponderador", "weight"),
     ("Creado", "created_at"),
@@ -1507,4 +1510,3 @@ def item_delete(request, item_id):
     )
 
     return redirect("planning:item_list")
-

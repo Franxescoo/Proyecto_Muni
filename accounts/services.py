@@ -16,10 +16,19 @@ def sync_profile(profile):
 def sync_employee(employee):
     profiles = UserProfile.objects.filter(
         employee=employee
-    ).select_related("employee")
+    ).select_related("employee", "user")
 
     for profile in profiles:
+        profile.user.groups.set(employee.assigned_groups.all())
         sync_profile(profile)
+
+
+def sync_user_groups(user):
+    profile = UserProfile.objects.filter(
+        user=user,
+    ).select_related("employee").first()
+    if profile and profile.employee_id:
+        profile.employee.assigned_groups.set(user.groups.all())
 
 
 def sync_position(position):

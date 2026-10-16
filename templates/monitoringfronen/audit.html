@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load i18n %}
 
 {% block titulo %}Auditoría · Monitoreo y trazabilidad{% endblock %}
 
@@ -19,12 +20,22 @@
 </style>
 {% endblock %}
 
-{% block submenu %}
-<ul class="nav nav-pills mb-3">
-    <li class="nav-item"><a class="nav-link" href="{% url 'monitoring:indicator_list' %}">Indicadores</a></li>
-    <li class="nav-item"><a class="nav-link" href="{% url 'monitoring:commitment_list' %}">Compromisos</a></li>
-    <li class="nav-item"><a class="nav-link active" href="{% url 'monitoring:audit_list' %}">Auditoría</a></li>
-</ul>
+{% block top_links %}{% endblock %}
+
+{% block sidebar %}
+<aside class="workspace-sidebar" aria-label="Navegación de monitoreo y trazabilidad">
+    <div class="workspace-sidebar-header">
+        <i class="bi bi-list" aria-hidden="true"></i>
+        <strong>Monitoreo y<br>trazabilidad</strong>
+        <i class="bi bi-chevron-down" aria-hidden="true"></i>
+    </div>
+    <nav class="nav flex-column">
+        <a class="nav-link" href="{% url 'home' %}"><i class="bi bi-house-door"></i><span>Inicio</span></a>
+        <a class="nav-link" href="{% url 'monitoring:indicator_list' %}"><i class="bi bi-bar-chart-line"></i><span>Indicadores</span></a>
+        <a class="nav-link" href="{% url 'monitoring:commitment_list' %}"><i class="bi bi-handshake"></i><span>Compromisos</span></a>
+        <a class="nav-link active" href="{% url 'monitoring:audit_list' %}"><i class="bi bi-shield-check"></i><span>Auditoría</span></a>
+    </nav>
+</aside>
 {% endblock %}
 
 {% block contenido %}
@@ -35,7 +46,7 @@
     </section>
     <div class="row g-3 mb-4">
         <div class="col-12 col-md-6"><div class="section-card metric h-100"><div class="value">{{ total_audits|default:"0" }}</div><div class="label">Eventos registrados</div></div></div>
-        <div class="col-12 col-md-6"><div class="section-card metric h-100"><div class="value text-muted">{{ last_audit_date|date:"d/m/Y H:i"|default:"—" }}</div><div class="label">Última actualización</div></div></div>
+        <div class="col-12 col-md-6"><div class="section-card metric h-100"><div class="value text-muted">{% language 'es' %}{{ last_audit_date|date:"d \d\e F \d\e Y H:i"|default:"—" }}{% endlanguage %}</div><div class="label">Última actualización</div></div></div>
     </div>
     <section class="section-card p-3 p-lg-4">
         <div class="mb-3"><h2 class="h5 mb-1 fw-bold">Historial de actividad</h2><p class="text-muted small mb-0">Cada evento conserva quién realizó la acción y sobre qué entidad.</p></div>
@@ -46,7 +57,7 @@
         </form>
         <div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr><th>Evento</th><th>Usuario</th><th>Entidad</th><th>Identificador</th><th>Fecha</th><th class="text-end">Detalle</th></tr></thead><tbody>
             {% for audit in audits %}
-            <tr><td><span class="event-icon me-2"><i class="bi bi-clock-history" aria-hidden="true"></i></span><span class="fw-semibold">{{ audit.event|default:"Evento" }}</span></td><td>{{ audit.user|default:"—" }}</td><td>{{ audit.entity|default:"—" }}</td><td><code>{{ audit.object_identifier|default:"—" }}</code></td><td class="text-muted small">{{ audit.event_date|date:"d/m/Y H:i"|default:"—" }}</td><td class="text-end"><button type="button" class="btn btn-sm btn-light border" title="Ver cambios"><i class="bi bi-eye"></i><span class="visually-hidden">Ver cambios</span></button></td></tr>
+            <tr><td><span class="event-icon me-2"><i class="bi bi-clock-history" aria-hidden="true"></i></span><span class="fw-semibold">{{ audit.event|default:"Evento" }}</span></td><td>{{ audit.user|default:"—" }}</td><td>{{ audit.entity|default:"—" }}</td><td><code>{{ audit.object_identifier|default:"—" }}</code></td><td class="text-muted small">{% language 'es' %}{{ audit.event_date|date:"d \d\e F \d\e Y H:i"|default:"—" }}{% endlanguage %}</td><td class="text-end"><button type="button" class="btn btn-sm btn-light border" title="Ver cambios"><i class="bi bi-eye"></i><span class="visually-hidden">Ver cambios</span></button></td></tr>
             {% empty %}<tr><td colspan="6" class="text-center py-5"><i class="bi bi-journal-check fs-2 text-muted d-block mb-2"></i><span class="text-muted">No hay eventos de auditoría para mostrar.</span></td></tr>
             {% endfor %}
         </tbody></table></div>

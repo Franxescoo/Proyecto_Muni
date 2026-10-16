@@ -204,6 +204,7 @@ class Command(BaseCommand):
                     defaults={
                         "position": employee.position,
                         "objective_value": value,
+                        "required_evidence_count": 5,
                         "unit": unit,
                         "weight": weight,
                     },

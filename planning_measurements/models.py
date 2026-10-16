@@ -1,5 +1,6 @@
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.core.validators import MinValueValidator
 
 from core.models import BaseModel
 
@@ -85,6 +86,11 @@ class Goal(BaseModel):
     objective_value = models.DecimalField(
         max_digits=10, decimal_places=2, verbose_name="Objective value"
     )
+    required_evidence_count = models.PositiveIntegerField(
+        default=5,
+        validators=[MinValueValidator(2)],
+        verbose_name="Required evidence count",
+    )
     unit = models.CharField(max_length=50, verbose_name="Unit")
     weight = models.DecimalField(
         max_digits=5, decimal_places=2, verbose_name="Weight"
@@ -103,6 +109,13 @@ class Goal(BaseModel):
             if self.objective_value <= 0:
                 errors["objective_value"] = (
                     "El valor objetivo debe ser mayor que cero."
+                )
+
+        if self.required_evidence_count is not None:
+            if self.required_evidence_count < 2:
+                errors["required_evidence_count"] = (
+                    "La cantidad de evidencias requeridas debe ser "
+                    "mayor o igual a 2."
                 )
 
         # Ponderación individual válida.

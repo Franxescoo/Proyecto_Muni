@@ -21,7 +21,15 @@ def archive_records(modeladmin, request, queryset):
 class GoalInline(admin.TabularInline):
     model = Goal
     extra = 0
-    fields = ("employee", "position", "item", "objective_value", "unit", "weight")
+    fields = (
+        "employee",
+        "position",
+        "item",
+        "objective_value",
+        "required_evidence_count",
+        "unit",
+        "weight",
+    )
     show_change_link = True
 
     def has_delete_permission(self, request, obj=None):
@@ -69,6 +77,7 @@ class GoalAdmin(admin.ModelAdmin):
         "employee",
         "position",
         "objective_value",
+        "required_evidence_count",
         "unit",
         "weight",
     )

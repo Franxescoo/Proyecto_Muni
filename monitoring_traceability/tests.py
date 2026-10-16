@@ -9,9 +9,11 @@ from django.test import TestCase, RequestFactory
 from accounts.models import UserProfile
 from organization.models import Delegation, Employee, PositionFunction
 from planning_measurements.models import Goal, Period
+from registration_validation.models import Activity, Evidence, Validation
 
 from .admin import AuditAdmin, CommitmentAdmin, IndicatorAdmin
-from .models import Audit, Commitment, Indicator
+from .models import Audit, Commitment, CommitmentComment, Indicator
+from .services import recalculate_indicator_for_goal
 
 
 class TraceabilityModelsTest(TestCase):
@@ -124,6 +126,265 @@ class TraceabilityModelsTest(TestCase):
 		)
 		with self.assertRaises(ValidationError):
 			commitment.full_clean()
+
+	def test_indicator_recalculates_from_approved_evidence(self):
+		activity = Activity.objects.create(
+			goal=self.north_goal,
+			author=self.north_employee,
+			date=date(2026, 6, 20),
+			request_problem="Request",
+			action="Action",
+			contact="Contact",
+			phone="555",
+		)
+		evidence = Evidence.objects.create(
+			code="EVID-TEST-001",
+			activity=activity,
+			author=self.north_employee,
+			file_link="evidence/test",
+			date="2026-06-21T10:00:00Z",
+			review_status="Pending",
+		)
+
+		indicator = Indicator.objects.get(goal=self.north_goal)
+		self.assertEqual(indicator.actual_progress, 0)
+
+		Validation.objects.create(
+			evidence=evidence,
+			verifier=self.north_employee,
+			decision="Approved",
+			date="2026-06-22T10:00:00Z",
+			result="Approved",
+		)
+
+		indicator.refresh_from_db()
+		self.assertEqual(indicator.actual_progress, 1)
+		self.assertEqual(indicator.compliance, 20)
+		self.assertEqual(indicator.weighted_result, 10)
+		self.assertEqual(indicator.traffic_light, "Red")
+
+	def test_multiple_evidences_on_one_activity_count_once(self):
+		activity = Activity.objects.create(
+			goal=self.north_goal,
+			author=self.north_employee,
+			date=date(2026, 6, 20),
+			request_problem="Request",
+			action="Action",
+			contact="Contact",
+			phone="555",
+		)
+		for code in ("EVID-ONE-001", "EVID-ONE-002"):
+			evidence = Evidence.objects.create(
+				code=code,
+				activity=activity,
+				author=self.north_employee,
+				file_link=f"evidence/{code}",
+				date="2026-06-21T10:00:00Z",
+				review_status="Pending",
+			)
+			Validation.objects.create(
+				evidence=evidence,
+				verifier=self.north_employee,
+				decision="Approved",
+				date="2026-06-22T10:00:00Z",
+				result="Approved",
+			)
+
+		indicator = recalculate_indicator_for_goal(self.north_goal)
+
+		self.assertEqual(indicator.approved_activities, 1)
+		self.assertEqual(indicator.approved_evidences, 2)
+		self.assertEqual(indicator.actual_progress, 2)
+		self.assertEqual(indicator.compliance, 40)
+
+		for number in range(3, 7):
+			evidence = Evidence.objects.create(
+				code=f"EVID-ONE-00{number}",
+				activity=activity,
+				author=self.north_employee,
+				file_link=f"evidence/EVID-ONE-00{number}",
+				date="2026-06-21T10:00:00Z",
+				review_status="Pending",
+			)
+			Validation.objects.create(
+				evidence=evidence,
+				verifier=self.north_employee,
+				decision="Approved",
+				date="2026-06-22T10:00:00Z",
+				result="Approved",
+			)
+
+		indicator = recalculate_indicator_for_goal(self.north_goal)
+
+		self.assertEqual(indicator.approved_evidences, 6)
+		self.assertEqual(indicator.actual_progress, 6)
+		self.assertEqual(indicator.compliance, 120)
+
+	def test_indicator_uses_goal_evidence_requirement(self):
+		self.north_goal.required_evidence_count = 10
+		self.north_goal.save(update_fields=["required_evidence_count"])
+
+		indicator = recalculate_indicator_for_goal(self.north_goal)
+
+		self.assertEqual(indicator.expected_value, 10)
+		self.assertEqual(indicator.compliance, 0)
+
+	def test_commitment_comments_preserve_author_and_text(self):
+		commitment = Commitment.objects.create(
+			delegation=self.north,
+			responsible=self.north_employee,
+			requester="Requester",
+			territory="North",
+			commitment_date=date(2026, 7, 1),
+		)
+
+		comment = CommitmentComment.objects.create(
+			commitment=commitment,
+			author=self.north_employee,
+			text="Seguimiento realizado.",
+		)
+
+		self.assertEqual(comment.author, self.north_employee)
+		self.assertEqual(comment.text, "Seguimiento realizado.")
+
+	def test_comment_can_be_created_without_employee_link(self):
+		user = get_user_model().objects.create_user(
+			username="comment_user",
+			password="test-password",
+		)
+		UserProfile.objects.create(
+			user=user,
+			employee_code="COMMENT-001",
+			delegation=self.north,
+		)
+		commitment = Commitment.objects.create(
+			delegation=self.north,
+			responsible=self.north_employee,
+			requester="Requester",
+			territory="North",
+			commitment_date=date(2026, 7, 1),
+		)
+
+		self.client.force_login(user)
+		response = self.client.post(
+			"/monitoring/compromisos/",
+			{
+				"commitment_id": commitment.pk,
+				"comment": "Comentario publicado.",
+			},
+		)
+
+		self.assertEqual(response.status_code, 302)
+		comment = CommitmentComment.objects.get(
+			commitment=commitment,
+		)
+		self.assertEqual(comment.created_by, user)
+		self.assertIsNone(comment.author)
+
+	def test_comment_can_only_be_deleted_by_creator(self):
+		creator = get_user_model().objects.create_user(
+			username="comment_creator",
+			password="test-password",
+		)
+		UserProfile.objects.create(
+			user=creator,
+			employee_code="COMMENT-002",
+			employee=self.north_employee,
+			delegation=self.north,
+		)
+		other_user = get_user_model().objects.create_user(
+			username="other_comment_user",
+			password="test-password",
+		)
+		UserProfile.objects.create(
+			user=other_user,
+			employee_code="COMMENT-003",
+			delegation=self.north,
+		)
+		commitment = Commitment.objects.create(
+			delegation=self.north,
+			responsible=self.north_employee,
+			requester="Requester",
+			territory="North",
+			commitment_date=date(2026, 7, 1),
+		)
+		comment = CommitmentComment.objects.create(
+			commitment=commitment,
+			created_by=creator,
+			text="Comentario para eliminar.",
+		)
+		self.assertTrue(
+			Audit.objects.filter(
+				entity="CommitmentComment",
+				object_identifier=str(comment.pk),
+				user=self.north_employee,
+				event="Created CommitmentComment",
+			).exists()
+		)
+
+		self.client.force_login(other_user)
+		self.client.post(
+			"/monitoring/compromisos/",
+			{
+				"action": "delete",
+				"commitment_id": commitment.pk,
+				"comment_id": comment.pk,
+			},
+		)
+		comment.refresh_from_db()
+		self.assertIsNone(comment.deleted_at)
+
+		self.client.force_login(creator)
+		response = self.client.post(
+			"/monitoring/compromisos/",
+			{
+				"action": "delete",
+				"commitment_id": commitment.pk,
+				"comment_id": comment.pk,
+			},
+		)
+
+		self.assertEqual(response.status_code, 302)
+		comment.refresh_from_db()
+		self.assertIsNotNone(comment.deleted_at)
+
+	def test_latest_rejected_validation_removes_activity_from_advance(self):
+		activity = Activity.objects.create(
+			goal=self.north_goal,
+			author=self.north_employee,
+			date=date(2026, 6, 20),
+			request_problem="Request",
+			action="Action",
+			contact="Contact",
+			phone="555",
+		)
+		evidence = Evidence.objects.create(
+			code="EVID-LATEST-001",
+			activity=activity,
+			author=self.north_employee,
+			file_link="evidence/latest",
+			date="2026-06-21T10:00:00Z",
+			review_status="Pending",
+		)
+		Validation.objects.create(
+			evidence=evidence,
+			verifier=self.north_employee,
+			decision="Approved",
+			date="2026-06-21T10:00:00Z",
+			result="Approved",
+		)
+		Validation.objects.create(
+			evidence=evidence,
+			verifier=self.north_employee,
+			decision="Rejected",
+			date="2026-06-22T10:00:00Z",
+			result="Rejected",
+			version=2,
+		)
+
+		indicator = recalculate_indicator_for_goal(self.north_goal)
+
+		self.assertEqual(indicator.approved_activities, 0)
 
 	def test_indicator_admin_scopes_by_profile_delegation(self):
 		user = get_user_model().objects.create_user(

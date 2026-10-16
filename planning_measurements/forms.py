@@ -119,6 +119,14 @@ class PeriodForm(BootstrapMixin, forms.ModelForm):
 class GoalScopeMixin(BootstrapMixin):
     """Limita funcionarios y asigna su cargo automáticamente."""
 
+    def _configure_evidence_count(self):
+        field = self.fields["required_evidence_count"]
+        field.required = False
+        field.initial = self.instance.required_evidence_count or 5
+
+    def clean_required_evidence_count(self):
+        return self.cleaned_data.get("required_evidence_count") or 5
+
     def _apply_scope(self, user):
         self.fields["position"].queryset = (
             PositionFunction.objects.filter(
@@ -308,6 +316,7 @@ class GoalForm(GoalScopeMixin, forms.ModelForm):
             "position",
             "item",
             "objective_value",
+            "required_evidence_count",
             "unit",
             "weight",
         ]
@@ -330,6 +339,7 @@ class GoalForm(GoalScopeMixin, forms.ModelForm):
             )
 
         self._apply_scope(user)
+        self._configure_evidence_count()
         self._configure_items()
 
 
@@ -343,6 +353,7 @@ class GoalInlineForm(GoalScopeMixin, forms.ModelForm):
             "position",
             "item",
             "objective_value",
+            "required_evidence_count",
             "unit",
             "weight",
         ]
@@ -350,6 +361,7 @@ class GoalInlineForm(GoalScopeMixin, forms.ModelForm):
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
         self._apply_scope(user)
+        self._configure_evidence_count()
         self._configure_items()
 
 
@@ -383,4 +395,3 @@ class MeasurementItemForm(BootstrapMixin, forms.ModelForm):
         self.fields["formula"].help_text = (
             "Obligatoria para ítems porcentuales."
         )
-

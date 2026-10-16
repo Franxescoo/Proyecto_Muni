@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load i18n %}
 
 {% block titulo %}Indicadores · Monitoreo y trazabilidad{% endblock %}
 
@@ -20,15 +21,32 @@
     .status-red { background: #fbe1e3; color: #a60a17; }
     .status-muted { background: #eef0f2; color: #5f6870; }
     .filter-label { color: #56616b; font-size: .78rem; font-weight: 600; margin-bottom: .35rem; }
+    .status-track { min-width: 120px; height: .65rem; background: #edf0f2; border-radius: 999px; overflow: hidden; }
+    .progress-fill { height: 100%; border-radius: inherit; transition: width .25s ease; }
+    .progress-green { background: #198754; }
+    .progress-yellow { background: #d39e00; }
+    .progress-red { background: #b4232d; }
+    .progress-muted { background: #6c757d; }
+    .progress-value { font-size: .75rem; font-weight: 600; min-width: 3.4rem; text-align: right; }
 </style>
 {% endblock %}
 
-{% block submenu %}
-<ul class="nav nav-pills mb-3">
-    <li class="nav-item"><a class="nav-link active" href="{% url 'monitoring:indicator_list' %}">Indicadores</a></li>
-    <li class="nav-item"><a class="nav-link" href="{% url 'monitoring:commitment_list' %}">Compromisos</a></li>
-    <li class="nav-item"><a class="nav-link" href="{% url 'monitoring:audit_list' %}">Auditoría</a></li>
-</ul>
+{% block top_links %}{% endblock %}
+
+{% block sidebar %}
+<aside class="workspace-sidebar" aria-label="Navegación de monitoreo y trazabilidad">
+    <div class="workspace-sidebar-header">
+        <i class="bi bi-list" aria-hidden="true"></i>
+        <strong>Monitoreo y<br>trazabilidad</strong>
+        <i class="bi bi-chevron-down" aria-hidden="true"></i>
+    </div>
+    <nav class="nav flex-column">
+        <a class="nav-link" href="{% url 'home' %}"><i class="bi bi-house-door"></i><span>Inicio</span></a>
+        <a class="nav-link active" href="{% url 'monitoring:indicator_list' %}"><i class="bi bi-bar-chart-line"></i><span>Indicadores</span></a>
+        <a class="nav-link" href="{% url 'monitoring:commitment_list' %}"><i class="bi bi-handshake"></i><span>Compromisos</span></a>
+        <a class="nav-link" href="{% url 'monitoring:audit_list' %}"><i class="bi bi-shield-check"></i><span>Auditoría</span></a>
+    </nav>
+</aside>
 {% endblock %}
 
 {% block contenido %}
@@ -52,7 +70,7 @@
 
     <section class="section-card p-3 p-lg-4">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-            <div><h2 class="h5 mb-1 fw-bold">Registro de indicadores</h2><p class="text-muted small mb-0">Consulta el resultado más reciente de cada meta.</p></div>
+            <div><h2 class="h5 mb-1 fw-bold">Registro de indicadores</h2><p class="text-muted small mb-0">Los resultados se calculan con las evidencias aprobadas asociadas a cada meta.</p></div>
             <button type="button" class="btn btn-outline-secondary btn-sm"><i class="bi bi-download me-1"></i>Exportar</button>
         </div>
         <form class="row g-3 align-items-end mb-3" method="get">
@@ -62,20 +80,22 @@
         </form>
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
-                <thead><tr><th>Meta</th><th>Responsable</th><th class="text-end">Esperado</th><th class="text-end">Avance</th><th class="text-end">Cumplimiento</th><th>Estado</th><th>Fecha</th></tr></thead>
+                <thead><tr><th>Meta</th><th>Responsable</th><th class="text-end">Evidencias requeridas</th><th class="text-end">Evidencias aprobadas</th><th class="text-end">Avance</th><th class="text-end">Diferencia</th><th class="text-end">Cumplimiento</th><th>Estado</th><th>Fecha</th></tr></thead>
                 <tbody>
                 {% for indicator in indicators %}
                 <tr>
                     <td class="fw-semibold">{{ indicator.goal.item|default:"Sin meta" }}</td>
                     <td>{{ indicator.employee|default:"Sin responsable" }}</td>
-                    <td class="text-end">{{ indicator.expected_value|default:"—" }}</td>
-                    <td class="text-end">{{ indicator.actual_progress|default:"—" }}</td>
-                    <td class="text-end fw-semibold">{{ indicator.compliance|default:"—" }}%</td>
-                    <td><span class="status {% if indicator.traffic_light|lower == 'green' or indicator.traffic_light|lower == 'verde' %}status-green{% elif indicator.traffic_light|lower == 'yellow' or indicator.traffic_light|lower == 'amarillo' %}status-yellow{% elif indicator.traffic_light|lower == 'red' or indicator.traffic_light|lower == 'rojo' %}status-red{% else %}status-muted{% endif %}">{{ indicator.traffic_light|default:"Pendiente" }}</span></td>
-                    <td class="text-muted small">{{ indicator.calculation_date|date:"d/m/Y"|default:"—" }}</td>
+                    <td class="text-end">{{ indicator.expected_value|default_if_none:"—" }}</td>
+                    <td class="text-end">{{ indicator.approved_evidences|default:"0" }}</td>
+                    <td class="text-end">{{ indicator.actual_progress|floatformat:"0"|default_if_none:"—" }}</td>
+                    <td class="text-end">{{ indicator.difference|floatformat:"0"|default_if_none:"—" }}</td>
+                    <td class="text-end fw-semibold">{{ indicator.compliance|default_if_none:"—" }}%</td>
+                    <td><div class="d-flex align-items-center gap-2"><div class="status-track flex-grow-1" title="Estado: {{ indicator.traffic_light|default:'Pendiente' }}"><div class="progress-fill {% if indicator.traffic_light|lower == 'green' or indicator.traffic_light|lower == 'verde' %}progress-green{% elif indicator.traffic_light|lower == 'yellow' or indicator.traffic_light|lower == 'amarillo' %}progress-yellow{% elif indicator.traffic_light|lower == 'red' or indicator.traffic_light|lower == 'rojo' %}progress-red{% else %}progress-muted{% endif %}" style="width: {% widthratio indicator.compliance 100 100 %}%"></div></div><span class="status {% if indicator.traffic_light|lower == 'green' or indicator.traffic_light|lower == 'verde' %}status-green{% elif indicator.traffic_light|lower == 'yellow' or indicator.traffic_light|lower == 'amarillo' %}status-yellow{% elif indicator.traffic_light|lower == 'red' or indicator.traffic_light|lower == 'rojo' %}status-red{% else %}status-muted{% endif %}">{{ indicator.traffic_light|default:"Pendiente" }}</span></div></td>
+                    <td class="text-muted small">{% language 'es' %}{{ indicator.calculation_date|date:"d \d\e F \d\e Y"|default:"—" }}{% endlanguage %}</td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="7" class="text-center py-5"><i class="bi bi-bar-chart-line fs-2 text-muted d-block mb-2"></i><span class="text-muted">No hay indicadores para mostrar.</span></td></tr>
+                <tr><td colspan="9" class="text-center py-5"><i class="bi bi-bar-chart-line fs-2 text-muted d-block mb-2"></i><span class="text-muted">No hay indicadores para mostrar.</span></td></tr>
                 {% endfor %}
                 </tbody>
             </table>

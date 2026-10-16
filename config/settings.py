@@ -9,12 +9,9 @@ https://docs.djangoproject.com/en/6.1/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
-
 import os
 from pathlib import Path
-
 from dotenv import load_dotenv
-
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -24,53 +21,34 @@ load_dotenv(BASE_DIR / ".env")
 DB_ENGINE = os.getenv("DB_ENGINE", "sqlite").lower()
 
 if DB_ENGINE == "sqlite":
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / os.getenv(
-                "DB_NAME",
-                "db.sqlite3",
-            ),
-        }
-    }
-
+    DATABASES = {"default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / os.getenv(
+            "DB_NAME", "db.sqlite3"
+        ),
+    }}
 elif DB_ENGINE == "mysql":
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.mysql",
-            "NAME": os.getenv("DB_NAME"),
-            "USER": os.getenv("DB_USER"),
-            "PASSWORD": os.getenv("DB_PASSWORD"),
-            "HOST": os.getenv(
-                "DB_HOST",
-                "127.0.0.1",
-            ),
-            "PORT": os.getenv(
-                "DB_PORT",
-                "3306",
-            ),
-        }
-    }
-
+    DATABASES = {"default": {
+        "ENGINE": "django.db.backends.mysql",
+        "NAME": os.getenv("DB_NAME"),
+        "USER": os.getenv("DB_USER"),
+        "PASSWORD": os.getenv("DB_PASSWORD"),
+        "HOST": os.getenv("DB_HOST", "127.0.0.1"),
+        "PORT": os.getenv("DB_PORT", "3306"),
+    }}
 else:
-    raise ValueError(
-        "DB_ENGINE debe ser sqlite o mysql"
-    )
-
+    raise ValueError("DB_ENGINE debe ser sqlite o mysql")
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = (
-    'django-insecure-u@u7+h&knqi!j1l8$mo5zfrm='
-    'a38go!sc#2s@y7bb4=ky+no47'
-)
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "django-insecure-solo-desarrollo-local-no-produccion")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() == "true"
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
 
 
 # Application definition
@@ -104,28 +82,14 @@ ROOT_URLCONF = 'config.urls'
 
 TEMPLATES = [
     {
-        'BACKEND': (
-            'django.template.backends.django.'
-            'DjangoTemplates'
-        ),
-        'DIRS': [
-            BASE_DIR / 'templates',
-        ],
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
-                (
-                    'django.template.context_processors.'
-                    'request'
-                ),
-                (
-                    'django.contrib.auth.context_processors.'
-                    'auth'
-                ),
-                (
-                    'django.contrib.messages.context_processors.'
-                    'messages'
-                ),
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
+                'django.contrib.messages.context_processors.messages',
             ],
         },
     },
@@ -137,12 +101,7 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
-}
+
 
 
 # Password validation
@@ -150,28 +109,16 @@ DATABASES = {
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': (
-            'django.contrib.auth.password_validation.'
-            'UserAttributeSimilarityValidator'
-        ),
+        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
     },
     {
-        'NAME': (
-            'django.contrib.auth.password_validation.'
-            'MinimumLengthValidator'
-        ),
+        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
     },
     {
-        'NAME': (
-            'django.contrib.auth.password_validation.'
-            'CommonPasswordValidator'
-        ),
+        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
     },
     {
-        'NAME': (
-            'django.contrib.auth.password_validation.'
-            'NumericPasswordValidator'
-        ),
+        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
 ]
 
@@ -192,17 +139,12 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL = 'static/'
-
+STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [
     BASE_DIR / "static",
 ]
-
-
-# Media files uploaded by users
-
-MEDIA_URL = '/media/'
-
-MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_URL = "media/"
+MEDIA_ROOT = BASE_DIR / "media"
 
 
 # Email
@@ -210,16 +152,10 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 MAILERS = {
     'default': {
-        'BACKEND': (
-            'django.core.mail.backends.console.'
-            'EmailBackend'
-        ),
+        'BACKEND': 'django.core.mail.backends.console.EmailBackend',
     },
 }
 
-
 LOGIN_URL = "login"
-
-LOGIN_REDIRECT_URL = "planning:index"
-
+LOGIN_REDIRECT_URL = "home"
 LOGOUT_REDIRECT_URL = "login"
