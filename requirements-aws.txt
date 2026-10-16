@@ -1,0 +1,8 @@
+Django==6.1
+django-bootstrap5==26.3
+python-dotenv==1.1.1
+holidays==0.106
+requests==2.32.4
+Pillow==12.3.0
+PyMySQL==1.2.3
+gunicorn

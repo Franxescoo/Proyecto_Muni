@@ -1,0 +1,77 @@
+
+name: Desplegar Proyecto Muni en AWS
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: despliegue-produccion
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Preparar conexion SSH
+        env:
+          SSH_KEY: ${{ secrets.AWS_SSH_KEY }}
+          AWS_KNOWN_HOSTS: ${{ secrets.AWS_KNOWN_HOSTS }}
+        run: |
+          set -e
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$AWS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Actualizar Django en AWS
+        env:
+          AWS_HOST: ${{ secrets.AWS_HOST }}
+          AWS_USER: ${{ secrets.AWS_USER }}
+          DEPLOY_SHA: ${{ github.sha }}
+        run: |
+          set -e
+          ssh -o StrictHostKeyChecking=yes \
+            -i ~/.ssh/id_ed25519 \
+            "$AWS_USER@$AWS_HOST" \
+            "DEPLOY_SHA=$DEPLOY_SHA bash -se" <<'EOF'
+          set -e
+
+          cd /home/ec2-user/Proyecto_Muni
+
+          # Comprobar que no hay modificaciones locales
+          git diff --quiet
+          git diff --cached --quiet
+
+          # Descargar y desplegar el commit correspondiente
+          git fetch origin main
+          git merge --ff-only "$DEPLOY_SHA"
+          test "$(git rev-parse HEAD)" = "$DEPLOY_SHA"
+
+          # Instalar dependencias de AWS
+          .venv/bin/python -m pip install -r requirements-aws.txt
+
+          # Comprobar Django
+          .venv/bin/python manage.py check
+
+          # Aplicar migraciones
+          .venv/bin/python manage.py migrate --noinput
+
+          # Actualizar archivos estaticos
+          .venv/bin/python manage.py collectstatic --noinput
+
+          # Reiniciar Gunicorn
+          sudo -n systemctl restart proyecto-muni
+
+          # Verificar el servicio
+          sudo -n systemctl is-active --quiet proyecto-muni
+
+          echo "Despliegue completado correctamente"
+          EOF
