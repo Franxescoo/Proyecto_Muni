@@ -7,25 +7,16 @@
 
 <style>
     /* =========================================
-       ESTRUCTURA GENERAL
-       ========================================= */
-
-    .container-fluid:has(> .registration-sidebar) {
-        display: grid;
-        grid-template-columns: 224px minmax(0, 1fr);
-        align-items: start;
-        gap: 1.5rem;
-    }
-
-    .container-fluid:has(> .registration-sidebar) > main {
-        min-width: 0;
-    }
-
-    /* =========================================
        MENÚ LATERAL
-       ========================================= */
+       Compatible con workspace-layout
+       de la plantilla principal
+    ========================================= */
 
     .registration-sidebar {
+        flex: 0 0 225px;
+        width: 225px;
+        min-width: 0;
+        align-self: flex-start;
         overflow: hidden;
         background: #fff;
         border: 1px solid #e5e7eb;
@@ -68,6 +59,8 @@
         border-radius: .45rem;
         color: #343a40;
         font-size: .9rem;
+        text-decoration: none;
+        margin: 0;
     }
 
     .registration-sidebar .nav-link i {
@@ -86,13 +79,18 @@
         font-weight: 600;
     }
 
+    .registration-sidebar .nav-link.active i {
+        color: #fff;
+    }
+
     /* =========================================
        CONTENIDO
-       ========================================= */
+    ========================================= */
 
     .registration-shell {
         max-width: 1480px;
         margin: 0 auto;
+        min-width: 0;
     }
 
     .registration-hero {
@@ -182,8 +180,7 @@
 
     /* =========================================
        MODALES RESPONSIVOS
-       Se conserva la corrección anterior
-       ========================================= */
+    ========================================= */
 
     .modal .modal-dialog {
         max-height: calc(100vh - 2rem);
@@ -207,7 +204,6 @@
     }
 
     /* Cabecera fija */
-
     .modal .modal-dialog .modal-content > form > .modal-header {
         flex: 0 0 auto;
         background: #fff;
@@ -215,7 +211,6 @@
     }
 
     /* Contenido desplazable */
-
     .modal .modal-dialog .modal-content > form > .modal-body {
         flex: 1 1 auto;
         min-height: 0;
@@ -225,7 +220,6 @@
     }
 
     /* Botones inferiores visibles */
-
     .modal .modal-dialog .modal-content > form > .modal-footer {
         display: flex;
         flex: 0 0 auto;
@@ -239,7 +233,6 @@
     }
 
     /* Compatibilidad con otros modales */
-
     .modal .modal-dialog .modal-content > .modal-body {
         min-height: 0;
         overflow-y: auto;
@@ -264,30 +257,36 @@
     }
 
     /* =========================================
-       TABLETS Y PANTALLAS MEDIANAS
-       ========================================= */
+       PANTALLAS PEQUEÑAS
+    ========================================= */
 
-    @media (max-width: 991.98px) {
+    @media (max-width: 767.98px) {
 
-        .container-fluid:has(> .registration-sidebar) {
-            grid-template-columns: minmax(0, 1fr);
-            gap: 1rem;
+        .registration-sidebar {
+            width: 100%;
+            flex: 0 0 auto;
+            margin-bottom: 1rem;
         }
 
         .registration-sidebar nav {
-            display: flex;
-            flex-wrap: wrap;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: .35rem;
+        }
+
+        .registration-sidebar .nav-link {
+            white-space: normal;
         }
     }
-
-    /* =========================================
-       CELULARES Y PANTALLAS PEQUEÑAS
-       ========================================= */
 
     @media (max-width: 575.98px) {
 
         .registration-hero {
             padding: 1.25rem;
+        }
+
+        .registration-sidebar nav {
+            grid-template-columns: minmax(0, 1fr);
         }
 
         .modal .modal-dialog {
@@ -320,9 +319,9 @@
 {% endblock %}
 
 
-{% block submenu %}
+{% block sidebar %}
 
-<aside class="registration-sidebar">
+<aside class="registration-sidebar workspace-sidebar">
 
     <div class="registration-sidebar-heading">
 
@@ -420,7 +419,7 @@
         {% endif %}
 
 
-        <!-- Sub Atención: NUEVA OPCIÓN -->
+        <!-- Sub Atención -->
 
         {% if perms.registration_validation.view_subattention %}
 
@@ -431,6 +430,23 @@
                aria-hidden="true"></i>
 
             Sub Atención
+
+        </a>
+
+        {% endif %}
+
+
+        <!-- Ingreso de Atención -->
+
+        {% if perms.registration_validation.view_attentionentry %}
+
+        <a class="nav-link{% if request.resolver_match.url_name == 'attention_entry_list' or request.resolver_match.url_name == 'attention_entry_create' or request.resolver_match.url_name == 'attention_entry_update' %} active{% endif %}"
+           href="{% url 'registration:attention_entry_list' %}">
+
+            <i class="bi bi-journal-text"
+               aria-hidden="true"></i>
+
+            Ingreso de Atención
 
         </a>
 
@@ -465,6 +481,7 @@
 {{ block.super }}
 
 <script>
+
     (function () {
 
         const currentPath = window.location.pathname;
@@ -481,28 +498,43 @@
         const attentionTypeEditPattern =
             /^\/registration\/attention-types\/\d+\/edit\/?$/;
 
-        /* Nuevo: edición de Sub Atención */
-
         const subAttentionEditPattern =
             /^\/registration\/sub-attentions\/\d+\/edit\/?$/;
+
+        const attentionEntryEditPattern =
+            /^\/registration\/attention-entries\/\d+\/edit\/?$/;
 
 
         const isFormPage =
             currentPath ===
                 "{% url 'registration:activity_create' %}"
+
             || currentPath ===
                 "{% url 'registration:evidence_create' %}"
+
             || currentPath ===
                 "{% url 'registration:validation_create' %}"
+
             || currentPath ===
                 "{% url 'registration:attention_type_create' %}"
+
             || currentPath ===
                 "{% url 'registration:sub_attention_create' %}"
+
+            || currentPath ===
+                "{% url 'registration:attention_entry_create' %}"
+
             || activityEditPattern.test(currentPath)
+
             || evidenceEditPattern.test(currentPath)
+
             || validationEditPattern.test(currentPath)
+
             || attentionTypeEditPattern.test(currentPath)
-            || subAttentionEditPattern.test(currentPath);
+
+            || subAttentionEditPattern.test(currentPath)
+
+            || attentionEntryEditPattern.test(currentPath);
 
 
         if (!isFormPage) {
@@ -518,8 +550,10 @@
         window.addEventListener(
             "pagehide",
             function () {
+
                 document.documentElement.style.visibility =
                     "hidden";
+
             }
         );
 
@@ -552,9 +586,13 @@
                         "hidden";
 
                     if (window.history.length >= 3) {
+
                         window.history.go(-2);
+
                     } else {
+
                         window.history.back();
+
                     }
 
                     return;
@@ -568,6 +606,7 @@
         );
 
     })();
+
 </script>
 
 {% endblock %}
