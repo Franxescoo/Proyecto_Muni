@@ -2,17 +2,6 @@
 
 {% block titulo %}{{ title }}{% endblock %}
 
-{% block estilos %}
-<style>
-    .account-profile-row { align-items: end; display: grid; gap: 1rem; grid-template-columns: minmax(180px, .75fr) minmax(0, 1.25fr); }
-    .account-profile-preview { align-items: center; background: #f1f3f5; border: 1px dashed #b8c0c8; border-radius: 50%; color: #7a858f; display: flex; height: 112px; justify-content: center; margin-bottom: .75rem; overflow: hidden; width: 112px; }
-    .account-profile-preview i { font-size: 3.4rem; }
-    .account-profile-preview img { height: 100%; object-fit: cover; width: 100%; }
-    .account-form-error { color: #b02a37; font-size: .875rem; margin-top: .3rem; }
-    @media (max-width: 575.98px) { .account-profile-row { grid-template-columns: minmax(0, 1fr); } .account-profile-preview { height: 88px; width: 88px; } }
-</style>
-{% endblock %}
-
 {% block contenido %}
 <div class="row">
     <div class="col-md-8 offset-md-2">
@@ -28,36 +17,23 @@
                 </div>
                 {% endif %}
 
-                {% if form.profile_photo %}
-                <div class="account-profile-row mb-3">
-                    <div>
-                        <div class="account-profile-preview" id="profile-photo-preview" aria-label="Vista previa de foto de perfil">
-                            <i class="bi bi-person-circle" aria-hidden="true"></i>
-                            <img alt="Vista previa de foto" hidden>
-                        </div>
-                        {{ form.profile_photo.label_tag }}
-                        {{ form.profile_photo }}
-                        {% if form.profile_photo.help_text %}<div class="form-text">{{ form.profile_photo.help_text }}</div>{% endif %}
-                        {% if form.profile_photo.errors %}<div class="account-form-error">{{ form.profile_photo.errors }}</div>{% endif %}
-                    </div>
-                    <div>
-                        {{ form.employee.label_tag }}
-                        {{ form.employee }}
-                        {% if form.employee.help_text %}<div class="form-text">{{ form.employee.help_text }}</div>{% endif %}
-                        {% if form.employee.errors %}<div class="account-form-error">{{ form.employee.errors }}</div>{% endif %}
-                    </div>
-                </div>
-                {% endif %}
-
                 {% for field in form %}
-                {% if field.name != 'profile_photo' and field.name != 'employee' %}
-                    <div class="mb-3">
-                        {{ field.label_tag }}
-                        {{ field }}
-                        {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
-                        {% if field.errors %}<div class="account-form-error">{{ field.errors }}</div>{% endif %}
+                <div class="mb-3">
+                    {{ field.label_tag }}
+                    {{ field }}
+
+                    {% if field.help_text %}
+                    <div class="form-text">
+                        {{ field.help_text }}
                     </div>
-                {% endif %}
+                    {% endif %}
+
+                    {% if field.errors %}
+                    <div class="text-danger">
+                        {{ field.errors }}
+                    </div>
+                    {% endif %}
+                </div>
                 {% endfor %}
 
                 <div class="d-flex justify-content-between">
@@ -75,34 +51,4 @@
         </div>
     </div>
 </div>
-{% endblock %}
-
-{% block scripts %}
-<script>
-document.addEventListener("DOMContentLoaded", function () {
-    const input = document.getElementById("id_profile_photo");
-    const preview = document.querySelector("#profile-photo-preview img");
-    const placeholder = document.querySelector("#profile-photo-preview i");
-    if (!input || !preview || !placeholder) return;
-
-    input.addEventListener("change", function () {
-        const file = input.files && input.files[0];
-        if (!file) {
-            preview.removeAttribute("src");
-            preview.hidden = true;
-            placeholder.hidden = false;
-            return;
-        }
-
-        if (!file.type.startsWith("image/")) {
-            input.value = "";
-            return;
-        }
-
-        preview.src = URL.createObjectURL(file);
-        preview.hidden = false;
-        placeholder.hidden = true;
-    });
-});
-</script>
 {% endblock %}
