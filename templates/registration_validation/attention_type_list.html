@@ -1,0 +1,551 @@
+
+{% extends "registration_validation/base.html" %}
+
+{% block titulo %}Tipos de atención · Registro y validación{% endblock %}
+
+{% block contenido %}
+
+<div class="registration-shell pb-4" id="tipos-atencion">
+
+    <!-- Encabezado -->
+    <section class="registration-hero mb-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
+
+        <div>
+            <div class="small text-uppercase fw-semibold opacity-75 mb-2">
+                Registro y validación
+            </div>
+
+            <h1 class="mb-2 fw-bold">
+                Tipos de atención
+            </h1>
+
+            <p class="mb-0">
+                Administra los tipos de atención utilizados
+                en el registro de solicitudes.
+            </p>
+        </div>
+
+        <i class="bi bi-card-checklist display-5 opacity-75"
+           aria-hidden="true"></i>
+
+    </section>
+
+
+    <!-- Estadísticas -->
+    <div class="row g-3 mb-4">
+
+        <div class="col-12 col-md-4">
+            <div class="section-card metric h-100">
+                <div class="value">
+                    {{ total_attention_types|default:"0" }}
+                </div>
+                <div class="label">
+                    Tipos registrados
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-md-4">
+            <div class="section-card metric h-100">
+                <div class="value text-success">
+                    {{ active_attention_types|default:"0" }}
+                </div>
+                <div class="label">
+                    Tipos activos
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-md-4">
+            <div class="section-card metric h-100">
+                <div class="value text-secondary">
+                    {{ inactive_attention_types|default:"0" }}
+                </div>
+                <div class="label">
+                    Tipos inactivos
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+
+    <!-- Listado -->
+    <section class="section-card p-3 p-lg-4">
+
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+
+            <div>
+                <h2 class="h5 mb-1 fw-bold">
+                    Listado de tipos de atención
+                </h2>
+
+                <p class="text-muted small mb-0">
+                    Consulta, registra y administra los tipos
+                    de atención disponibles.
+                </p>
+            </div>
+
+            {% if perms.registration_validation.add_attentiontype %}
+
+            <a href="{% url 'registration:attention_type_create' %}"
+               class="btn btn-outline-secondary btn-sm">
+
+                <i class="bi bi-plus-lg me-1"></i>
+                Agregar tipo de atención
+
+            </a>
+
+            {% endif %}
+
+        </div>
+
+
+        <!-- Filtros -->
+        <form method="get"
+              class="row g-3 align-items-end mb-3">
+
+            <div class="col-12 col-md-5">
+
+                <label class="filter-label"
+                       for="attention-type-search">
+                    Buscar tipo de atención
+                </label>
+
+                <input type="search"
+                       id="attention-type-search"
+                       name="q"
+                       value="{{ query }}"
+                       class="form-control"
+                       placeholder="Código, nombre o descripción...">
+
+            </div>
+
+
+            <div class="col-12 col-md-3">
+
+                <label class="filter-label"
+                       for="attention-type-status">
+                    Estado
+                </label>
+
+                <select id="attention-type-status"
+                        name="status"
+                        class="form-select">
+
+                    <option value="">
+                        Todos los estados
+                    </option>
+
+                    <option value="active"
+                            {% if selected_status == "active" %}selected{% endif %}>
+                        Activo
+                    </option>
+
+                    <option value="inactive"
+                            {% if selected_status == "inactive" %}selected{% endif %}>
+                        Inactivo
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <div class="col-12 col-md-2">
+
+                <button type="submit"
+                        class="btn btn-dark w-100">
+
+                    <i class="bi bi-funnel me-1"></i>
+                    Filtrar
+
+                </button>
+
+            </div>
+
+
+            <div class="col-12 col-md-2">
+
+                <a href="{% url 'registration:attention_type_list' %}"
+                   class="btn btn-outline-secondary w-100">
+                    Limpiar
+                </a>
+
+            </div>
+
+        </form>
+
+
+        <!-- Registros por página -->
+        {% if not open_modal %}
+
+        <form method="post"
+              action="{% url 'registration:set_page_size' %}"
+              class="d-flex flex-wrap align-items-center gap-2 mb-3">
+
+            {% csrf_token %}
+
+            <input type="hidden"
+                   name="next"
+                   value="{{ request.get_full_path }}">
+
+            <label for="attention-type-page-size"
+                   class="form-label mb-0 small text-muted">
+
+                Registros por página
+
+            </label>
+
+            <select id="attention-type-page-size"
+                    name="page_size"
+                    class="form-select form-select-sm w-auto">
+
+                {% for size in page_size_options %}
+
+                <option value="{{ size }}"
+                        {% if size == page_size %}selected{% endif %}>
+
+                    {{ size }}
+
+                </option>
+
+                {% endfor %}
+
+            </select>
+
+            <button type="submit"
+                    class="btn btn-secondary btn-sm">
+                Guardar preferencia
+            </button>
+
+        </form>
+
+        {% endif %}
+
+
+        <!-- Tabla -->
+        <div class="table-responsive">
+
+            <table class="table table-hover align-middle mb-0">
+
+                <thead>
+                    <tr>
+                        <th>Código</th>
+                        <th>Nombre</th>
+                        <th>Descripción</th>
+                        <th>Estado</th>
+                        <th class="text-end">Acciones</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+
+                    {% for attention_type in attention_types %}
+
+                    <tr>
+
+                        <td class="fw-semibold">
+                            {{ attention_type.code }}
+                        </td>
+
+                        <td>
+                            {{ attention_type.name }}
+                        </td>
+
+                        <td class="text-muted small">
+                            {% if attention_type.description %}
+                                {{ attention_type.description|truncatechars:100 }}
+                            {% else %}
+                                Sin descripción
+                            {% endif %}
+                        </td>
+
+                        <td>
+                            {% if attention_type.status %}
+
+                            <span class="status status-green">
+                                Activo
+                            </span>
+
+                            {% else %}
+
+                            <span class="status status-muted">
+                                Inactivo
+                            </span>
+
+                            {% endif %}
+                        </td>
+
+
+                        <!-- Acciones -->
+                        <td class="text-end">
+
+                            {% if perms.registration_validation.change_attentiontype %}
+
+                            <a href="{% url 'registration:attention_type_update' attention_type.attention_type_id %}"
+                               class="btn btn-sm btn-light border me-1"
+                               title="Modificar tipo de atención">
+
+                                <i class="bi bi-pencil"></i>
+
+                                <span class="d-none d-xl-inline ms-1">
+                                    Modificar
+                                </span>
+
+                            </a>
+
+                            {% endif %}
+
+
+                            {% if perms.registration_validation.delete_attentiontype %}
+
+                            <form id="delete-attention-type-{{ attention_type.attention_type_id }}"
+                                  method="post"
+                                  action="{% url 'registration:attention_type_delete' attention_type.attention_type_id %}"
+                                  class="d-none">
+
+                                {% csrf_token %}
+
+                            </form>
+
+
+                            <button type="button"
+                                    class="btn btn-sm btn-light border text-danger"
+                                    title="Eliminar tipo de atención"
+                                    onclick="confirmDeleteAttentionType(
+                                        '{{ attention_type.attention_type_id }}',
+                                        '{{ attention_type.name|escapejs }}'
+                                    )">
+
+                                <i class="bi bi-trash"></i>
+
+                                <span class="d-none d-xl-inline ms-1">
+                                    Eliminar
+                                </span>
+
+                            </button>
+
+                            {% endif %}
+
+                        </td>
+
+                    </tr>
+
+
+                    {% empty %}
+
+                    <tr>
+
+                        <td colspan="5"
+                            class="text-center py-5">
+
+                            <i class="bi bi-inbox fs-2 text-muted d-block mb-2"></i>
+
+                            <span class="text-muted">
+                                No hay tipos de atención para mostrar.
+                            </span>
+
+                        </td>
+
+                    </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+
+        <!-- Paginación -->
+        {% if is_paginated %}
+
+        <nav class="mt-4"
+             aria-label="Paginación de tipos de atención">
+
+            <ul class="pagination justify-content-center mb-0">
+
+                {% if page_obj.has_previous %}
+
+                <li class="page-item">
+
+                    <a class="page-link"
+                       href="?page={{ page_obj.previous_page_number }}&q={{ query|urlencode }}&status={{ selected_status|urlencode }}">
+
+                        Anterior
+
+                    </a>
+
+                </li>
+
+                {% endif %}
+
+
+                <li class="page-item active">
+
+                    <span class="page-link">
+
+                        {{ page_obj.number }}
+                        de
+                        {{ page_obj.paginator.num_pages }}
+
+                    </span>
+
+                </li>
+
+
+                {% if page_obj.has_next %}
+
+                <li class="page-item">
+
+                    <a class="page-link"
+                       href="?page={{ page_obj.next_page_number }}&q={{ query|urlencode }}&status={{ selected_status|urlencode }}">
+
+                        Siguiente
+
+                    </a>
+
+                </li>
+
+                {% endif %}
+
+            </ul>
+
+        </nav>
+
+        {% endif %}
+
+    </section>
+
+</div>
+
+
+<!-- Modal de creación y modificación -->
+{% include "registration_validation/_attention_type_modal.html" %}
+
+{% endblock %}
+
+
+{% block scripts %}
+
+{{ block.super }}
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+
+<!-- Confirmar eliminación -->
+<script>
+    function confirmDeleteAttentionType(id, name) {
+
+        Swal.fire({
+            title: "¿Eliminar tipo de atención?",
+            text: name,
+            icon: "warning",
+            showCancelButton: true,
+            confirmButtonText: "Sí, eliminar",
+            cancelButtonText: "Cancelar",
+            confirmButtonColor: "#a60a17"
+
+        }).then((result) => {
+
+            if (result.isConfirmed) {
+
+                document
+                    .getElementById(
+                        "delete-attention-type-" + id
+                    )
+                    .submit();
+
+            }
+
+        });
+    }
+</script>
+
+
+<!-- Mensajes SweetAlert -->
+{% if messages %}
+
+<script>
+    document.addEventListener(
+        "DOMContentLoaded",
+        function () {
+
+            document.querySelectorAll(
+                ".alert-dismissible"
+            ).forEach(function (alertElement) {
+                alertElement.remove();
+            });
+
+            {% for message in messages %}
+
+            Swal.fire({
+
+                title: (
+                    "{% if message.tags == 'success' %}"
+                    + "Operación exitosa"
+                    + "{% elif message.tags == 'error' %}"
+                    + "Error"
+                    + "{% elif message.tags == 'warning' %}"
+                    + "Advertencia"
+                    + "{% else %}"
+                    + "Información"
+                    + "{% endif %}"
+                ),
+
+                text: "{{ message|escapejs }}",
+
+                icon: (
+                    "{% if message.tags == 'success' %}"
+                    + "success"
+                    + "{% elif message.tags == 'error' %}"
+                    + "error"
+                    + "{% elif message.tags == 'warning' %}"
+                    + "warning"
+                    + "{% else %}"
+                    + "info"
+                    + "{% endif %}"
+                ),
+
+                confirmButtonText: "Aceptar",
+                confirmButtonColor: "#a60a17"
+
+            });
+
+            {% endfor %}
+        }
+    );
+</script>
+
+{% endif %}
+
+
+<!-- Mostrar el modal al crear o modificar -->
+{% if open_modal %}
+
+<script>
+    document.addEventListener(
+        "DOMContentLoaded",
+        function () {
+
+            const modalElement =
+                document.getElementById(
+                    "attentionTypeModal"
+                );
+
+            if (modalElement && window.bootstrap) {
+
+                const modal =
+                    new bootstrap.Modal(modalElement);
+
+                modal.show();
+            }
+        }
+    );
+</script>
+
+{% endif %}
+
+{% endblock %}

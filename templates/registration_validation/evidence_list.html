@@ -1,0 +1,739 @@
+
+{% extends "registration_validation/base.html" %}
+
+{% block titulo %}Evidencias · Registro y validación{% endblock %}
+
+{% block contenido %}
+
+<div class="registration-shell pb-4" id="evidencias">
+
+    <!-- Encabezado -->
+    <section class="registration-hero mb-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
+
+        <div>
+            <div class="small text-uppercase fw-semibold opacity-75 mb-2">
+                Registro y validación
+            </div>
+
+            <h1 class="mb-2 fw-bold">
+                Gestión de evidencias
+            </h1>
+
+            <p class="mb-0">
+                Administra los respaldos asociados a las actividades registradas.
+            </p>
+        </div>
+
+        <i class="bi bi-file-earmark-check display-5 opacity-75"
+           aria-hidden="true"></i>
+
+    </section>
+
+
+    <!-- Métricas -->
+    <div class="row g-3 mb-4">
+
+        <div class="col-12 col-md-4">
+            <div class="section-card metric h-100">
+                <div class="value">
+                    {{ total_evidences|default:"0" }}
+                </div>
+                <div class="label">
+                    Evidencias registradas
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-md-4">
+            <div class="section-card metric h-100">
+                <div class="value text-warning">
+                    {{ pending_evidences|default:"0" }}
+                </div>
+                <div class="label">
+                    Pendientes de revisión
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-md-4">
+            <div class="section-card metric h-100">
+                <div class="value text-success">
+                    {{ evidences_with_file|default:"0" }}
+                </div>
+                <div class="label">
+                    Con archivo adjunto
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+
+    <!-- Listado de evidencias -->
+    <section class="section-card p-3 p-lg-4">
+
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+
+            <div>
+                <h2 class="h5 mb-1 fw-bold">
+                    Listado de evidencias
+                </h2>
+
+                <p class="text-muted small mb-0">
+                    Consulta archivos, enlaces, responsables y estados de revisión.
+                </p>
+            </div>
+
+            {% if perms.registration_validation.add_evidence %}
+
+            <a href="{% url 'registration:evidence_create' %}"
+               class="btn btn-outline-secondary btn-sm">
+
+                <i class="bi bi-plus-lg me-1"></i>
+                Agregar evidencia
+
+            </a>
+
+            {% endif %}
+
+        </div>
+
+
+        <!-- Filtros -->
+        <form method="get"
+              class="row g-3 align-items-end mb-3">
+
+            <div class="col-12 col-md-5">
+
+                <label class="filter-label"
+                       for="evidence-search">
+                    Buscar evidencia
+                </label>
+
+                <input id="evidence-search"
+                       type="search"
+                       name="q"
+                       value="{{ query }}"
+                       class="form-control"
+                       placeholder="Código, actividad, meta o funcionario...">
+
+            </div>
+
+            <div class="col-12 col-md-3">
+
+                <label class="filter-label"
+                       for="evidence-status">
+                    Estado de revisión
+                </label>
+
+                <select id="evidence-status"
+                        name="review_status"
+                        class="form-select">
+
+                    <option value="">
+                        Todos los estados
+                    </option>
+
+                    {% for status in review_status_options %}
+
+                    <option value="{{ status }}"
+                            {% if selected_review_status == status %}
+                            selected
+                            {% endif %}>
+
+                        {{ status }}
+
+                    </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+            <div class="col-12 col-md-2">
+
+                <button type="submit"
+                        class="btn btn-dark w-100">
+
+                    <i class="bi bi-funnel me-1"></i>
+                    Filtrar
+
+                </button>
+
+            </div>
+
+            <div class="col-12 col-md-2">
+
+                <a href="{% url 'registration:evidence_list' %}"
+                   class="btn btn-outline-secondary w-100">
+
+                    Limpiar
+
+                </a>
+
+            </div>
+
+        </form>
+
+
+        <!-- Paginación configurable -->
+        {% if not open_modal %}
+
+        <form method="post"
+              action="{% url 'registration:set_page_size' %}"
+              class="d-flex flex-wrap align-items-center gap-2 mb-3">
+
+            {% csrf_token %}
+
+            <input type="hidden"
+                   name="next"
+                   value="{{ request.get_full_path }}">
+
+            <label for="evidence-page-size"
+                   class="form-label mb-0 small text-muted">
+
+                Registros por página
+
+            </label>
+
+            <select id="evidence-page-size"
+                    name="page_size"
+                    class="form-select form-select-sm w-auto">
+
+                {% for size in page_size_options %}
+
+                <option value="{{ size }}"
+                        {% if size == page_size %}selected{% endif %}>
+
+                    {{ size }}
+
+                </option>
+
+                {% endfor %}
+
+            </select>
+
+            <button type="submit"
+                    class="btn btn-secondary btn-sm">
+
+                Guardar preferencia
+
+            </button>
+
+        </form>
+
+        {% endif %}
+
+
+        <!-- Tabla principal -->
+        <div class="table-responsive">
+
+            <table class="table table-hover align-middle mb-0">
+
+                <thead>
+
+                    <tr>
+                        <th>Código</th>
+                        <th>Actividad</th>
+                        <th>Funcionario</th>
+                        <th>Fecha</th>
+                        <th>Estado</th>
+                        <th>Archivos / Enlace</th>
+                        <th>Período</th>
+                        <th class="text-end">Acciones</th>
+                    </tr>
+
+                </thead>
+
+
+                <tbody>
+
+                    {% for evidence in evidences %}
+
+                    <tr>
+
+                        <td class="fw-semibold">
+                            {{ evidence.code }}
+                        </td>
+
+
+                        <td>
+                            {{ evidence.activity }}
+                        </td>
+
+
+                        <td>
+                            {{ evidence.author }}
+                        </td>
+
+
+                        <td class="text-muted small">
+                            {{ evidence.date|date:"d/m/Y H:i" }}
+                        </td>
+
+
+                        <!-- Estado -->
+                        <td>
+
+                            {% if evidence.review_status|lower == "pending" or evidence.review_status|lower == "pendiente" %}
+
+                            <span class="status status-yellow">
+                                {{ evidence.review_status }}
+                            </span>
+
+                            {% else %}
+
+                            <span class="status status-muted">
+                                {{ evidence.review_status }}
+                            </span>
+
+                            {% endif %}
+
+                        </td>
+
+
+                        <!-- Archivos antiguos y nuevos unificados -->
+                        <td>
+
+                            <div class="d-flex flex-column align-items-start gap-1">
+
+                                {% with attachments=evidence.files.all %}
+
+                                    {% if evidence.file or attachments %}
+
+                                    <details class="w-100">
+
+                                        <summary class="btn btn-sm btn-light border">
+
+                                            <i class="bi bi-paperclip me-1"
+                                               aria-hidden="true"></i>
+
+                                            Ver archivos
+
+                                        </summary>
+
+
+                                        <div class="d-flex flex-column align-items-start gap-1 mt-2 ps-2">
+
+                                            <!-- Archivos del sistema nuevo -->
+                                            {% for attachment in attachments %}
+
+                                                {% if not attachment.deleted_at %}
+
+                                                    <!-- Evita repetir el archivo antiguo -->
+                                                    {% if attachment.file.name != evidence.file.name %}
+
+                                                    <a href="{{ attachment.file.url }}"
+                                                       target="_blank"
+                                                       rel="noopener noreferrer"
+                                                       class="btn btn-sm btn-outline-secondary text-start"
+                                                       title="{{ attachment.file.name }}">
+
+                                                        <i class="bi bi-file-earmark me-1"
+                                                           aria-hidden="true"></i>
+
+                                                        {{ attachment.file.name|truncatechars:42 }}
+
+                                                    </a>
+
+                                                    {% endif %}
+
+                                                {% endif %}
+
+                                            {% endfor %}
+
+
+                                            <!-- Compatibilidad con archivos antiguos -->
+                                            {% if evidence.file %}
+
+                                            <a href="{{ evidence.file.url }}"
+                                               target="_blank"
+                                               rel="noopener noreferrer"
+                                               class="btn btn-sm btn-outline-secondary text-start"
+                                               title="{{ evidence.file.name }}">
+
+                                                <i class="bi bi-file-earmark me-1"
+                                                   aria-hidden="true"></i>
+
+                                                {{ evidence.file.name|truncatechars:42 }}
+
+                                            </a>
+
+                                            {% endif %}
+
+                                        </div>
+
+                                    </details>
+
+                                    {% endif %}
+
+                                {% endwith %}
+
+
+                                <!-- Enlace opcional -->
+                                {% if evidence.file_link %}
+
+                                <a href="{{ evidence.file_link }}"
+                                   target="_blank"
+                                   rel="noopener noreferrer"
+                                   class="btn btn-sm btn-light border"
+                                   title="Abrir enlace de evidencia">
+
+                                    <i class="bi bi-link-45deg me-1"></i>
+
+                                    Ver enlace
+
+                                </a>
+
+                                {% endif %}
+
+
+                                <!-- Sin respaldo -->
+                                {% if not evidence.file and not evidence.files.all and not evidence.file_link %}
+
+                                <span class="text-muted small">
+                                    Sin respaldo
+                                </span>
+
+                                {% endif %}
+
+                            </div>
+
+                        </td>
+
+
+                        <!-- Período -->
+                        <td class="small">
+
+                            <div>
+
+                                {{ evidence.activity.goal.period.start_date|date:"d/m/Y" }}
+
+                                al
+
+                                {{ evidence.activity.goal.period.end_date|date:"d/m/Y" }}
+
+                            </div>
+
+                            {% if evidence.activity.goal.period.status == "Closed" %}
+
+                            <div class="mt-1">
+
+                                <span class="status status-red">
+                                    Cerrado
+                                </span>
+
+                            </div>
+
+                            {% endif %}
+
+                        </td>
+
+
+                        <!-- Acciones -->
+                        <td class="text-end">
+
+                            {% if evidence.activity.goal.period.status == "Closed" %}
+
+                            <span class="status status-muted">
+                                Solo lectura
+                            </span>
+
+                            {% else %}
+
+
+                                <!-- Modificar -->
+                                {% if perms.registration_validation.change_evidence %}
+
+                                <a href="{% url 'registration:evidence_update' evidence.evidence_id %}"
+                                   class="btn btn-sm btn-light border me-1"
+                                   title="Modificar evidencia">
+
+                                    <i class="bi bi-pencil"></i>
+
+                                    <span class="d-none d-xl-inline ms-1">
+                                        Modificar
+                                    </span>
+
+                                </a>
+
+                                {% endif %}
+
+
+                                <!-- Eliminar -->
+                                {% if perms.registration_validation.delete_evidence %}
+
+                                <form id="delete-form-{{ evidence.evidence_id }}"
+                                      method="post"
+                                      action="{% url 'registration:evidence_delete' evidence.evidence_id %}"
+                                      class="d-none">
+
+                                    {% csrf_token %}
+
+                                </form>
+
+
+                                <button type="button"
+                                        class="btn btn-sm btn-light border text-danger"
+                                        title="Eliminar evidencia"
+                                        onclick="confirmDeleteEvidence(
+                                            '{{ evidence.evidence_id }}',
+                                            '{{ evidence.code|escapejs }}'
+                                        )">
+
+                                    <i class="bi bi-trash"></i>
+
+                                    <span class="d-none d-xl-inline ms-1">
+                                        Eliminar
+                                    </span>
+
+                                </button>
+
+                                {% endif %}
+
+                            {% endif %}
+
+                        </td>
+
+                    </tr>
+
+
+                    {% empty %}
+
+                    <tr>
+
+                        <td colspan="8"
+                            class="text-center py-5">
+
+                            <i class="bi bi-file-earmark-x fs-2 text-muted d-block mb-2"></i>
+
+                            <span class="text-muted">
+                                No hay evidencias para mostrar.
+                            </span>
+
+                        </td>
+
+                    </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+
+        <!-- Paginación -->
+        {% if is_paginated %}
+
+        <nav class="mt-4">
+
+            <ul class="pagination justify-content-center mb-0">
+
+                {% if page_obj.has_previous %}
+
+                <li class="page-item">
+
+                    <a class="page-link"
+                       href="?page={{ page_obj.previous_page_number }}&q={{ query|urlencode }}&review_status={{ selected_review_status|urlencode }}">
+
+                        Anterior
+
+                    </a>
+
+                </li>
+
+                {% endif %}
+
+
+                <li class="page-item active">
+
+                    <span class="page-link">
+
+                        {{ page_obj.number }}
+
+                        de
+
+                        {{ page_obj.paginator.num_pages }}
+
+                    </span>
+
+                </li>
+
+
+                {% if page_obj.has_next %}
+
+                <li class="page-item">
+
+                    <a class="page-link"
+                       href="?page={{ page_obj.next_page_number }}&q={{ query|urlencode }}&review_status={{ selected_review_status|urlencode }}">
+
+                        Siguiente
+
+                    </a>
+
+                </li>
+
+                {% endif %}
+
+            </ul>
+
+        </nav>
+
+        {% endif %}
+
+    </section>
+
+</div>
+
+
+<!-- Modal de evidencias -->
+{% include "registration_validation/_evidence_modal.html" %}
+
+{% endblock %}
+
+
+{% block scripts %}
+
+{{ block.super }}
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+
+<!-- Confirmación de eliminación -->
+<script>
+
+    function confirmDeleteEvidence(id, code) {
+
+        Swal.fire({
+
+            title: "¿Eliminar evidencia?",
+            text: code,
+            icon: "warning",
+            showCancelButton: true,
+            confirmButtonText: "Sí, eliminar",
+            cancelButtonText: "Cancelar",
+            confirmButtonColor: "#a60a17"
+
+        }).then((result) => {
+
+            if (result.isConfirmed) {
+
+                document
+                    .getElementById(
+                        "delete-form-" + id
+                    )
+                    .submit();
+
+            }
+
+        });
+
+    }
+
+</script>
+
+
+<!-- Mensajes SweetAlert -->
+{% if messages %}
+
+<script>
+
+    document.addEventListener(
+        "DOMContentLoaded",
+        function () {
+
+            document
+                .querySelectorAll(
+                    ".alert-dismissible"
+                )
+                .forEach(
+                    function (alertElement) {
+                        alertElement.remove();
+                    }
+                );
+
+            {% for message in messages %}
+
+            Swal.fire({
+
+                title: (
+                    "{% if message.tags == 'success' %}"
+                    + "Operación exitosa"
+                    + "{% elif message.tags == 'error' %}"
+                    + "Error"
+                    + "{% elif message.tags == 'warning' %}"
+                    + "Advertencia"
+                    + "{% else %}"
+                    + "Información"
+                    + "{% endif %}"
+                ),
+
+                text: "{{ message|escapejs }}",
+
+                icon: (
+                    "{% if message.tags == 'success' %}"
+                    + "success"
+                    + "{% elif message.tags == 'error' %}"
+                    + "error"
+                    + "{% elif message.tags == 'warning' %}"
+                    + "warning"
+                    + "{% else %}"
+                    + "info"
+                    + "{% endif %}"
+                ),
+
+                confirmButtonText: "Aceptar",
+                confirmButtonColor: "#a60a17"
+
+            });
+
+            {% endfor %}
+
+        }
+    );
+
+</script>
+
+{% endif %}
+
+
+<!-- Abrir modal automáticamente -->
+{% if open_modal %}
+
+<script>
+
+    document.addEventListener(
+        "DOMContentLoaded",
+        function () {
+
+            const modalElement =
+                document.getElementById(
+                    "evidenceModal"
+                );
+
+            if (
+                modalElement &&
+                window.bootstrap
+            ) {
+
+                const modal =
+                    new bootstrap.Modal(
+                        modalElement
+                    );
+
+                modal.show();
+
+            }
+
+        }
+    );
+
+</script>
+
+{% endif %}
+
+{% endblock %}
+

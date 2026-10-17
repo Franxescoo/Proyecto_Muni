@@ -1,0 +1,217 @@
+{% if open_modal %}
+
+<div class="modal fade"
+     id="validationModal"
+     tabindex="-1"
+     aria-labelledby="validationModalLabel"
+     aria-hidden="true">
+
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+
+        <div class="modal-content shadow">
+
+            <div class="modal-header"
+                 style="background-color: #a60a17; color: white;">
+
+                <h5 class="modal-title"
+                    id="validationModalLabel">
+
+                    {% if object %}
+                        Modificar Validación
+                    {% else %}
+                        Agregar Validación
+                    {% endif %}
+
+                </h5>
+
+                <button type="button"
+                        class="btn-close btn-close-white"
+                        data-bs-dismiss="modal"
+                        aria-label="Cerrar">
+                </button>
+
+            </div>
+
+
+            <form method="post"
+                  novalidate>
+
+                {% csrf_token %}
+
+                <div class="modal-body">
+
+                    {% if form.non_field_errors %}
+
+                    <div class="alert alert-danger">
+
+                        {% for error in form.non_field_errors %}
+                            <div>{{ error }}</div>
+                        {% endfor %}
+
+                    </div>
+
+                    {% endif %}
+
+
+                    <div class="row">
+
+                        <div class="col-md-6 mb-3">
+
+                            <label class="form-label fw-semibold">
+                                {{ form.evidence.label }}
+                            </label>
+
+                            {{ form.evidence }}
+
+                            {% for error in form.evidence.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                            {% endfor %}
+
+                        </div>
+
+
+                        <div class="col-md-6 mb-3">
+
+                            <label class="form-label fw-semibold">
+                                {{ form.verifier.label }}
+                            </label>
+
+                            {{ form.verifier }}
+
+                            {% for error in form.verifier.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                            {% endfor %}
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="row">
+
+                        <div class="col-md-6 mb-3">
+
+                            <label class="form-label fw-semibold">
+                                {{ form.decision.label }}
+                            </label>
+
+                            {{ form.decision }}
+
+                            {% for error in form.decision.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                            {% endfor %}
+
+                        </div>
+
+
+                        <div class="col-md-6 mb-3">
+
+                            <label class="form-label fw-semibold">
+                                {{ form.date.label }}
+                            </label>
+
+                            {{ form.date }}
+
+                            {% for error in form.date.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                            {% endfor %}
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="mb-3">
+
+                        <label class="form-label fw-semibold">
+                            {{ form.observation.label }}
+                        </label>
+
+                        {{ form.observation }}
+
+                        {% for error in form.observation.errors %}
+                        <div class="text-danger small mt-1">
+                            {{ error }}
+                        </div>
+                        {% endfor %}
+
+                    </div>
+
+
+                    <div class="row">
+
+                        <div class="col-md-8 mb-3">
+
+                            <label class="form-label fw-semibold">
+                                {{ form.result.label }}
+                            </label>
+
+                            {{ form.result }}
+
+                            {% for error in form.result.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                            {% endfor %}
+
+                        </div>
+
+
+                        <div class="col-md-4 mb-3">
+
+                            <label class="form-label fw-semibold">
+                                {{ form.version.label }}
+                            </label>
+
+                            {{ form.version }}
+
+                            {% if form.version.help_text %}
+                            <div class="form-text">
+                                {{ form.version.help_text }}
+                            </div>
+                            {% endif %}
+
+                            {% for error in form.version.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ error }}
+                            </div>
+                            {% endfor %}
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <div class="modal-footer">
+
+                    <a href="{% url 'registration:validation_list' %}"
+                       class="btn btn-outline-secondary">
+                        Cancelar
+                    </a>
+
+                    <button type="submit"
+                            class="btn btn-success fw-semibold">
+                        Guardar
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endif %}

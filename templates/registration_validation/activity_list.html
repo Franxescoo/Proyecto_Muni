@@ -1,0 +1,620 @@
+{% extends "registration_validation/base.html" %}
+
+{% block titulo %}Actividades · Registro y validación{% endblock %}
+
+{% block contenido %}
+
+<div class="registration-shell pb-4" id="actividades">
+
+    <section class="registration-hero mb-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
+
+        <div>
+            <div class="small text-uppercase fw-semibold opacity-75 mb-2">
+                Registro y validación
+            </div>
+
+            <h1 class="mb-2 fw-bold">
+                Gestión de actividades
+            </h1>
+
+            <p class="mb-0">
+                Registra y consulta las actividades asociadas a las metas institucionales.
+            </p>
+        </div>
+
+        <i class="bi bi-clipboard-check display-5 opacity-75"
+           aria-hidden="true"></i>
+
+    </section>
+
+
+    <div class="row g-3 mb-4">
+
+        <div class="col-12 col-md-4">
+
+            <div class="section-card metric h-100">
+
+                <div class="value">
+                    {{ total_activities|default:"0" }}
+                </div>
+
+                <div class="label">
+                    Actividades registradas
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="col-12 col-md-4">
+
+            <div class="section-card metric h-100">
+
+                <div class="value text-warning">
+                    {{ pending_activities|default:"0" }}
+                </div>
+
+                <div class="label">
+                    Pendientes
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="col-12 col-md-4">
+
+            <div class="section-card metric h-100">
+
+                <div class="value text-success">
+                    {{ completed_activities|default:"0" }}
+                </div>
+
+                <div class="label">
+                    Completadas
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <section class="section-card p-3 p-lg-4">
+
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+
+            <div>
+
+                <h2 class="h5 mb-1 fw-bold">
+                    Listado de actividades
+                </h2>
+
+                <p class="text-muted small mb-0">
+                    Seguimiento de actividades por meta, funcionario, estado y período.
+                </p>
+
+            </div>
+
+
+            {% if perms.registration_validation.add_activity %}
+
+            <a href="{% url 'registration:activity_create' %}"
+               class="btn btn-outline-secondary btn-sm">
+
+                <i class="bi bi-plus-lg me-1"></i>
+                Agregar actividad
+
+            </a>
+
+            {% endif %}
+
+        </div>
+
+
+        <form method="get"
+              class="row g-3 align-items-end mb-3">
+
+            <div class="col-12 col-md-5">
+
+                <label class="filter-label"
+                       for="activity-search">
+
+                    Buscar actividad
+
+                </label>
+
+                <input id="activity-search"
+                       type="search"
+                       name="q"
+                       value="{{ query }}"
+                       class="form-control"
+                       placeholder="Problema, acción, funcionario o meta...">
+
+            </div>
+
+
+            <div class="col-12 col-md-3">
+
+                <label class="filter-label"
+                       for="activity-status">
+
+                    Estado
+
+                </label>
+
+                <select id="activity-status"
+                        name="status"
+                        class="form-select">
+
+                    <option value="">
+                        Todos los estados
+                    </option>
+
+                    {% for value, label in status_options %}
+
+                    <option value="{{ value }}"
+                            {% if selected_status == value %}
+                            selected
+                            {% endif %}>
+
+                        {{ label }}
+
+                    </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+
+            <div class="col-12 col-md-2">
+
+                <button type="submit"
+                        class="btn btn-dark w-100">
+
+                    <i class="bi bi-funnel me-1"></i>
+                    Filtrar
+
+                </button>
+
+            </div>
+
+
+            <div class="col-12 col-md-2">
+
+                <a href="{% url 'registration:activity_list' %}"
+                   class="btn btn-outline-secondary w-100">
+
+                    Limpiar
+
+                </a>
+
+            </div>
+
+        </form>
+
+        {% if not open_modal %}
+        <form method="post"
+              action="{% url 'registration:set_page_size' %}"
+              class="d-flex flex-wrap align-items-center gap-2 mb-3">
+
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+
+            <label for="activity-page-size" class="form-label mb-0 small text-muted">
+                Registros por página
+            </label>
+            <select id="activity-page-size"
+                    name="page_size"
+                    class="form-select form-select-sm w-auto">
+                {% for size in page_size_options %}
+                <option value="{{ size }}" {% if size == page_size %}selected{% endif %}>
+                    {{ size }}
+                </option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-secondary btn-sm">
+                Guardar preferencia
+            </button>
+
+        </form>
+        {% endif %}
+
+        <div class="table-responsive">
+
+            <table class="table table-hover align-middle mb-0">
+
+                <thead>
+
+                    <tr>
+                        <th>Meta</th>
+                        <th>Funcionario</th>
+                        <th>Fecha</th>
+                        <th>Estado</th>
+                        <th>Período</th>
+                        <th class="text-end">Acciones</th>
+                    </tr>
+
+                </thead>
+
+                <tbody>
+
+                    {% for activity in activities %}
+
+                    <tr>
+
+                        <td class="fw-semibold">
+                            {{ activity.goal.item }}
+                        </td>
+
+
+                        <td>
+                            {{ activity.author }}
+                        </td>
+
+
+                        <td class="text-muted small">
+                            {{ activity.date|date:"d/m/Y" }}
+                        </td>
+
+
+                        <td>
+
+                            {% if activity.status == "Completed" %}
+
+                            <span class="status status-green">
+                                Completada
+                            </span>
+
+                            {% elif activity.status == "In progress" %}
+
+                            <span class="status status-yellow">
+                                En progreso
+                            </span>
+
+                            {% else %}
+
+                            <span class="status status-muted">
+                                Pendiente
+                            </span>
+
+                            {% endif %}
+
+                        </td>
+
+
+                        <td class="small">
+
+                            <div>
+                                {{ activity.goal.period.start_date|date:"d/m/Y" }}
+                                al
+                                {{ activity.goal.period.end_date|date:"d/m/Y" }}
+                            </div>
+
+                            {% if activity.goal.period.status == "Closed" %}
+
+                            <div class="mt-1">
+
+                                <span class="status status-red">
+                                    Cerrado
+                                </span>
+
+                            </div>
+
+                            {% endif %}
+
+                        </td>
+
+
+                        <td class="text-end">
+
+                            {% if activity.goal.period.status == "Closed" %}
+
+                            <span class="status status-muted">
+                                Solo lectura
+                            </span>
+
+                            {% else %}
+
+
+                                {% if perms.registration_validation.change_activity %}
+
+                                <a href="{% url 'registration:activity_update' activity.activity_id %}"
+                                   class="btn btn-sm btn-light border me-1"
+                                   title="Modificar actividad">
+
+                                    <i class="bi bi-pencil"></i>
+
+                                    <span class="d-none d-xl-inline ms-1">
+                                        Modificar
+                                    </span>
+
+                                </a>
+
+                                {% endif %}
+
+
+                                {% if perms.registration_validation.delete_activity %}
+
+                                <form id="delete-form-{{ activity.activity_id }}"
+                                      method="post"
+                                      action="{% url 'registration:activity_delete' activity.activity_id %}"
+                                      class="d-none">
+
+                                    {% csrf_token %}
+
+                                </form>
+
+
+                                <button type="button"
+                                        class="btn btn-sm btn-light border text-danger"
+                                        title="Eliminar actividad"
+                                        onclick="confirmDelete(
+                                            '{{ activity.activity_id }}',
+                                            '{{ activity.goal.item|escapejs }}'
+                                        )">
+
+                                    <i class="bi bi-trash"></i>
+
+                                    <span class="d-none d-xl-inline ms-1">
+                                        Eliminar
+                                    </span>
+
+                                </button>
+
+                                {% endif %}
+
+
+                            {% endif %}
+
+                        </td>
+
+                    </tr>
+
+
+                    {% empty %}
+
+                    <tr>
+
+                        <td colspan="6"
+                            class="text-center py-5">
+
+                            <i class="bi bi-clipboard-check fs-2 text-muted d-block mb-2"></i>
+
+                            <span class="text-muted">
+                                No hay actividades para mostrar.
+                            </span>
+
+                        </td>
+
+                    </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+
+        {% if is_paginated %}
+
+        <nav class="mt-4">
+
+            <ul class="pagination justify-content-center mb-0">
+
+                {% if page_obj.has_previous %}
+
+                <li class="page-item">
+
+                    <a class="page-link"
+                       href="?page={{ page_obj.previous_page_number }}&q={{ query }}&status={{ selected_status }}">
+
+                        Anterior
+
+                    </a>
+
+                </li>
+
+                {% endif %}
+
+
+                <li class="page-item active">
+
+                    <span class="page-link">
+
+                        {{ page_obj.number }}
+                        de
+                        {{ page_obj.paginator.num_pages }}
+
+                    </span>
+
+                </li>
+
+
+                {% if page_obj.has_next %}
+
+                <li class="page-item">
+
+                    <a class="page-link"
+                       href="?page={{ page_obj.next_page_number }}&q={{ query }}&status={{ selected_status }}">
+
+                        Siguiente
+
+                    </a>
+
+                </li>
+
+                {% endif %}
+
+            </ul>
+
+        </nav>
+
+        {% endif %}
+
+    </section>
+
+</div>
+
+
+{% include "registration_validation/_activity_modal.html" %}
+
+{% endblock %}
+
+
+{% block scripts %}
+
+{{ block.super }}
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+
+<script>
+
+    function confirmDelete(id, name) {
+
+        Swal.fire({
+
+            title: "¿Eliminar actividad?",
+
+            text: name,
+
+            icon: "warning",
+
+            showCancelButton: true,
+
+            confirmButtonText: "Sí, eliminar",
+
+            cancelButtonText: "Cancelar",
+
+            confirmButtonColor: "#a60a17"
+
+        }).then((result) => {
+
+            if (result.isConfirmed) {
+
+                document
+                    .getElementById(
+                        "delete-form-" + id
+                    )
+                    .submit();
+
+            }
+
+        });
+
+    }
+
+</script>
+
+
+{% if messages %}
+
+<script>
+
+    document.addEventListener(
+        "DOMContentLoaded",
+        function () {
+
+            document
+                .querySelectorAll(
+                    ".alert-dismissible"
+                )
+                .forEach(
+                    function (alertElement) {
+
+                        alertElement.remove();
+
+                    }
+                );
+
+
+            {% for message in messages %}
+
+            Swal.fire({
+
+                title: (
+                    "{% if message.tags == 'success' %}"
+                    + "Operación exitosa"
+                    + "{% elif message.tags == 'error' %}"
+                    + "Error"
+                    + "{% elif message.tags == 'warning' %}"
+                    + "Advertencia"
+                    + "{% else %}"
+                    + "Información"
+                    + "{% endif %}"
+                ),
+
+                text: "{{ message|escapejs }}",
+
+                icon: (
+                    "{% if message.tags == 'success' %}"
+                    + "success"
+                    + "{% elif message.tags == 'error' %}"
+                    + "error"
+                    + "{% elif message.tags == 'warning' %}"
+                    + "warning"
+                    + "{% else %}"
+                    + "info"
+                    + "{% endif %}"
+                ),
+
+                confirmButtonText: "Aceptar",
+
+                confirmButtonColor: "#a60a17"
+
+            });
+
+            {% endfor %}
+
+        }
+    );
+
+</script>
+
+{% endif %}
+
+
+{% if open_modal %}
+
+<script>
+
+    document.addEventListener(
+        "DOMContentLoaded",
+        function () {
+
+            const modalElement =
+                document.getElementById(
+                    "activityModal"
+                );
+
+
+            if (
+                modalElement &&
+                window.bootstrap
+            ) {
+
+                const modal =
+                    new bootstrap.Modal(
+                        modalElement
+                    );
+
+                modal.show();
+
+            }
+
+        }
+    );
+
+</script>
+
+{% endif %}
+
+{% endblock %}

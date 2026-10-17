@@ -1,0 +1,612 @@
+
+{% extends "base.html" %}
+
+{% block titulo %}Registro y validación{% endblock %}
+
+{% block estilos %}
+
+<style>
+    /* =========================================
+       MENÚ LATERAL
+       Compatible con workspace-layout
+       de la plantilla principal
+    ========================================= */
+
+    .registration-sidebar {
+        flex: 0 0 225px;
+        width: 225px;
+        min-width: 0;
+        align-self: flex-start;
+        overflow: hidden;
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: .65rem;
+        box-shadow: 0 3px 12px rgba(24, 33, 44, .06);
+    }
+
+    .registration-sidebar-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .75rem;
+        padding: .875rem;
+        background: linear-gradient(135deg, #a60a17, #760710);
+        color: #fff;
+        font-weight: 700;
+        font-size: .875rem;
+        white-space: nowrap;
+    }
+
+    .registration-sidebar-heading span {
+        display: inline-flex;
+        align-items: center;
+        min-width: 0;
+        white-space: nowrap;
+    }
+
+    .registration-sidebar nav {
+        display: grid;
+        gap: .25rem;
+        padding: .6rem;
+    }
+
+    .registration-sidebar .nav-link {
+        display: flex;
+        align-items: center;
+        gap: .65rem;
+        min-height: 2.8rem;
+        padding: .65rem .75rem;
+        border-radius: .45rem;
+        color: #343a40;
+        font-size: .9rem;
+        text-decoration: none;
+        margin: 0;
+    }
+
+    .registration-sidebar .nav-link i {
+        flex: 0 0 1rem;
+        text-align: center;
+    }
+
+    .registration-sidebar .nav-link:hover {
+        background: #f8e9eb;
+        color: #8c0712;
+    }
+
+    .registration-sidebar .nav-link.active {
+        background: #a60a17;
+        color: #fff;
+        font-weight: 600;
+    }
+
+    .registration-sidebar .nav-link.active i {
+        color: #fff;
+    }
+
+    /* =========================================
+       CONTENIDO
+    ========================================= */
+
+    .registration-shell {
+        max-width: 1480px;
+        margin: 0 auto;
+        min-width: 0;
+    }
+
+    .registration-hero {
+        background: linear-gradient(135deg, #a60a17, #760710);
+        color: #fff;
+        border-radius: .65rem;
+        padding: 1.5rem 1.75rem;
+        box-shadow: 0 6px 18px rgba(166, 10, 23, .18);
+    }
+
+    .registration-hero h1 {
+        font-size: clamp(1.35rem, 2vw, 1.85rem);
+    }
+
+    .registration-hero p {
+        color: rgba(255, 255, 255, .78);
+    }
+
+    .registration-shell .section-card {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: .65rem;
+        box-shadow: 0 3px 12px rgba(24, 33, 44, .04);
+    }
+
+    .registration-shell .metric {
+        border-left: 4px solid #a60a17;
+        padding: 1rem 1.1rem;
+    }
+
+    .registration-shell .metric .value {
+        font-size: 1.55rem;
+        font-weight: 700;
+        color: #23272b;
+    }
+
+    .registration-shell .metric .label {
+        color: #6c757d;
+        font-size: .82rem;
+    }
+
+    .registration-shell .table thead th {
+        color: #6c757d;
+        font-size: .72rem;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        white-space: nowrap;
+    }
+
+    .registration-shell .table tbody td {
+        vertical-align: middle;
+    }
+
+    .registration-shell .status {
+        border-radius: 999px;
+        font-size: .75rem;
+        font-weight: 600;
+        padding: .35rem .65rem;
+    }
+
+    .registration-shell .status-green {
+        background: #dff5e9;
+        color: #147a49;
+    }
+
+    .registration-shell .status-yellow {
+        background: #fff3cd;
+        color: #936b00;
+    }
+
+    .registration-shell .status-red {
+        background: #fbe1e3;
+        color: #a60a17;
+    }
+
+    .registration-shell .status-muted {
+        background: #eef0f2;
+        color: #5f6870;
+    }
+
+    .registration-shell .filter-label {
+        color: #56616b;
+        font-size: .78rem;
+        font-weight: 600;
+        margin-bottom: .35rem;
+    }
+
+    /* =========================================
+       MODALES RESPONSIVOS
+    ========================================= */
+
+    .modal .modal-dialog {
+        max-height: calc(100vh - 2rem);
+        max-height: calc(100dvh - 2rem);
+    }
+
+    .modal .modal-dialog .modal-content {
+        max-height: calc(100vh - 2rem);
+        max-height: calc(100dvh - 2rem);
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    .modal .modal-dialog .modal-content > form {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        max-height: calc(100vh - 2rem);
+        max-height: calc(100dvh - 2rem);
+        overflow: hidden;
+    }
+
+    /* Cabecera fija */
+    .modal .modal-dialog .modal-content > form > .modal-header {
+        flex: 0 0 auto;
+        background: #fff;
+        z-index: 2;
+    }
+
+    /* Contenido desplazable */
+    .modal .modal-dialog .modal-content > form > .modal-body {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+        overscroll-behavior: contain;
+    }
+
+    /* Botones inferiores visibles */
+    .modal .modal-dialog .modal-content > form > .modal-footer {
+        display: flex;
+        flex: 0 0 auto;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        align-items: center;
+        gap: .5rem;
+        background: #fff;
+        border-top: 1px solid #dee2e6;
+        z-index: 2;
+    }
+
+    /* Compatibilidad con otros modales */
+    .modal .modal-dialog .modal-content > .modal-body {
+        min-height: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+    }
+
+    .modal .modal-body {
+        overflow-wrap: anywhere;
+    }
+
+    .modal .modal-body .row > [class*="col-"] {
+        min-width: 0;
+    }
+
+    .modal .modal-body .form-control,
+    .modal .modal-body .form-select {
+        max-width: 100%;
+    }
+
+    .modal .modal-body .alert {
+        overflow-wrap: anywhere;
+    }
+
+    /* =========================================
+       PANTALLAS PEQUEÑAS
+    ========================================= */
+
+    @media (max-width: 767.98px) {
+
+        .registration-sidebar {
+            width: 100%;
+            flex: 0 0 auto;
+            margin-bottom: 1rem;
+        }
+
+        .registration-sidebar nav {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: .35rem;
+        }
+
+        .registration-sidebar .nav-link {
+            white-space: normal;
+        }
+    }
+
+    @media (max-width: 575.98px) {
+
+        .registration-hero {
+            padding: 1.25rem;
+        }
+
+        .registration-sidebar nav {
+            grid-template-columns: minmax(0, 1fr);
+        }
+
+        .modal .modal-dialog {
+            margin: .5rem auto;
+            width: calc(100% - 1rem);
+            max-height: calc(100dvh - 1rem);
+        }
+
+        .modal .modal-dialog .modal-content,
+        .modal .modal-dialog .modal-content > form {
+            max-height: calc(100dvh - 1rem);
+        }
+
+        .modal .modal-header,
+        .modal .modal-footer {
+            padding: .85rem 1rem;
+        }
+
+        .modal .modal-body {
+            padding: 1rem;
+        }
+
+        .modal .modal-footer .btn {
+            flex: 1 1 auto;
+        }
+    }
+
+</style>
+
+{% endblock %}
+
+
+{% block sidebar %}
+
+<aside class="registration-sidebar workspace-sidebar">
+
+    <div class="registration-sidebar-heading">
+
+        <span>
+            <i class="bi bi-list me-2"
+               aria-hidden="true"></i>
+            Registro y validación
+        </span>
+
+        <i class="bi bi-chevron-down"
+           aria-hidden="true"></i>
+
+    </div>
+
+    <nav aria-label="Navegación de Registro y validación">
+
+        <!-- Inicio -->
+
+        <a class="nav-link"
+           href="{% url 'home' %}">
+
+            <i class="bi bi-house"
+               aria-hidden="true"></i>
+
+            Inicio
+
+        </a>
+
+
+        <!-- Actividades -->
+
+        {% if perms.registration_validation.view_activity %}
+
+        <a class="nav-link{% if request.resolver_match.url_name == 'activity_list' or request.resolver_match.url_name == 'activity_create' or request.resolver_match.url_name == 'activity_update' %} active{% endif %}"
+           href="{% url 'registration:activity_list' %}">
+
+            <i class="bi bi-clipboard-check"
+               aria-hidden="true"></i>
+
+            Actividades
+
+        </a>
+
+        {% endif %}
+
+
+        <!-- Evidencias -->
+
+        {% if perms.registration_validation.view_evidence %}
+
+        <a class="nav-link{% if request.resolver_match.url_name == 'evidence_list' or request.resolver_match.url_name == 'evidence_create' or request.resolver_match.url_name == 'evidence_update' %} active{% endif %}"
+           href="{% url 'registration:evidence_list' %}">
+
+            <i class="bi bi-file-earmark-check"
+               aria-hidden="true"></i>
+
+            Evidencias
+
+        </a>
+
+        {% endif %}
+
+
+        <!-- Validaciones -->
+
+        {% if perms.registration_validation.view_validation %}
+
+        <a class="nav-link{% if request.resolver_match.url_name == 'validation_list' or request.resolver_match.url_name == 'validation_create' or request.resolver_match.url_name == 'validation_update' %} active{% endif %}"
+           href="{% url 'registration:validation_list' %}">
+
+            <i class="bi bi-patch-check"
+               aria-hidden="true"></i>
+
+            Validaciones
+
+        </a>
+
+        {% endif %}
+
+
+        <!-- Tipos de atención -->
+
+        {% if perms.registration_validation.view_attentiontype %}
+
+        <a class="nav-link{% if request.resolver_match.url_name == 'attention_type_list' or request.resolver_match.url_name == 'attention_type_create' or request.resolver_match.url_name == 'attention_type_update' %} active{% endif %}"
+           href="{% url 'registration:attention_type_list' %}">
+
+            <i class="bi bi-card-checklist"
+               aria-hidden="true"></i>
+
+            Tipos de atención
+
+        </a>
+
+        {% endif %}
+
+
+        <!-- Sub Atención -->
+
+        {% if perms.registration_validation.view_subattention %}
+
+        <a class="nav-link{% if request.resolver_match.url_name == 'sub_attention_list' or request.resolver_match.url_name == 'sub_attention_create' or request.resolver_match.url_name == 'sub_attention_update' %} active{% endif %}"
+           href="{% url 'registration:sub_attention_list' %}">
+
+            <i class="bi bi-diagram-3"
+               aria-hidden="true"></i>
+
+            Sub Atención
+
+        </a>
+
+        {% endif %}
+
+
+        <!-- Ingreso de Atención -->
+
+        {% if perms.registration_validation.view_attentionentry %}
+
+        <a class="nav-link{% if request.resolver_match.url_name == 'attention_entry_list' or request.resolver_match.url_name == 'attention_entry_create' or request.resolver_match.url_name == 'attention_entry_update' %} active{% endif %}"
+           href="{% url 'registration:attention_entry_list' %}">
+
+            <i class="bi bi-journal-text"
+               aria-hidden="true"></i>
+
+            Ingreso de Atención
+
+        </a>
+
+        {% endif %}
+
+
+        <!-- Gestión de accesos -->
+
+        {% if user.is_superuser %}
+
+        <a class="nav-link{% if request.resolver_match.namespace == 'accounts' and request.resolver_match.url_name == 'access_home' %} active{% endif %}"
+           href="{% url 'accounts:access_home' %}">
+
+            <i class="bi bi-shield-lock"
+               aria-hidden="true"></i>
+
+            Gestión de accesos
+
+        </a>
+
+        {% endif %}
+
+    </nav>
+
+</aside>
+
+{% endblock %}
+
+
+{% block scripts %}
+
+{{ block.super }}
+
+<script>
+
+    (function () {
+
+        const currentPath = window.location.pathname;
+
+        const activityEditPattern =
+            /^\/registration\/activities\/\d+\/edit\/?$/;
+
+        const evidenceEditPattern =
+            /^\/registration\/evidences\/\d+\/edit\/?$/;
+
+        const validationEditPattern =
+            /^\/registration\/validations\/\d+\/edit\/?$/;
+
+        const attentionTypeEditPattern =
+            /^\/registration\/attention-types\/\d+\/edit\/?$/;
+
+        const subAttentionEditPattern =
+            /^\/registration\/sub-attentions\/\d+\/edit\/?$/;
+
+        const attentionEntryEditPattern =
+            /^\/registration\/attention-entries\/\d+\/edit\/?$/;
+
+
+        const isFormPage =
+            currentPath ===
+                "{% url 'registration:activity_create' %}"
+
+            || currentPath ===
+                "{% url 'registration:evidence_create' %}"
+
+            || currentPath ===
+                "{% url 'registration:validation_create' %}"
+
+            || currentPath ===
+                "{% url 'registration:attention_type_create' %}"
+
+            || currentPath ===
+                "{% url 'registration:sub_attention_create' %}"
+
+            || currentPath ===
+                "{% url 'registration:attention_entry_create' %}"
+
+            || activityEditPattern.test(currentPath)
+
+            || evidenceEditPattern.test(currentPath)
+
+            || validationEditPattern.test(currentPath)
+
+            || attentionTypeEditPattern.test(currentPath)
+
+            || subAttentionEditPattern.test(currentPath)
+
+            || attentionEntryEditPattern.test(currentPath);
+
+
+        if (!isFormPage) {
+            return;
+        }
+
+
+        /*
+         * Conservamos el comportamiento anterior
+         * del historial del navegador.
+         */
+
+        window.addEventListener(
+            "pagehide",
+            function () {
+
+                document.documentElement.style.visibility =
+                    "hidden";
+
+            }
+        );
+
+
+        window.addEventListener(
+            "pageshow",
+            function (event) {
+
+                const navigationEntries =
+                    performance.getEntriesByType(
+                        "navigation"
+                    );
+
+                const navigation =
+                    navigationEntries.length
+                        ? navigationEntries[0]
+                        : null;
+
+                const returnedFromHistory =
+                    event.persisted
+                    || (
+                        navigation
+                        && navigation.type === "back_forward"
+                    );
+
+
+                if (returnedFromHistory) {
+
+                    document.documentElement.style.visibility =
+                        "hidden";
+
+                    if (window.history.length >= 3) {
+
+                        window.history.go(-2);
+
+                    } else {
+
+                        window.history.back();
+
+                    }
+
+                    return;
+                }
+
+
+                document.documentElement.style.visibility =
+                    "visible";
+
+            }
+        );
+
+    })();
+
+</script>
+
+{% endblock %}
