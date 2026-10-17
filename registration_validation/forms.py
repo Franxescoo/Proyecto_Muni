@@ -17,10 +17,10 @@ from .models import (
 )
 
 # ---------------------------------------------------------
-
 # Estilos reutilizables
 
 # ---------------------------------------------------------
+
 
 class BootstrapMixin:
     """Agrega clases de Bootstrap a los campos del formulario."""
@@ -36,13 +36,14 @@ class BootstrapMixin:
             field.widget.attrs["class"] = css_class
 
 # ---------------------------------------------------------
-
 # Campos para múltiples archivos
 
 # ---------------------------------------------------------
 
+
 class MultipleFileInput(forms.ClearableFileInput):
     allow_multiple_selected = True
+
 
 class MultipleFileField(forms.FileField):
     """
@@ -66,10 +67,10 @@ class MultipleFileField(forms.FileField):
         return cleaned_files
 
 # ---------------------------------------------------------
-
 # Formulario de Actividades
 
 # ---------------------------------------------------------
+
 
 class ActivityForm(BootstrapMixin, forms.ModelForm):
     STATUS_CHOICES = [
@@ -81,6 +82,7 @@ class ActivityForm(BootstrapMixin, forms.ModelForm):
         label="Estado",
         choices=STATUS_CHOICES,
     )
+
     class Meta:
         model = Activity
         fields = [
@@ -193,10 +195,10 @@ class ActivityForm(BootstrapMixin, forms.ModelForm):
         return cleaned_data
 
 # ---------------------------------------------------------
-
 # Formulario de Evidencias
 
 # ---------------------------------------------------------
+
 
 class EvidenceForm(BootstrapMixin, forms.ModelForm):
     date = forms.DateTimeField(
@@ -227,6 +229,7 @@ class EvidenceForm(BootstrapMixin, forms.ModelForm):
             "Formatos permitidos: PDF, JPG, JPEG, PNG, DOC y DOCX."
         ),
     )
+
     class Meta:
         model = Evidence
         fields = [
@@ -253,7 +256,7 @@ class EvidenceForm(BootstrapMixin, forms.ModelForm):
                 attrs={"placeholder": "https://..."},
             ),
             "review_status": forms.TextInput(
-                attrs={"placeholder": "Ej.: Pending"},
+                attrs={"placeholder": "Ej.: Pending (pendiente)"},
             ),
         }
 
@@ -309,6 +312,10 @@ class EvidenceForm(BootstrapMixin, forms.ModelForm):
         self.fields["activity"].queryset = activities
         self.fields["author"].queryset = employees
         self.fields["file_link"].required = False
+        self.fields["review_status"].help_text = (
+            "Para indicar que una evidencia está pendiente, ingresa Pending. "
+            "Se conserva ese valor por compatibilidad con el sistema."
+        )
         # Archivos que se seleccionan para quitar.
         self.files_to_remove = []
         # Archivos que ya pertenecen a esta evidencia.
@@ -427,10 +434,10 @@ class EvidenceForm(BootstrapMixin, forms.ModelForm):
         return cleaned_data
 
 # ---------------------------------------------------------
-
 # Formulario de Validaciones
 
 # ---------------------------------------------------------
+
 
 class ValidationForm(BootstrapMixin, forms.ModelForm):
     date = forms.DateTimeField(
@@ -441,6 +448,7 @@ class ValidationForm(BootstrapMixin, forms.ModelForm):
             format="%Y-%m-%dT%H:%M",
         ),
     )
+
     class Meta:
         model = Validation
         fields = [
@@ -561,10 +569,10 @@ class ValidationForm(BootstrapMixin, forms.ModelForm):
         return cleaned_data
 
 # ---------------------------------------------------------
-
 # Formulario de Tipo de Atención
 
 # ---------------------------------------------------------
+
 
 class AttentionTypeForm(BootstrapMixin, forms.ModelForm):
     STATUS_CHOICES = [
@@ -578,6 +586,7 @@ class AttentionTypeForm(BootstrapMixin, forms.ModelForm):
         empty_value=None,
         required=True,
     )
+
     class Meta:
         model = AttentionType
         fields = [
@@ -647,10 +656,10 @@ class AttentionTypeForm(BootstrapMixin, forms.ModelForm):
         ).strip()
 
 # ---------------------------------------------------------
-
-# Formulario de Sub Atención - NUEVO
+# Formulario de Subatención
 
 # ---------------------------------------------------------
+
 
 class SubAttentionForm(BootstrapMixin, forms.ModelForm):
     STATUS_CHOICES = [
@@ -664,6 +673,7 @@ class SubAttentionForm(BootstrapMixin, forms.ModelForm):
         empty_value=None,
         required=True,
     )
+
     class Meta:
         model = SubAttention
         fields = [
@@ -758,10 +768,11 @@ class SubAttentionForm(BootstrapMixin, forms.ModelForm):
             )
         return attention_type
 
-
 # ---------------------------------------------------------
 # Formulario de Ingreso de Atención
+
 # ---------------------------------------------------------
+
 
 class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
     """Registra solicitudes con relaciones y delegación validadas."""
@@ -797,9 +808,7 @@ class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
 
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
-
         existing = bool(self.instance.pk)
-
         # Solo relaciones activas y no archivadas para nuevos registros.
         type_condition = Q(deleted_at__isnull=True, status=True)
         sub_condition = Q(
@@ -819,7 +828,6 @@ class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
         employee_condition = Q(deleted_at__isnull=True)
         if delegation_has_deleted_at:
             employee_condition &= Q(delegation__deleted_at__isnull=True)
-
         # En edición se permite conservar relaciones históricas que
         # después hayan quedado inactivas o archivadas, sin crear otras.
         if existing:
@@ -831,12 +839,10 @@ class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
                 delegation_condition |= Q(pk=self.instance.delegation_id)
             if self.instance.responsible_employee_id:
                 employee_condition |= Q(pk=self.instance.responsible_employee_id)
-
         attention_types = AttentionType.objects.filter(type_condition)
         sub_attentions = SubAttention.objects.filter(sub_condition)
         delegations = Delegation.objects.filter(delegation_condition)
         employees = Employee.objects.filter(employee_condition)
-
         # Los usuarios normales solo trabajan en su delegación.
         if user is not None and not user.is_superuser:
             profile = getattr(user, "profile", None)
@@ -849,7 +855,6 @@ class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
             else:
                 delegations = delegations.filter(pk=delegation_id)
                 employees = employees.filter(delegation_id=delegation_id)
-
         self.fields["attention_type"].queryset = attention_types.order_by(
             "name", "attention_type_id"
         )
@@ -860,12 +865,10 @@ class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
         self.fields["responsible_employee"].queryset = employees.select_related(
             "delegation"
         ).order_by("name")
-
         self.fields["attention_type"].empty_label = "Seleccione un tipo de atención"
         self.fields["sub_attention"].empty_label = "Seleccione una subatención"
         self.fields["delegation"].empty_label = "Seleccione una delegación"
         self.fields["responsible_employee"].empty_label = "Seleccione un funcionario"
-
         self.fields["sub_attention"].help_text = (
             "La subatención debe pertenecer al tipo de atención seleccionado."
         )
@@ -873,6 +876,12 @@ class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
             "El funcionario debe pertenecer a la delegación elegida."
         )
 
+        for field_name in (
+            "attention_type", "sub_attention", "delegation", "responsible_employee"
+        ):
+            self.fields[field_name].error_messages["invalid_choice"] = (
+                "Selecciona una opción válida de la lista."
+            )
         # registration_date se genera automáticamente en el modelo.
         self._apply_bootstrap()
 
@@ -894,7 +903,6 @@ class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
         sub_attention = cleaned_data.get("sub_attention")
         delegation = cleaned_data.get("delegation")
         employee = cleaned_data.get("responsible_employee")
-
         # Permitir conservar una relación histórica solo si no cambió.
         if attention_type is not None:
             old_type_id = self.instance.attention_type_id if self.instance.pk else None
@@ -905,7 +913,6 @@ class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
                     "attention_type",
                     "Selecciona un tipo de atención activo y no eliminado.",
                 )
-
         if sub_attention is not None:
             old_sub_id = self.instance.sub_attention_id if self.instance.pk else None
             if (
@@ -926,7 +933,6 @@ class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
                     "sub_attention",
                     "La subatención no pertenece al tipo de atención seleccionado.",
                 )
-
         if delegation is not None:
             old_delegation_id = self.instance.delegation_id if self.instance.pk else None
             if (
@@ -936,7 +942,6 @@ class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
                 self.add_error(
                     "delegation", "Selecciona una delegación no eliminada."
                 )
-
         if employee is not None:
             old_employee_id = (
                 self.instance.responsible_employee_id if self.instance.pk else None
@@ -954,5 +959,4 @@ class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
                     "responsible_employee",
                     "El funcionario no pertenece a la delegación seleccionada.",
                 )
-
         return cleaned_data

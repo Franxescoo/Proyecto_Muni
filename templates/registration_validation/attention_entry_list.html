@@ -1,24 +1,17 @@
 
 {% extends "registration_validation/base.html" %}
-
 {% block titulo %}Ingreso de Atención | Registro y validación{% endblock %}
 
-
 {% block contenido %}
-
 <div class="registration-shell">
-
     <!-- ENCABEZADO -->
-
     <section class="registration-hero mb-4">
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
-
             <div>
                 <h1 class="fw-bold mb-2">
                     <i class="bi bi-journal-text me-2"></i>
                     Ingreso de Atención
                 </h1>
-
                 <p class="mb-0">
                     Registra y administra las solicitudes de atención,
                     sus categorías y los funcionarios responsables.
@@ -34,15 +27,11 @@
                 Agregar ingreso
             </a>
             {% endif %}
-
         </div>
     </section>
 
-
     <!-- INDICADORES -->
-
     <div class="row g-3 mb-4">
-
         <div class="col-12 col-md-4">
             <div class="section-card metric h-100">
                 <div class="label">Total de ingresos</div>
@@ -73,14 +62,10 @@
                 </div>
             </div>
         </div>
-
     </div>
 
-
     <!-- LISTADO -->
-
     <section class="section-card p-3 p-md-4">
-
         <div class="mb-4">
             <h2 class="h5 fw-bold mb-1">
                 Listado de ingresos de atención
@@ -90,20 +75,16 @@
             </p>
         </div>
 
-
         <!-- FILTROS -->
-
         <form
             method="get"
             action="{% url 'registration:attention_entry_list' %}"
             class="row g-3 align-items-end mb-4"
         >
-
             <div class="col-12 col-lg-4">
                 <label for="searchAttentionEntry" class="filter-label">
                     Buscar ingreso
                 </label>
-
                 <input
                     type="search"
                     id="searchAttentionEntry"
@@ -118,14 +99,12 @@
                 <label for="filterAttentionType" class="filter-label">
                     Tipo de atención
                 </label>
-
                 <select
                     id="filterAttentionType"
                     name="attention_type"
                     class="form-select"
                 >
                     <option value="">Todos los tipos</option>
-
                     {% for type in attention_type_options %}
                     <option
                         value="{{ type.pk }}"
@@ -141,14 +120,12 @@
                 <label for="filterDelegation" class="filter-label">
                     Delegación
                 </label>
-
                 <select
                     id="filterDelegation"
                     name="delegation"
                     class="form-select"
                 >
                     <option value="">Todas las delegaciones</option>
-
                     {% for delegation in delegation_options %}
                     <option
                         value="{{ delegation.pk }}"
@@ -162,7 +139,6 @@
 
             <div class="col-12 col-lg-2">
                 <div class="d-flex gap-2">
-
                     <button
                         type="submit"
                         class="btn btn-danger flex-fill"
@@ -179,17 +155,12 @@
                     >
                         <i class="bi bi-arrow-clockwise"></i>
                     </a>
-
                 </div>
             </div>
-
         </form>
 
-
         <!-- CANTIDAD Y PAGINACIÓN -->
-
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
-
             <div class="text-muted small">
                 Ingresos encontrados:
                 <strong>
@@ -207,7 +178,6 @@
                 class="d-flex align-items-center gap-2"
             >
                 {% csrf_token %}
-
                 <input
                     type="hidden"
                     name="next"
@@ -237,16 +207,11 @@
 
                 <span class="small text-muted">registros</span>
             </form>
-
         </div>
 
-
         <!-- TABLA -->
-
         <div class="table-responsive">
-
             <table class="table table-hover align-middle mb-0">
-
                 <thead class="table-light">
                     <tr>
                         <th scope="col">Solicitante</th>
@@ -260,16 +225,12 @@
                 </thead>
 
                 <tbody>
-
                     {% for entry in attention_entries %}
-
                     <tr>
-
                         <td>
                             <div class="fw-semibold">
                                 {{ entry.requester }}
                             </div>
-
                             <div
                                 class="small text-muted text-truncate"
                                 style="max-width: 220px;"
@@ -305,7 +266,6 @@
 
                         <td class="text-nowrap">
                             {{ entry.registration_date|date:"d/m/Y" }}
-
                             <div class="small text-muted">
                                 {{ entry.registration_date|date:"H:i" }}
                             </div>
@@ -313,9 +273,7 @@
 
                         <td>
                             <div class="d-flex flex-wrap justify-content-end gap-2">
-
                                 {% if perms.registration_validation.change_attentionentry %}
-
                                 <a
                                     href="{% url 'registration:attention_entry_update' entry.attention_entry_id %}"
                                     class="btn btn-sm btn-outline-primary"
@@ -326,19 +284,15 @@
                                         Modificar
                                     </span>
                                 </a>
-
                                 {% endif %}
 
-
                                 {% if perms.registration_validation.delete_attentionentry %}
-
                                 <form
                                     method="post"
                                     action="{% url 'registration:attention_entry_delete' entry.attention_entry_id %}"
                                     class="js-delete-attention-entry m-0"
                                 >
                                     {% csrf_token %}
-
                                     <button
                                         type="submit"
                                         class="btn btn-sm btn-outline-danger"
@@ -351,7 +305,6 @@
                                         </span>
                                     </button>
                                 </form>
-
                                 {% endif %}
 
                                 {% if not perms.registration_validation.change_attentionentry and not perms.registration_validation.delete_attentionentry %}
@@ -359,51 +312,35 @@
                                     Solo lectura
                                 </span>
                                 {% endif %}
-
                             </div>
                         </td>
-
                     </tr>
 
                     {% empty %}
-
                     <tr>
                         <td colspan="7" class="text-center py-5">
-
                             <i class="bi bi-inbox fs-2 text-muted"></i>
-
                             <p class="fw-semibold mt-2 mb-1">
                                 No se encontraron ingresos de atención
                             </p>
-
                             <p class="small text-muted mb-0">
                                 Puedes cambiar los filtros o registrar
                                 un nuevo ingreso de atención.
                             </p>
-
                         </td>
                     </tr>
-
                     {% endfor %}
-
                 </tbody>
-
             </table>
-
         </div>
 
-
         <!-- PAGINACIÓN -->
-
         {% if is_paginated %}
-
         <nav
             class="mt-4"
             aria-label="Paginación de ingresos de atención"
         >
-
             <ul class="pagination justify-content-center flex-wrap mb-0">
-
                 {% if page_obj.has_previous %}
                 <li class="page-item">
                     <a
@@ -439,22 +376,14 @@
                     <span class="page-link">Siguiente</span>
                 </li>
                 {% endif %}
-
             </ul>
-
         </nav>
-
         {% endif %}
-
     </section>
-
 </div>
 
-
 <!-- MODAL DE CREACIÓN Y MODIFICACIÓN -->
-
 {% if open_modal %}
-
 <div
     class="modal fade"
     id="attentionEntryModal"
@@ -463,17 +392,12 @@
     aria-hidden="true"
     data-bs-backdrop="static"
 >
-
     <div class="modal-dialog modal-dialog-centered modal-lg">
-
         <div class="modal-content">
-
             <form method="post" novalidate>
-
                 {% csrf_token %}
 
                 <div class="modal-header">
-
                     <h2
                         class="modal-title fs-5 fw-bold"
                         id="attentionEntryModalLabel"
@@ -492,35 +416,25 @@
                         class="btn-close"
                         aria-label="Cerrar"
                     ></a>
-
                 </div>
 
-
                 <div class="modal-body">
-
                     <p class="text-muted small mb-4">
                         Completa los datos de la solicitud.
                         Los campos marcados con * son obligatorios.
                     </p>
 
-
                     {% if form.non_field_errors %}
-
                     <div class="alert alert-danger" role="alert">
                         {% for error in form.non_field_errors %}
                             <div>{{ error }}</div>
                         {% endfor %}
                     </div>
-
                     {% endif %}
 
-
                     <div class="row g-3">
-
                         <!-- SOLICITANTE -->
-
                         <div class="col-12">
-
                             <label
                                 for="{{ form.requester.id_for_label }}"
                                 class="form-label fw-semibold"
@@ -536,14 +450,10 @@
                                 {{ error }}
                             </div>
                             {% endfor %}
-
                         </div>
 
-
                         <!-- TIPO DE ATENCIÓN -->
-
                         <div class="col-12 col-md-6">
-
                             <label
                                 for="{{ form.attention_type.id_for_label }}"
                                 class="form-label fw-semibold"
@@ -559,14 +469,10 @@
                                 {{ error }}
                             </div>
                             {% endfor %}
-
                         </div>
 
-
                         <!-- SUBATENCIÓN -->
-
                         <div class="col-12 col-md-6">
-
                             <label
                                 for="{{ form.sub_attention.id_for_label }}"
                                 class="form-label fw-semibold"
@@ -588,14 +494,10 @@
                                 {{ error }}
                             </div>
                             {% endfor %}
-
                         </div>
 
-
                         <!-- DESCRIPCIÓN -->
-
                         <div class="col-12">
-
                             <label
                                 for="{{ form.description.id_for_label }}"
                                 class="form-label fw-semibold"
@@ -611,14 +513,10 @@
                                 {{ error }}
                             </div>
                             {% endfor %}
-
                         </div>
 
-
                         <!-- DELEGACIÓN -->
-
                         <div class="col-12 col-md-6">
-
                             <label
                                 for="{{ form.delegation.id_for_label }}"
                                 class="form-label fw-semibold"
@@ -634,14 +532,10 @@
                                 {{ error }}
                             </div>
                             {% endfor %}
-
                         </div>
 
-
                         <!-- FUNCIONARIO -->
-
                         <div class="col-12 col-md-6">
-
                             <label
                                 for="{{ form.responsible_employee.id_for_label }}"
                                 class="form-label fw-semibold"
@@ -663,18 +557,12 @@
                                 {{ error }}
                             </div>
                             {% endfor %}
-
                         </div>
-
                     </div>
 
-
                     <!-- DATOS AUTOMÁTICOS -->
-
                     <div class="alert alert-light border mt-4 mb-0">
-
                         <i class="bi bi-info-circle me-2"></i>
-
                         La fecha y hora de registro se generan
                         automáticamente al guardar la solicitud.
 
@@ -684,16 +572,11 @@
                             {{ form.instance.registration_date|date:"d/m/Y H:i" }}
                         </div>
                         {% endif %}
-
                     </div>
-
                 </div>
 
-
                 <!-- BOTONES -->
-
                 <div class="modal-footer">
-
                     <a
                         href="{% url 'registration:attention_entry_list' %}"
                         class="btn btn-outline-secondary"
@@ -712,26 +595,17 @@
                         {% else %}
                             Guardar ingreso
                         {% endif %}
-
                     </button>
-
                 </div>
-
             </form>
-
         </div>
-
     </div>
-
 </div>
-
 
 <!-- DATOS PARA DESPLEGABLES DEPENDIENTES -->
 <!-- Estos datos provienen de las opciones permitidas
-     por AttentionEntryForm. -->
-
+    por AttentionEntryForm. -->
 <div id="attentionEntryRelations" hidden>
-
     {% for sub in form.fields.sub_attention.queryset %}
     <span
         data-relation="subattention"
@@ -747,27 +621,20 @@
         data-parent-id="{{ employee.delegation_id }}"
     ></span>
     {% endfor %}
-
 </div>
-
 {% endif %}
-
 {% endblock %}
 
-
 {% block scripts %}
-
 {{ block.super }}
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-
 <script>
 document.addEventListener("DOMContentLoaded", function () {
 
     // ========================================
     // ABRIR EL MODAL
     // ========================================
-
     {% if open_modal %}
 
     const modalElement =
@@ -779,11 +646,9 @@ document.addEventListener("DOMContentLoaded", function () {
         ).show();
     }
 
-
     // ========================================
     // DESPLEGABLES DEPENDIENTES
     // ========================================
-
     const typeSelect =
         document.getElementById("id_attention_type");
 
@@ -795,7 +660,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const employeeSelect =
         document.getElementById("id_responsible_employee");
-
 
     function buildRelationMap(relationName) {
         const result = {};
@@ -809,9 +673,7 @@ document.addEventListener("DOMContentLoaded", function () {
         return result;
     }
 
-
     function prepareDependentSelect(parentSelect, childSelect, relationMap) {
-
         if (!parentSelect || !childSelect) {
             return;
         }
@@ -828,7 +690,6 @@ document.addEventListener("DOMContentLoaded", function () {
             return option.cloneNode(true);
         });
 
-
         function updateOptions() {
             const parentId = String(parentSelect.value);
             const previousValue = childSelect.value;
@@ -836,9 +697,7 @@ document.addEventListener("DOMContentLoaded", function () {
             const fragment = document.createDocumentFragment();
 
             originalOptions.forEach(function (option) {
-
                 const optionId = String(option.value);
-
                 const isPlaceholder = !optionId;
 
                 const belongsToParent =
@@ -848,7 +707,6 @@ document.addEventListener("DOMContentLoaded", function () {
                 if (isPlaceholder || belongsToParent) {
                     fragment.appendChild(option.cloneNode(true));
                 }
-
             });
 
             childSelect.replaceChildren(fragment);
@@ -866,7 +724,6 @@ document.addEventListener("DOMContentLoaded", function () {
             childSelect.disabled = !parentId;
         }
 
-
         updateOptions();
 
         parentSelect.addEventListener(
@@ -874,7 +731,6 @@ document.addEventListener("DOMContentLoaded", function () {
             updateOptions
         );
     }
-
 
     prepareDependentSelect(
         typeSelect,
@@ -890,17 +746,14 @@ document.addEventListener("DOMContentLoaded", function () {
 
     {% endif %}
 
-
     // ========================================
     // CONFIRMACIÓN DE ELIMINACIÓN
     // ========================================
-
     document.querySelectorAll(
         ".js-delete-attention-entry"
     ).forEach(function (form) {
 
         form.addEventListener("submit", function (event) {
-
             event.preventDefault();
 
             const button = form.querySelector(
@@ -933,34 +786,25 @@ document.addEventListener("DOMContentLoaded", function () {
                 confirmButtonColor: "#a60a17",
                 reverseButtons: true
             }).then(function (result) {
-
                 if (result.isConfirmed) {
                     form.submit();
                 }
-
             });
-
         });
-
     });
-
 
     // ========================================
     // MENSAJES DE RESULTADO
     // ========================================
-
     if (window.Swal) {
-
         document.querySelectorAll(
             "main > .alert"
         ).forEach(function (alert) {
-
             const isError =
                 alert.classList.contains("alert-danger") ||
                 alert.classList.contains("alert-error");
 
             const message = alert.textContent.trim();
-
             alert.remove();
 
             Swal.fire({
@@ -971,12 +815,9 @@ document.addEventListener("DOMContentLoaded", function () {
                 text: message,
                 confirmButtonColor: "#a60a17"
             });
-
         });
-
     }
 
 });
 </script>
-
 {% endblock %}
