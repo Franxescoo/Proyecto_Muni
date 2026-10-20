@@ -1,4 +1,6 @@
 from .models import UserProfile
+from django.db import transaction
+
 
 
 def sync_profile(profile):
@@ -38,3 +40,34 @@ def sync_position(position):
 
     for profile in profiles:
         sync_profile(profile)
+
+
+
+@transaction.atomic
+def create_user_account(form):
+    """Crea una cuenta y hereda los roles del funcionario."""
+
+    # Crear la cuenta con su contraseña protegida.
+    user = form.save(commit=False)
+
+    # Una cuenta normal no tendrá acceso administrativo.
+    user.is_staff = False
+    user.is_superuser = False
+    user.save()
+
+    # Obtener el funcionario seleccionado.
+    employee = form.cleaned_data["employee"]
+
+    # Vincular la cuenta al funcionario existente.
+    profile = UserProfile.objects.create(
+        user=user,
+        employee=employee,
+        employee_code=form.cleaned_data["employee_code"],
+        delegation=employee.delegation,
+    )
+
+    # Heredar los roles que ya tiene el funcionario.
+    sync_employee(employee)
+
+    return user
+

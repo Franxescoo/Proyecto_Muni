@@ -5,6 +5,7 @@ from django.core.exceptions import PermissionDenied
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.contrib.auth import get_user_model
 
 from accounts.services import sync_employee
 
@@ -16,6 +17,17 @@ from .forms import (
 	mark_invalid_fields,
 )
 from .models import Delegation, Employee, PositionFunction
+
+from django.db import IntegrityError
+
+from accounts.forms import AccountCreateForm
+from accounts.services import create_user_account, sync_user_groups
+from django.db import IntegrityError, transaction
+
+from accounts.forms import AccountCreateForm, AccountEditForm
+from accounts.models import UserProfile
+
+
 
 
 def organization_access(permission):
@@ -409,3 +421,180 @@ def position_list(request):
 		"organization/positions.html",
 		context,
 	)
+
+
+@login_required
+def user_list(request):
+    """Mantenedor de usuarios con modales de creación y edición."""
+
+    if not request.user.is_superuser:
+        raise PermissionDenied(
+            "No tienes permiso para administrar usuarios."
+        )
+
+    form = None
+    modal_open = False
+    modal_action = ""
+    object_id = ""
+
+    if request.method == "POST":
+        modal_action = request.POST.get("action", "")
+        object_id = request.POST.get("object_id", "")
+		
+        if modal_action == "delete":
+            if not object_id.isdecimal():
+                raise PermissionDenied("Usuario no válido.")
+
+            with transaction.atomic():
+                account = get_object_or_404(
+                    get_user_model().objects.select_for_update(),
+                    pk=object_id,
+                    is_superuser=False,
+                    profile__deleted_at__isnull=True,
+                )
+
+                profile = UserProfile.objects.filter(
+                    user=account,
+                    deleted_at__isnull=True,
+                ).first()
+
+                if profile is None:
+                    messages.error(
+                        request,
+                        "No se puede eliminar una cuenta sin perfil activo."
+                    )
+                    return redirect("organization:user_list")
+
+                # El usuario pierde acceso al sistema.
+                account.is_active = False
+                account.save(update_fields=["is_active"])
+
+                # Eliminación lógica del perfil.
+                profile.deleted_at = timezone.now()
+                profile.save(
+                    update_fields=["deleted_at", "updated_at"]
+                )
+
+            messages.success(
+                request,
+                "Usuario eliminado correctamente."
+            )
+            return redirect("organization:user_list")
+
+
+        if modal_action == "create":
+            form = AccountCreateForm(request.POST)
+
+        elif modal_action == "edit":
+            account = get_object_or_404(
+                get_user_model(),
+                pk=object_id,
+                is_superuser=False,
+                profile__deleted_at__isnull=True,
+            )
+            form = AccountEditForm(
+                request.POST,
+                instance=account,
+            )
+
+        else:
+            raise PermissionDenied(
+                "La operación solicitada no es válida."
+            )
+
+        modal_open = True
+
+        if form.is_valid():
+            try:
+                if modal_action == "create":
+                    create_user_account(form)
+                else:
+                    with transaction.atomic():
+                        form.save()
+
+            except IntegrityError:
+                form.add_error(
+                    None,
+                    "No se pudo guardar la cuenta. "
+                    "Revisa que los datos no estén duplicados."
+                )
+
+            else:
+                messages.success(
+                    request,
+                    (
+                        "Usuario creado correctamente."
+                        if modal_action == "create"
+                        else "Usuario modificado correctamente."
+                    ),
+                )
+                return redirect("organization:user_list")
+
+        mark_invalid_fields(form)
+
+    else:
+        modal_action = request.GET.get("modal", "")
+        object_id = request.GET.get("id", "")
+
+        if modal_action == "create":
+            form = AccountCreateForm()
+            modal_open = True
+
+        elif modal_action == "edit":
+            account = get_object_or_404(
+                get_user_model(),
+                pk=object_id,
+                is_superuser=False,
+                profile__deleted_at__isnull=True,
+            )
+            form = AccountEditForm(instance=account)
+            modal_open = True
+
+    users = (
+        get_user_model().objects
+        .filter(
+			is_superuser=False,
+			profile__deleted_at__isnull=True,
+		)
+        .select_related(
+            "profile",
+            "profile__employee",
+            "profile__delegation",
+        )
+        .prefetch_related("groups")
+        .order_by("username")
+    )
+
+    context = {
+        "users": users,
+        "total_users": users.count(),
+        "active_users": users.filter(is_active=True).count(),
+        "inactive_users": users.filter(is_active=False).count(),
+        "form": form,
+        "modal_open": modal_open,
+        "modal_action": modal_action,
+        "modal_title": (
+            "Crear usuario"
+            if modal_action == "create"
+            else "Modificar usuario"
+        ),
+        "edit_confirmation": "¿Desea modificar este usuario?",
+        "object_id": (
+            object_id if modal_action == "edit" else ""
+        ),
+        "active_page": "users",
+        "page_title": "Usuarios",
+        "page_description": (
+            "Administra las cuentas de los funcionarios."
+        ),
+        "page_icon": "bi-person-gear",
+    }
+
+    return render(
+        request,
+        "organization/users.html",
+        context,
+    )
+
+
+

@@ -28,6 +28,15 @@
     .comment-detail { min-width: 260px; }
     .comment-avatar { width: 2.25rem; height: 2.25rem; object-fit: cover; border-radius: 50%; }
     .comment-avatar-fallback { align-items: center; background: #fbe1e3; color: #a60a17; display: inline-flex; font-weight: 700; justify-content: center; }
+        /* Compromisos sin seleccionar */
+    .nav-link:not(.active) .bi-people {
+        color: #212529;
+    }
+
+    /* Compromisos seleccionado */
+    .nav-link.active .bi-people {
+        color: #ffffff;
+    }
 </style>
 {% endblock %}
 
@@ -43,7 +52,7 @@
     <nav class="nav flex-column">
         <a class="nav-link" href="{% url 'home' %}"><i class="bi bi-house-door"></i><span>Inicio</span></a>
         <a class="nav-link" href="{% url 'monitoring:indicator_list' %}"><i class="bi bi-bar-chart-line"></i><span>Indicadores</span></a>
-        <a class="nav-link active" href="{% url 'monitoring:commitment_list' %}"><i class="bi bi-handshake"></i><span>Compromisos</span></a>
+        <a class="nav-link active" href="{% url 'monitoring:commitment_list' %}"><i class="bi bi-people"></i><span>Compromisos</span></a>
         <a class="nav-link" href="{% url 'monitoring:audit_list' %}"><i class="bi bi-shield-check"></i><span>Auditoría</span></a>
     </nav>
 </aside>

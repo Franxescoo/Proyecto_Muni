@@ -158,17 +158,17 @@ class AccountCreateForm(BootstrapMixin, UserCreationForm):
         max_length=30,
     )
 
-    groups = forms.ModelMultipleChoiceField(
-        label="Roles asignados",
-        queryset=Group.objects.filter(
-            organization_role__isnull=False
-        ).select_related(
-            "organization_role__delegation"
-        ).order_by("organization_role__delegation__name", "name"),
-        widget=forms.CheckboxSelectMultiple,
-        required=True,
-        help_text="Selecciona uno o varios roles creados en Organización.",
-    )
+    #groups = forms.ModelMultipleChoiceField(
+        #label="Roles asignados",
+        #queryset=Group.objects.filter(
+        #    organization_role__isnull=False
+        #).select_related(
+        #    "organization_role__delegation"
+        #).order_by("organization_role__delegation__name", "name"),
+        #widget=forms.CheckboxSelectMultiple,
+        #required=True,
+        #help_text="Selecciona uno o varios roles creados en Organización.",
+    #)
 
     class Meta:
         model = get_user_model()
@@ -177,7 +177,7 @@ class AccountCreateForm(BootstrapMixin, UserCreationForm):
             "email",
             "employee",
             "employee_code",
-            "groups",
+            #"groups",
             "password1",
             "password2",
         ]
@@ -217,7 +217,7 @@ class AccountCreateForm(BootstrapMixin, UserCreationForm):
 
         return code
 
-    def clean(self):
+    #def clean(self):
         cleaned_data = super().clean()
         employee = cleaned_data.get("employee")
         groups = cleaned_data.get("groups")
@@ -236,16 +236,16 @@ class AccountCreateForm(BootstrapMixin, UserCreationForm):
 class AccountEditForm(BootstrapMixin, forms.ModelForm):
     """Edita una cuenta y los grupos asignados."""
 
-    groups = forms.ModelMultipleChoiceField(
-        label="Roles asignados",
-        queryset=Group.objects.order_by("name"),
-        widget=forms.CheckboxSelectMultiple,
-        required=False,
-        help_text=(
-            "Puedes seleccionar varios roles. Sin roles, "
-            "la cuenta no recibe permisos mediante grupos."
-        ),
-    )
+    #groups = forms.ModelMultipleChoiceField(
+     #   label="Roles asignados",
+      #  queryset=Group.objects.order_by("name"),
+       # widget=forms.CheckboxSelectMultiple,
+        #required=False,
+        #help_text=(
+         #   "Puedes seleccionar varios roles. Sin roles, "
+          #  "la cuenta no recibe permisos mediante grupos."
+        #),
+    #)
 
     class Meta:
         model = get_user_model()
@@ -253,7 +253,7 @@ class AccountEditForm(BootstrapMixin, forms.ModelForm):
             "username",
             "email",
             "is_active",
-            "groups",
+            #"groups",
         ]
         labels = {
             "username": "Nombre de usuario",
@@ -261,22 +261,25 @@ class AccountEditForm(BootstrapMixin, forms.ModelForm):
             "is_active": "Cuenta activa",
         }
 
+    #def __init__(self, *args, **kwargs):
+        #super().__init__(*args, **kwargs)
+        #current_group_ids = self.instance.groups.values_list("pk", flat=True)
+        #profile_delegation_id = UserProfile.objects.filter(
+        #    user=self.instance
+        #).values_list("delegation_id", flat=True).first()
+        #group_scope = Q(pk__in=current_group_ids)
+        #if profile_delegation_id is not None:
+        #    group_scope |= Q(
+        #        organization_role__delegation_id=profile_delegation_id
+        #    )
+        #self.fields["groups"].queryset = Group.objects.filter(
+        #    group_scope
+        #).select_related(
+        #    "organization_role__delegation"
+        #).order_by("name")
+        #self.apply_bootstrap()
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        current_group_ids = self.instance.groups.values_list("pk", flat=True)
-        profile_delegation_id = UserProfile.objects.filter(
-            user=self.instance
-        ).values_list("delegation_id", flat=True).first()
-        group_scope = Q(pk__in=current_group_ids)
-        if profile_delegation_id is not None:
-            group_scope |= Q(
-                organization_role__delegation_id=profile_delegation_id
-            )
-        self.fields["groups"].queryset = Group.objects.filter(
-            group_scope
-        ).select_related(
-            "organization_role__delegation"
-        ).order_by("name")
         self.apply_bootstrap()
 
 
