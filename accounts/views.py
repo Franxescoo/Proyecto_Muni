@@ -25,6 +25,7 @@ from .services import (
     sync_profile,
     sync_user_groups,
 )
+from .services import create_user_account
 
 
 def administrator_required(view):
@@ -172,9 +173,10 @@ def employee_form(request, pk=None):
     )
 
 
+
 @administrator_required
 def account_create(request):
-    """Crea una cuenta y asigna los grupos elegidos."""
+    """Crea una cuenta heredando los roles del funcionario."""
 
     form = AccountCreateForm(
         request.POST if request.method == "POST" else None
@@ -182,39 +184,20 @@ def account_create(request):
 
     if request.method == "POST" and form.is_valid():
         try:
-            with transaction.atomic():
-                user = form.save(commit=False)
-
-                # No permite crear superusuarios ni acceso al panel admin.
-                user.is_staff = False
-                user.is_superuser = False
-                user.save()
-
-                user.groups.set(form.cleaned_data["groups"])
-
-                employee = form.cleaned_data["employee"]
-                employee.assigned_groups.set(form.cleaned_data["groups"])
-
-                profile = UserProfile.objects.create(
-                    user=user,
-                    employee=employee,
-                    employee_code=form.cleaned_data["employee_code"],
-                    delegation=employee.delegation,
-                )
-
-                sync_profile(profile)
+            create_user_account(form)
 
         except IntegrityError:
             form.add_error(
                 None,
-                "No se pudo crear la cuenta. El usuario, "
-                "el código o el funcionario podrían estar "
-                "registrados."
+                "No se pudo crear la cuenta. "
+                "El usuario, código o funcionario "
+                "podría estar registrado."
             )
+
         else:
             messages.success(
                 request,
-                "Cuenta creada con los grupos seleccionados."
+                "Cuenta creada correctamente."
             )
             return redirect("accounts:access_home")
 
@@ -228,6 +211,7 @@ def account_create(request):
     )
 
 
+
 @administrator_required
 def account_edit(request, pk):
     """Edita una cuenta de trabajador y sus grupos."""
@@ -236,6 +220,8 @@ def account_edit(request, pk):
         get_user_model(),
         pk=pk,
         is_superuser=False,
+        profile__isnull=False,
+        profile__deleted_at__isnull=True,
     )
 
     form = AccountEditForm(
@@ -247,7 +233,6 @@ def account_edit(request, pk):
         request,
         form,
         f"Editar cuenta: {user.username}",
-        on_save=sync_user_groups,
     )
 
 

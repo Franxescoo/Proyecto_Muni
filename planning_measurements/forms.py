@@ -196,29 +196,62 @@ class GoalScopeMixin(BootstrapMixin):
         # El servidor obtiene el cargo real del funcionario.
         return position
     
+    
     def _configure_items(self):
-        """Carga los ítems del catálogo y protege la unidad."""
+        """Carga los ítems por ID y conserva los datos históricos."""
 
         items = MeasurementItem.objects.filter(
             deleted_at__isnull=True,
             is_active=True,
         ).order_by("code")
 
-        # Los ítems se siguen guardando como texto en Goal.item.
-        choices = [("", "Seleccione un ítem")]
+        # Si la meta ya tiene un ítem vinculado, también se
+        # permite mostrarlo aunque esté inactivo o archivado.
+        if self.instance.pk and self.instance.measurement_item_id:
+            items = (
+                MeasurementItem.objects.filter(
+                    pk__in=items.values("pk")
+                )
+                | MeasurementItem.objects.filter(
+                    pk=self.instance.measurement_item_id
+                )
+            ).distinct().order_by("code")
 
+        field = self.fields["measurement_item"]
+        field.queryset = items
+        field.label = "Ítem de medición"
+        field.required = not bool(self.instance.pk)
+        field.empty_label = "Seleccione un ítem"
+        field.widget.attrs["class"] = "form-select"
         
-        unidades = {}
+        # Identifica visualmente los ítems históricos desactivados.
+        field.label_from_instance = lambda item: (
+            f"{item.code} - {item.name}"
+            + (
+                " (histórico - inactivo)"
+                if not item.is_active or item.deleted_at is not None
+                else ""
+            )
+        )
+
+
+        # El nombre antiguo se conserva para compatibilidad.
+        self.fields["item"].widget = forms.HiddenInput()
+        self.fields["item"].required = False
+
+        # La unidad no se modifica manualmente.
+        unit_field = self.fields["unit"]
+        unit_field.required = False
+        unit_field.label = "Unidad de medida (automática)"
+        unit_field.widget.attrs["readonly"] = "readonly"
+        unit_field.help_text = (
+            "Se obtiene automáticamente del ítem seleccionado."
+        )
+
         detalles = {}
 
         for item in items:
-            choices.append(
-                (item.name, f"{item.code} - {item.name}")
-            )
-
-            unidades[item.name] = item.unit
-
-            detalles[item.name] = {
+            detalles[str(item.pk)] = {
                 "codigo": item.code,
                 "descripcion": item.description,
                 "tipo": item.get_item_type_display(),
@@ -226,84 +259,75 @@ class GoalScopeMixin(BootstrapMixin):
                 "formula": item.formula,
             }
 
-
-        # Permite mostrar ítems históricos al editar una meta.
-        if self.instance.pk:
-            nombre_actual = self.instance.item
-
-            if nombre_actual and nombre_actual not in unidades:
-                choices.append(
-                    (nombre_actual, f"{nombre_actual} (histórico)")
-                )
-
-        self.fields["item"].widget = forms.Select(
-            choices=choices
+        field.widget.attrs["data-item-details"] = json.dumps(
+            detalles
         )
-        self.fields["item"].widget.attrs["class"] = "form-select"
-
-        self.fields["item"].label = "Ítem de medición"
-        self.fields["item"].help_text = (
-            "Seleccione un ítem registrado en el catálogo."
-        )
-
-        self.fields["unit"].required = False
-        self.fields["unit"].label = "Unidad de medida (automática)"
-        self.fields["unit"].widget.attrs["readonly"] = "readonly"
-        self.fields["unit"].help_text = (
-            "Se obtiene automáticamente del ítem seleccionado."
-        )
-
-        self.fields["item"].widget.attrs[
-            "data-item-units"
-        ] = json.dumps(unidades)
-        
-        self.fields["item"].widget.attrs[
-            "data-item-details"
-        ] = json.dumps(detalles)
-
 
     def clean(self):
         cleaned_data = super().clean()
 
-        nombre = cleaned_data.get("item")
+        item = cleaned_data.get("measurement_item")
 
-        if not nombre:
+        # Si el formulario ya tiene errores en el selector,
+        # no continuar con la validación del ítem.
+        if "measurement_item" in self.errors:
             return cleaned_data
 
-        items = MeasurementItem.objects.filter(
-            name=nombre,
-            deleted_at__isnull=True,
-        )
+        # Metas antiguas sin relación: permitir conservar
+        # sus datos históricos, pero no inventar un código.
+        if item is None:
+            if self.instance.pk and not self.instance.measurement_item_id:
+                cleaned_data["item"] = self.instance.item
+                cleaned_data["unit"] = self.instance.unit
+                return cleaned_data
 
-        if items.count() != 1:
             self.add_error(
-                "item",
-                "El ítem debe existir una sola vez en el catálogo."
+                "measurement_item",
+                "Debe seleccionar un ítem de medición."
             )
             return cleaned_data
 
-        item = items.first()
+        # Una meta vinculada puede conservar su ítem histórico,
+        # aunque posteriormente haya sido desactivado o archivado.
+        es_historico = (
+            bool(self.instance.pk)
+            and self.instance.measurement_item_id == item.pk
+        )
 
-        if not item.is_active:
+        if (
+            item.deleted_at is not None or not item.is_active
+        ) and not es_historico:
             self.add_error(
-                "item",
+                "measurement_item",
                 "El ítem seleccionado no está activo."
             )
             return cleaned_data
 
-        if not item.unit.strip():
+        # Conserva la unidad histórica de una meta vinculada
+        # si su ítem fue desactivado o archivado.
+        if es_historico and (
+            item.deleted_at is not None or not item.is_active
+        ):
+            cleaned_data["item"] = self.instance.item
+            cleaned_data["unit"] = self.instance.unit
+            return cleaned_data
+
+        # Validación del ítem activo seleccionado.
+        if not item.unit or not item.unit.strip():
             self.add_error(
-                "item",
+                "measurement_item",
                 "Este ítem no tiene unidad de medida. "
                 "Complétela primero en el catálogo."
             )
             return cleaned_data
 
-        # La unidad real se obtiene del catálogo,
-        # nunca del valor enviado por el navegador.
+        # Mantener compatibilidad con los demás módulos.
+        cleaned_data["item"] = item.name
         cleaned_data["unit"] = item.unit
 
         return cleaned_data
+
+
 
 
 
@@ -314,6 +338,7 @@ class GoalForm(GoalScopeMixin, forms.ModelForm):
             "period",
             "employee",
             "position",
+            "measurement_item",
             "item",
             "objective_value",
             "required_evidence_count",
@@ -351,6 +376,7 @@ class GoalInlineForm(GoalScopeMixin, forms.ModelForm):
         fields = [
             "employee",
             "position",
+            "measurement_item",
             "item",
             "objective_value",
             "required_evidence_count",

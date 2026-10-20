@@ -6,7 +6,8 @@
 
         if (!modal) return;
 
-        const itemSelect = modal.querySelector('[name="item"]');
+        // Selector basado en el ID único del catálogo.
+        const itemSelect = modal.querySelector('[name="measurement_item"]');
         const unitInput = modal.querySelector('[name="unit"]');
         const detailsBox = modal.querySelector("#itemDetails");
 
@@ -35,11 +36,19 @@
 
             if (!seleccionado) {
                 detailsBox.classList.add("d-none");
-                unitInput.value = "";
+
+                // No borrar la unidad histórica al abrir una meta.
+                if (!itemSelect.disabled) {
+                    unitInput.value = "";
+                }
+
                 return;
             }
 
-            unitInput.value = seleccionado.unidad || "";
+            // Al consultar una meta, conservar su unidad guardada.
+            if (!itemSelect.disabled) {
+                unitInput.value = seleccionado.unidad || "";
+            }
 
             code.textContent = seleccionado.codigo || "—";
             type.textContent = seleccionado.tipo || "—";

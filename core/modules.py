@@ -43,6 +43,12 @@ MODULES = [
             {"title": "Funcionarios", "icon": "bi-people",
              "url": "organization:employee_list",
              "perm": "organization.view_employee"},
+             {
+                "title": "Usuarios",
+                "icon": "bi-person-gear",
+                "url": "organization:user_list",
+                "admin_only": True,
+            },
             {"title": "Delegaciones", "icon": "bi-building",
              "url": "organization:delegation_list",
              "perm": "organization.view_delegation"},
@@ -66,6 +72,24 @@ MODULES = [
             {"title": "Verificación", "icon": "bi-patch-check",
              "url": "registration:validation_list",
              "perm": "registration_validation.view_validation"},
+            {
+                "title": "Tipos de atención",
+                "icon": "bi-card-checklist",
+                "url": "registration:attention_type_list",
+                "perm": "registration_validation.view_attentiontype",
+            },
+            {
+                "title": "Sub Atención",
+                "icon": "bi-diagram-3",
+                "url": "registration:sub_attention_list",
+                "perm": "registration_validation.view_subattention",
+            },
+            {
+                "title": "Ingreso de Atención",
+                "icon": "bi-journal-check",
+                "url": "registration:attention_entry_list",
+                "perm": "registration_validation.view_attentionentry",
+            },
         ],
     },
     {
@@ -74,12 +98,13 @@ MODULES = [
             {"title": "Indicadores", "icon": "bi-graph-up",
              "url": "monitoring:indicator_list",
              "perm": "monitoring_traceability.view_indicator"},
-            {"title": "Compromisos", "icon": "bi-handshake",
+            {"title": "Compromisos", "icon": "bi-people-fill",
              "url": "monitoring:commitment_list",
              "perm": "monitoring_traceability.view_commitment"},
             {"title": "Auditoría", "icon": "bi-clipboard-data",
              "url": "monitoring:audit_list",
              "perm": "monitoring_traceability.view_audit"},
+            
         ],
     },
 ]

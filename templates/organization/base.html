@@ -46,6 +46,13 @@
     <nav class="nav flex-column">
         <a class="nav-link" href="{% url 'home' %}"><i class="bi bi-house-door"></i><span>Inicio</span></a>
         <a class="nav-link {% if active_page == 'employees' %}active{% endif %}" href="{% url 'organization:employee_list' %}"><i class="bi bi-people"></i><span>Funcionarios</span></a>
+        {% if user.is_superuser %}
+        <a class="nav-link {% if active_page == 'users' %}active{% endif %}"
+        href="{% url 'organization:user_list' %}">
+            <i class="bi bi-person-gear"></i>
+            <span>Usuarios</span>
+        </a>
+        {% endif %}
         <a class="nav-link {% if active_page == 'delegations' %}active{% endif %}" href="{% url 'organization:delegation_list' %}"><i class="bi bi-building"></i><span>Delegaciones</span></a>
         <a class="nav-link {% if active_page == 'positions' %}active{% endif %}" href="{% url 'organization:position_list' %}"><i class="bi bi-person-badge"></i><span>Cargos y funciones</span></a>
         {% if user.is_superuser %}<a class="nav-link {% if active_page == 'roles' %}active{% endif %}" href="{% url 'organization:role_list' %}"><i class="bi bi-shield-lock"></i><span>Roles y Permisos</span></a>{% endif %}

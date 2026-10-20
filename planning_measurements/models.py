@@ -82,6 +82,14 @@ class Goal(BaseModel):
         related_name="goals",
         verbose_name="Position",
     )
+    measurement_item = models.ForeignKey(
+        "planning_measurements.MeasurementItem",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="goals",
+        verbose_name="Ítem de medición",
+    )
     item = models.CharField(max_length=150, verbose_name="Item")
     objective_value = models.DecimalField(
         max_digits=10, decimal_places=2, verbose_name="Objective value"

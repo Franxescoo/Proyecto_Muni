@@ -414,14 +414,16 @@ def apply_goal_assignments(request, period, *, may_add, may_remove):
                 "Alguna meta seleccionada no está disponible."
             )
 
+        
         existing = set(
             Goal.objects.filter(
                 period=period,
                 deleted_at__isnull=True,
+                measurement_item__isnull=False,
             ).values_list(
                 "employee_id",
                 "position_id",
-                "item",
+                "measurement_item_id",
             )
         )
 
@@ -429,10 +431,10 @@ def apply_goal_assignments(request, period, *, may_add, may_remove):
             key = (
                 source.employee_id,
                 source.position_id,
-                source.item,
+                source.measurement_item_id,
             )
 
-            if key in existing:
+            if source.measurement_item_id and key in existing:
                 raise ValidationError(
                     f"La meta '{source.item}' ya existe "
                     "para ese funcionario y cargo."
@@ -449,23 +451,36 @@ def apply_goal_assignments(request, period, *, may_add, may_remove):
 
             existing.add(key)
 
-            catalog = MeasurementItem.objects.filter(
-                name=source.item,
-                is_active=True,
-                deleted_at__isnull=True,
-                unit=source.unit,
-            )
+            
+            # Utilizar el ítem vinculado a la meta original.
+            item = source.measurement_item
 
-            if catalog.count() != 1:
+            if item is None:
                 raise ValidationError(
-                    f"El ítem '{source.item}' no está activo "
-                    "o no coincide con el catálogo."
+                    f"La meta '{source.item}' no tiene un ítem "
+                    "del catálogo identificado. Debe revisarse "
+                    "antes de copiarla."
                 )
+
+            if item.deleted_at is not None or not item.is_active:
+                raise ValidationError(
+                    f"El ítem '{item.code} - {item.name}' "
+                    "no está activo y no puede asignarse "
+                    "a una nueva meta."
+                )
+
+            if item.unit != source.unit:
+                raise ValidationError(
+                    f"La unidad del ítem '{item.code}' "
+                    "no coincide con la meta original."
+                )
+
 
             copied_goal = Goal(
                 period=period,
                 employee=source.employee,
                 position=source.position,
+                measurement_item=item,
                 item=source.item,
                 objective_value=source.objective_value,
                 required_evidence_count=source.required_evidence_count,
@@ -882,8 +897,15 @@ def period_assign_existing_goals(request, period_id):
 
     already_assigned = set(
         scoped_goals(request.user)
-        .filter(period=period)
-        .values_list("employee_id", "position_id", "item")
+        .filter(
+            period=period,
+            measurement_item__isnull=False,
+        )
+        .values_list(
+            "employee_id",
+            "position_id",
+            "measurement_item_id",
+        )
     )
 
     available = [
@@ -892,10 +914,13 @@ def period_assign_existing_goals(request, period_id):
             "-period__start_date", "item", "pk"
         )
         if (
-            goal.employee_id,
-            goal.position_id,
-            goal.item
-        ) not in already_assigned
+            goal.measurement_item_id is not None
+            and (
+                goal.employee_id,
+                goal.position_id,
+                goal.measurement_item_id,
+            ) not in already_assigned
+        )
     ]
 
     if request.method == "POST":
@@ -941,24 +966,27 @@ def period_assign_existing_goals(request, period_id):
                 else:
                     errors = []
 
+                                        
                     current = set(
                         Goal.objects.filter(
                             period=locked_period,
-                            deleted_at__isnull=True
+                            deleted_at__isnull=True,
+                            measurement_item__isnull=False,
                         ).values_list(
                             "employee_id",
                             "position_id",
-                            "item"
+                            "measurement_item_id",
                         )
                     )
 
+
                     new_goals = []
 
-                    for source in selected:
+                    for source in selected:                   
                         key = (
                             source.employee_id,
                             source.position_id,
-                            source.item
+                            source.measurement_item_id,
                         )
 
                         if key in current:
@@ -970,26 +998,38 @@ def period_assign_existing_goals(request, period_id):
 
                         current.add(key)
 
-                        item_exists = (
-                            MeasurementItem.objects.filter(
-                                name=source.item,
-                                deleted_at__isnull=True,
-                                is_active=True,
-                                unit=source.unit
-                            ).count() == 1
-                        )
+                        
+                        # Identifica el ítem por su relación, no por el nombre.
+                        item = source.measurement_item
 
-                        if not item_exists:
+                        if item is None:
                             errors.append(
-                                f"El ítem '{source.item}' no está "
-                                "activo, es ambiguo o cambió su unidad."
+                                f"La meta '{source.item}' no tiene un ítem "
+                                "del catálogo identificado. Debe revisarse "
+                                "antes de copiarla."
                             )
                             continue
+
+                        if item.deleted_at is not None or not item.is_active:
+                            errors.append(
+                                f"El ítem '{item.code} - {item.name}' "
+                                "no está activo y no puede copiarse."
+                            )
+                            continue
+
+                        if item.unit != source.unit:
+                            errors.append(
+                                f"La unidad del ítem '{item.code}' "
+                                "no coincide con la meta original."
+                            )
+                            continue
+
 
                         copy = Goal(
                             period=locked_period,
                             employee=source.employee,
                             position=source.position,
+                            measurement_item=item,
                             item=source.item,
                             objective_value=source.objective_value,
                             required_evidence_count=source.required_evidence_count,

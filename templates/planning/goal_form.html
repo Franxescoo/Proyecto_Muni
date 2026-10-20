@@ -55,30 +55,75 @@
 
                         <div class="row">
 
+                            
                             {% for field in form %}
 
-                            <div class="col-md-4 mb-3">
+                                {% if field.is_hidden %}
 
-                                {{ field.label_tag }}
+                                    {{ field }}
 
-                                {{ field }}
+                                    {% if field.errors %}
+                                    <div class="text-danger">
+                                        {{ field.errors }}
+                                    </div>
+                                    {% endif %}
 
-                                {% if field.help_text %}
-                                <div class="form-text">
-                                    {{ field.help_text }}
-                                </div>
+                                {% else %}
+
+                                    <div class="col-md-4 mb-3">
+
+                                        {{ field.label_tag }}
+
+                                        {{ field }}
+
+                                        {% if field.help_text %}
+                                        <div class="form-text">
+                                            {{ field.help_text }}
+                                        </div>
+                                        {% endif %}
+
+                                        <div class="text-danger">
+                                            {{ field.errors }}
+                                        </div>
+
+                                    </div>
+
                                 {% endif %}
 
-                                <div class="text-danger">
-                                    {{ field.errors }}
-                                </div>
 
-                            </div>
+
 
                             {% endfor %}
 
                         </div>
                         
+                        <!-- INFORMACIÓN DEL ÍTEM HISTÓRICO SIN VINCULAR -->
+                        {% if goal and not goal.measurement_item_id %}
+                        <div class="alert alert-info mt-3">
+
+                            <h6 class="fw-bold mb-2">
+                                Ítem histórico sin código identificado
+                            </h6>
+
+                            <p class="mb-1">
+                                <strong>Nombre original:</strong>
+                                {{ goal.item }}
+                            </p>
+
+                            <p class="mb-1">
+                                <strong>Unidad de medida:</strong>
+                                {{ goal.unit }}
+                            </p>
+
+                            <small>
+                                Esta meta conserva sus datos originales,
+                                pero todavía no tiene un ítem del catálogo vinculado.
+                                Puedes seleccionar un ítem activo al modificarla.
+                            </small>
+
+                        </div>
+                        {% endif %}
+
                         <!-- INFORMACIÓN AUTOMÁTICA DEL ÍTEM -->
                         <div id="itemDetails" class="card bg-light border-0 mt-3 d-none">
                             <div class="card-body">

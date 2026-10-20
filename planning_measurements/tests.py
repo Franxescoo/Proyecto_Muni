@@ -1,3 +1,4 @@
+
 from datetime import date
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -5,7 +6,7 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.core.exceptions import ValidationError
-from django.test import TestCase
+from django.test import TestCase, SimpleTestCase
 from django.urls import reverse
 from django.utils import timezone
 
@@ -17,14 +18,13 @@ from organization.models import (
 )
 
 from .forms import GoalForm, GoalInlineForm, PeriodForm
-from .models import Goal, Period
+from .models import Goal, Period, MeasurementItem
 from .views import scoped_goals
-
-from django.test import SimpleTestCase
-
 from .working_days import calculate_computable_days
 
+
 class PlanningTests(TestCase):
+
     def setUp(self):
         self.delegation = Delegation.objects.create(
             name="Norte",
@@ -79,10 +79,20 @@ class PlanningTests(TestCase):
             ),
         )
 
+        # Los ítems se identifican mediante su ID único.
+        self.measurement_item = MeasurementItem.objects.create(
+            code="TEST-META-001",
+            name="Meta",
+            item_type=MeasurementItem.ItemType.QUANTITATIVE,
+            unit="Items",
+            is_active=True,
+        )
+
         self.data = {
             "period": self.period.pk,
             "employee": self.employee.pk,
             "item": "Meta",
+            "measurement_item": self.measurement_item.pk,
             "objective_value": "100",
             "unit": "Items",
             "weight": "50",
@@ -153,12 +163,33 @@ class PlanningTests(TestCase):
         return data
 
     def test_create_without_posted_position(self):
-        form = GoalForm(self.data, user=self.form_user)
+        form = GoalForm(
+            self.data,
+            user=self.form_user,
+        )
 
         self.assertTrue(form.is_valid(), form.errors)
+
+        saved_goal = form.save()
+
         self.assertEqual(
-            form.save().position_id,
+            saved_goal.position_id,
             self.position.pk,
+        )
+
+        self.assertEqual(
+            saved_goal.measurement_item_id,
+            self.measurement_item.pk,
+        )
+
+        self.assertEqual(
+            saved_goal.item,
+            self.measurement_item.name,
+        )
+
+        self.assertEqual(
+            saved_goal.unit,
+            self.measurement_item.unit,
         )
 
     def test_posted_position_is_ignored(self):
@@ -168,6 +199,7 @@ class PlanningTests(TestCase):
         )
 
         self.assertTrue(form.is_valid(), form.errors)
+
         self.assertEqual(
             form.save().position_id,
             self.position.pk,
@@ -175,7 +207,10 @@ class PlanningTests(TestCase):
 
     def test_outside_employee_is_rejected(self):
         form = GoalForm(
-            {**self.data, "employee": self.outside.pk},
+            {
+                **self.data,
+                "employee": self.outside.pk,
+            },
             user=self.form_user,
         )
 
@@ -203,12 +238,16 @@ class PlanningTests(TestCase):
         )
 
         form = GoalForm(
-            {**self.data, "employee": employee.pk},
+            {
+                **self.data,
+                "employee": employee.pk,
+            },
             instance=goal,
             user=self.form_user,
         )
 
         self.assertTrue(form.is_valid(), form.errors)
+
         self.assertEqual(
             form.save().position_id,
             position.pk,
@@ -223,6 +262,7 @@ class PlanningTests(TestCase):
         form.instance.period = self.period
 
         self.assertTrue(form.is_valid(), form.errors)
+
         self.assertEqual(
             form.save().position_id,
             self.position.pk,
@@ -244,7 +284,10 @@ class PlanningTests(TestCase):
         for value in ["0", "-1"]:
             with self.subTest(value=value):
                 form = GoalForm(
-                    {**self.data, "objective_value": value},
+                    {
+                        **self.data,
+                        "objective_value": value,
+                    },
                     user=self.form_user,
                 )
 
@@ -255,7 +298,10 @@ class PlanningTests(TestCase):
         for value in ["-1", "101"]:
             with self.subTest(value=value):
                 form = GoalForm(
-                    {**self.data, "weight": value},
+                    {
+                        **self.data,
+                        "weight": value,
+                    },
                     user=self.form_user,
                 )
 
@@ -263,12 +309,32 @@ class PlanningTests(TestCase):
                 self.assertIn("weight", form.errors)
 
     def test_period_rejects_invalid_dates_days_and_status(self):
+        # Los días computables se calculan automáticamente
+        # a partir de las fechas y feriados chilenos.
+
         cases = [
-            ({"end_date": "2025-12-31"}, "end_date"),
-            ({"computable_days": "0"}, "computable_days"),
-            ({"computable_days": "-1"}, "computable_days"),
-            ({"computable_days": "366"}, "computable_days"),
-            ({"status": "inventado"}, "status"),
+            (
+                {"end_date": "2025-12-31"},
+                "end_date",
+            ),
+            (
+                {
+                    "start_date": "2026-01-01",
+                    "end_date": "2026-01-01",
+                },
+                "computable_days",
+            ),
+            (
+                {
+                    "start_date": "2026-01-03",
+                    "end_date": "2026-01-04",
+                },
+                "computable_days",
+            ),
+            (
+                {"status": "inventado"},
+                "status",
+            ),
         ]
 
         for changes, field in cases:
@@ -282,14 +348,23 @@ class PlanningTests(TestCase):
                 self.assertIn(field, form.errors)
 
     def test_period_accepts_one_day_and_closed_status(self):
+        # Lunes 5 de enero de 2026:
+        # día hábil y no feriado.
+
         form = PeriodForm({
             **self.period_data(),
-            "end_date": "2026-01-01",
-            "computable_days": 1,
+            "start_date": "2026-01-05",
+            "end_date": "2026-01-05",
+            "computable_days": 366,
             "status": "Closed",
         })
 
         self.assertTrue(form.is_valid(), form.errors)
+
+        self.assertEqual(
+            form.cleaned_data["computable_days"],
+            1,
+        )
 
     def test_period_view_hides_goals_without_permission(self):
         self.account("view_period")
@@ -303,14 +378,23 @@ class PlanningTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, "Meta confidencial")
+
+        self.assertNotContains(
+            response,
+            "Meta confidencial",
+        )
+
         self.assertEqual(
             response.context["formset"].queryset.count(),
             0,
         )
 
     def test_period_view_exposes_authorized_goals(self):
-        self.account("view_period", "view_goal")
+        self.account(
+            "view_period",
+            "view_goal",
+        )
+
         self.create_goal()
 
         response = self.client.get(
@@ -320,46 +404,88 @@ class PlanningTests(TestCase):
             )
         )
 
-        self.assertContains(response, "Meta confidencial")
+        self.assertContains(
+            response,
+            "Meta confidencial",
+        )
 
     def test_read_only_user_cannot_post_edits(self):
-        self.account("view_goal", "view_period")
+        self.account(
+            "view_goal",
+            "view_period",
+        )
+
         goal = self.create_goal()
 
         cases = [
-            ("goal_edit", goal.pk, self.data),
-            ("period_edit", self.period.pk, self.period_data()),
+            (
+                "goal_edit",
+                goal.pk,
+                self.data,
+            ),
+            (
+                "period_edit",
+                self.period.pk,
+                self.period_data(),
+            ),
         ]
 
         for name, pk, data in cases:
             response = self.client.post(
-                reverse("planning:" + name, args=[pk]),
+                reverse(
+                    "planning:" + name,
+                    args=[pk],
+                ),
                 data,
             )
 
-            self.assertEqual(response.status_code, 403)
+            self.assertEqual(
+                response.status_code,
+                403,
+            )
 
         goal.refresh_from_db()
-        self.assertEqual(goal.item, "Meta confidencial")
+
+        self.assertEqual(
+            goal.item,
+            "Meta confidencial",
+        )
 
     def test_user_without_add_permission_cannot_create(self):
-        self.account("view_goal", "view_period")
+        self.account(
+            "view_goal",
+            "view_period",
+        )
 
         response = self.client.post(
             reverse("planning:goal_create"),
             self.data,
         )
-        self.assertEqual(response.status_code, 403)
+
+        self.assertEqual(
+            response.status_code,
+            403,
+        )
 
         response = self.client.post(
             reverse("planning:period_create"),
             self.period_data(),
         )
-        self.assertEqual(response.status_code, 403)
+
+        self.assertEqual(
+            response.status_code,
+            403,
+        )
 
     def test_other_delegation_goal_returns_404(self):
-        self.account("view_goal", "change_goal")
-        goal = self.create_goal(employee=self.outside)
+        self.account(
+            "view_goal",
+            "change_goal",
+        )
+
+        goal = self.create_goal(
+            employee=self.outside
+        )
 
         url = reverse(
             "planning:goal_edit",
@@ -370,12 +496,19 @@ class PlanningTests(TestCase):
             self.client.get(url).status_code,
             404,
         )
+
         self.assertEqual(
-            self.client.post(url, self.data).status_code,
+            self.client.post(
+                url,
+                self.data,
+            ).status_code,
             404,
         )
 
-    def test_delete_permission_does_not_bypass_superuser(self):
+    def test_delete_permissions_allow_archiving_without_superuser(self):
+        # Con el permiso explícito de eliminación,
+        # el usuario puede archivar registros.
+
         self.account(
             "view_goal",
             "delete_goal",
@@ -385,18 +518,41 @@ class PlanningTests(TestCase):
 
         goal = self.create_goal()
 
-        for name, pk in [
-            ("goal_delete", goal.pk),
-            ("period_delete", self.period.pk),
-        ]:
-            response = self.client.post(
-                reverse("planning:" + name, args=[pk])
+        response = self.client.post(
+            reverse(
+                "planning:goal_delete",
+                args=[goal.pk],
             )
+        )
 
-            self.assertEqual(response.status_code, 403)
+        self.assertEqual(
+            response.status_code,
+            302,
+        )
 
         goal.refresh_from_db()
-        self.assertIsNone(goal.deleted_at)
+
+        self.assertIsNotNone(
+            goal.deleted_at,
+        )
+
+        response = self.client.post(
+            reverse(
+                "planning:period_delete",
+                args=[self.period.pk],
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            302,
+        )
+
+        self.period.refresh_from_db()
+
+        self.assertIsNotNone(
+            self.period.deleted_at,
+        )
 
     def test_archived_period_hides_and_blocks_goals(self):
         user = self.account(
@@ -406,11 +562,14 @@ class PlanningTests(TestCase):
         )
 
         goal = self.create_goal()
+
         self.period.deleted_at = timezone.now()
         self.period.save()
 
         self.assertFalse(
-            scoped_goals(user).filter(pk=goal.pk).exists()
+            scoped_goals(user).filter(
+                pk=goal.pk
+            ).exists()
         )
 
         url = reverse(
@@ -422,17 +581,27 @@ class PlanningTests(TestCase):
             self.client.get(url).status_code,
             404,
         )
+
         self.assertEqual(
-            self.client.post(url, self.data).status_code,
+            self.client.post(
+                url,
+                self.data,
+            ).status_code,
             404,
         )
 
-        form = GoalForm(self.data, user=user)
+        form = GoalForm(
+            self.data,
+            user=user,
+        )
 
         self.assertFalse(form.is_valid())
         self.assertIn("period", form.errors)
 
-    def test_superuser_archives_period_without_destroying_goals(self):
+    def test_superuser_cannot_archive_period_with_active_goals(self):
+        # No se permite archivar un período
+        # mientras tenga metas activas.
+
         user = self.account(superuser=True)
         goal = self.create_goal()
 
@@ -443,21 +612,32 @@ class PlanningTests(TestCase):
             )
         )
 
-        self.assertEqual(response.status_code, 302)
-
-        self.period.refresh_from_db()
-        self.assertIsNotNone(self.period.deleted_at)
-
-        self.assertTrue(
-            Goal.objects.filter(pk=goal.pk).exists()
+        self.assertEqual(
+            response.status_code,
+            403,
         )
 
-        self.assertFalse(
-            scoped_goals(user).filter(pk=goal.pk).exists()
+        self.period.refresh_from_db()
+
+        self.assertIsNone(
+            self.period.deleted_at,
+        )
+
+        self.assertTrue(
+            Goal.objects.filter(
+                pk=goal.pk
+            ).exists()
+        )
+
+        self.assertTrue(
+            scoped_goals(user).filter(
+                pk=goal.pk
+            ).exists()
         )
 
     def test_period_creation_rolls_back_on_goal_save_failure(self):
         self.account(superuser=True)
+
         original_count = Period.objects.count()
 
         with patch.object(
@@ -475,7 +655,11 @@ class PlanningTests(TestCase):
             Period.objects.count(),
             original_count,
         )
-        self.assertEqual(Goal.objects.count(), 0)
+
+        self.assertEqual(
+            Goal.objects.count(),
+            0,
+        )
 
     def test_period_change_without_goal_view_cannot_add_goal(self):
         self.account(
@@ -492,8 +676,16 @@ class PlanningTests(TestCase):
             self.inline_data(),
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(Goal.objects.count(), 0)
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
+
+        self.assertEqual(
+            Goal.objects.count(),
+            0,
+        )
+
         self.assertTrue(
             response.context["formset"].non_form_errors()
         )
@@ -516,8 +708,15 @@ class PeriodWeightCalculationTests(PlanningTests):
     def test_exactly_100_is_accepted(self):
         from .calculations import validate_period_weights
 
-        self.create_goal(item="Atenciones", weight=40)
-        self.create_goal(item="Informes", weight=60)
+        self.create_goal(
+            item="Atenciones",
+            weight=40,
+        )
+
+        self.create_goal(
+            item="Informes",
+            weight=60,
+        )
 
         self.assertIsNone(
             validate_period_weights(self.period)
@@ -529,8 +728,15 @@ class PeriodWeightCalculationTests(PlanningTests):
             validate_period_weights,
         )
 
-        self.create_goal(item="Atenciones", weight=40)
-        self.create_goal(item="Informes", weight=50)
+        self.create_goal(
+            item="Atenciones",
+            weight=40,
+        )
+
+        self.create_goal(
+            item="Informes",
+            weight=50,
+        )
 
         with self.assertRaises(InvalidPeriodWeights):
             validate_period_weights(self.period)
@@ -541,8 +747,15 @@ class PeriodWeightCalculationTests(PlanningTests):
             validate_period_weights,
         )
 
-        self.create_goal(item="Atenciones", weight=60)
-        self.create_goal(item="Informes", weight=50)
+        self.create_goal(
+            item="Atenciones",
+            weight=60,
+        )
+
+        self.create_goal(
+            item="Informes",
+            weight=50,
+        )
 
         with self.assertRaises(InvalidPeriodWeights):
             validate_period_weights(self.period)
@@ -550,13 +763,20 @@ class PeriodWeightCalculationTests(PlanningTests):
     def test_same_item_for_two_employees_is_counted_once(self):
         from .calculations import validate_period_weights
 
-        self.create_goal(item="Atenciones", weight=40)
-        self.create_goal(item="Informes", weight=60)
+        self.create_goal(
+            item="Atenciones",
+            weight=40,
+        )
+
+        self.create_goal(
+            item="Informes",
+            weight=60,
+        )
 
         self.create_goal(
             employee=self.outside,
             item="Atenciones",
-            weight=40
+            weight=40,
         )
 
         self.assertIsNone(
@@ -569,12 +789,15 @@ class PeriodWeightCalculationTests(PlanningTests):
             validate_period_weights,
         )
 
-        self.create_goal(item="Atenciones", weight=40)
+        self.create_goal(
+            item="Atenciones",
+            weight=40,
+        )
 
         self.create_goal(
             employee=self.outside,
             item="Atenciones",
-            weight=50
+            weight=50,
         )
 
         with self.assertRaises(InvalidPeriodWeights):
@@ -589,10 +812,12 @@ class PeriodWeightCalculationTests(PlanningTests):
         with self.assertRaises(InvalidPeriodWeights):
             validate_period_weights(self.period)
 
+
 class ComputableDaysTests(SimpleTestCase):
 
     def test_weekdays_without_holidays(self):
         # Del lunes 5 al viernes 9 de enero de 2026.
+
         result = calculate_computable_days(
             date(2026, 1, 5),
             date(2026, 1, 9),
@@ -602,7 +827,7 @@ class ComputableDaysTests(SimpleTestCase):
 
     def test_excludes_weekends(self):
         # Del viernes 2 al lunes 5 de enero.
-        # Sábado y domingo no cuentan.
+
         result = calculate_computable_days(
             date(2026, 1, 2),
             date(2026, 1, 5),
@@ -612,6 +837,7 @@ class ComputableDaysTests(SimpleTestCase):
 
     def test_excludes_chilean_holiday(self):
         # El 1 de enero es feriado en Chile.
+
         result = calculate_computable_days(
             date(2026, 1, 1),
             date(2026, 1, 7),
@@ -621,6 +847,7 @@ class ComputableDaysTests(SimpleTestCase):
 
     def test_holiday_only(self):
         # Día de Año Nuevo.
+
         result = calculate_computable_days(
             date(2026, 1, 1),
             date(2026, 1, 1),
