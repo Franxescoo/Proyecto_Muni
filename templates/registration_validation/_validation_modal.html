@@ -1,6 +1,6 @@
 {% if open_modal %}
 
-<div class="modal fade"
+<div class="modal fade sgr-upgraded-modal"
      id="validationModal"
      tabindex="-1"
      aria-labelledby="validationModalLabel"
@@ -13,7 +13,9 @@
             <div class="modal-header"
                  style="background-color: #a60a17; color: white;">
 
-                <h5 class="modal-title"
+                <div class="sgr-modal-title-block">
+                        <div class="sgr-modal-eyebrow"><i class="bi bi-shield-check me-2" aria-hidden="true"></i>REGISTRO Y VALIDACIÓN</div>
+                        <h5 class="modal-title"
                     id="validationModalLabel">
 
                     {% if object %}
@@ -23,6 +25,8 @@
                     {% endif %}
 
                 </h5>
+                        <p class="sgr-modal-subtitle mb-0">Consulta o completa la información del registro de forma segura.</p>
+                    </div>
 
                 <button type="button"
                         class="btn-close btn-close-white"
@@ -39,6 +43,7 @@
                 {% csrf_token %}
 
                 <div class="modal-body">
+                    <div class="sgr-form-section-title"><span class="sgr-section-icon"><i class="bi bi-card-list" aria-hidden="true"></i></span><span>Datos de validación</span></div>
 
                     {% if form.non_field_errors %}
 

@@ -35,6 +35,8 @@ from .views import (
     ServiceUpdateView,
     ServiceDeleteView,
     set_page_size,
+    attention_type_export,
+    sub_attention_export,
 )
 
 
@@ -180,6 +182,7 @@ urlpatterns = [
     # -----------------------------------------------------
     # Tipo de Atención
     # -----------------------------------------------------
+    path("attention-types/exportar/", attention_type_export, name="attention_type_export"),
     path(
         "attention-types/",
         AttentionTypeListView.as_view(),
@@ -204,6 +207,7 @@ urlpatterns = [
     # -----------------------------------------------------
     # Sub Atención
     # -----------------------------------------------------
+    path("sub-attentions/exportar/", sub_attention_export, name="sub_attention_export"),
     path(
         "sub-attentions/",
         SubAttentionListView.as_view(),

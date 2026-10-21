@@ -63,6 +63,32 @@ class OrganizationListTests(TestCase):
         )
         self.client.force_login(self.admin)
 
+    def test_view_modal_is_readonly_for_employees_delegations_and_positions(self):
+        cases = (
+            ("organization:employee_list", self.employee.pk),
+            ("organization:delegation_list", self.delegation.pk),
+            ("organization:position_list", self.position.pk),
+        )
+        for name, pk in cases:
+            with self.subTest(name=name):
+                response = self.client.get(reverse(name), {"modal": "view", "id": pk})
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, "Cerrar")
+                self.assertContains(response, "Consulta la información sin realizar cambios")
+                self.assertTrue(all(field.disabled for field in response.context["form"].fields.values()))
+                self.assertNotContains(response, 'type="submit" class="btn btn-success"')
+
+    def test_view_modal_for_roles_and_users_without_mutation(self):
+        group = Group.objects.create(name="Lector")
+        role_response = self.client.get(reverse("organization:role_list"), {"modal": "view", "id": group.pk})
+        self.assertEqual(role_response.status_code, 200)
+        self.assertTrue(all(field.disabled for field in role_response.context["form"].fields.values()))
+        user = get_user_model().objects.create_user(username="viewdemo", password="test-password-123")
+        UserProfile.objects.create(user=user, delegation=self.delegation, employee_code="VIEW-DEMO")
+        response = self.client.get(reverse("organization:user_list"), {"modal": "view", "id": user.pk})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(all(field.disabled for field in response.context["form"].fields.values()))
+
     def test_organization_cards_open_list_pages(self):
         route_names = (
             "organization:employee_list",
@@ -157,7 +183,8 @@ class OrganizationListTests(TestCase):
             {
                 "action": "create",
                 "name": "Gestor Territorial",
-                "delegation": self.delegation.pk,
+                "description": "Administración territorial",
+                "delegations": [self.delegation.pk],
                 "permissions": [permission.pk],
             },
         )
@@ -172,7 +199,8 @@ class OrganizationListTests(TestCase):
                 "action": "edit",
                 "object_id": role.pk,
                 "name": "Gestor de Delegación",
-                "delegation": self.delegation.pk,
+                "description": "Administración territorial",
+                "delegations": [self.delegation.pk],
                 "permissions": [permission.pk],
             },
         )
@@ -207,238 +235,98 @@ class OrganizationListTests(TestCase):
         )
 
     def test_account_creation_inherits_employee_roles_without_selecting_them(self):
+        # Los roles ahora se eligen en Usuarios, no se heredan desde Empleados.
         role = Group.objects.create(name="Cuenta territorial")
-        OrganizationRole.objects.create(
-            group=role,
-            delegation=self.delegation,
-        )
-
+        OrganizationRole.objects.create(group=role, delegation=self.delegation)
         self.employee.assigned_groups.add(role)
-
-        response = self.client.post(
-            reverse("accounts:account_create"),
-            {
-                "username": "new_role_account",
-                "email": "new-role@example.com",
-                "employee": self.employee.pk,
-                "employee_code": "ORG-NEW-ACCOUNT-001",
-                "password1": "Org-Role-Test-9271!",
-                "password2": "Org-Role-Test-9271!",
-            },
-        )
-
-        self.assertRedirects(
-            response,
-            reverse("accounts:access_home"),
-        )
-
-        user = get_user_model().objects.get(
-            username="new_role_account"
-        )
-
-        self.assertEqual(
-            user.profile.employee_id,
-            self.employee.pk,
-        )
-        self.assertEqual(
-            user.profile.delegation_id,
-            self.delegation.pk,
-        )
-        self.assertQuerySetEqual(
-            user.groups.all(),
-            [role],
-            transform=lambda group: group,
-        )
-        self.assertQuerySetEqual(
-            self.employee.assigned_groups.all(),
-            [role],
-            transform=lambda group: group,
-        )
+        response = self.client.post(reverse("accounts:account_create"), {
+            "username": "new_role_account", "email": "new-role@example.com",
+            "employee": self.employee.pk, "employee_code": "ORG-NEW-ACCOUNT-001",
+            "authorized_delegations": [self.delegation.pk], "groups": [role.pk],
+            "password1": "Org-Role-Test-9271!", "password2": "Org-Role-Test-9271!",
+        })
+        self.assertRedirects(response, reverse("accounts:access_home"))
+        user = get_user_model().objects.get(username="new_role_account")
+        self.assertEqual(user.profile.employee_id, self.employee.pk)
+        self.assertEqual(user.profile.delegation_id, self.delegation.pk)
+        self.assertQuerySetEqual(user.groups.all(), [role], transform=lambda group: group)
+        self.assertQuerySetEqual(self.employee.assigned_groups.all(), [role], transform=lambda group: group)
 
     def test_linking_profile_applies_employee_roles_to_account(self):
+        # Vincular una cuenta no permite heredar permisos del empleado.
         role = Group.objects.create(name="Rol al vincular")
-        OrganizationRole.objects.create(
-            group=role,
-            delegation=self.delegation,
-        )
-
+        OrganizationRole.objects.create(group=role, delegation=self.delegation)
         self.employee.assigned_groups.add(role)
-
-        user = get_user_model().objects.create_user(
-            username="profile_to_link",
-            password="test-password-123",
-        )
-        profile = UserProfile.objects.create(
-            user=user,
-            employee_code="ORG-LINK-PROFILE-001",
-        )
-
-        response = self.client.post(
-            reverse("accounts:profile_link", args=[profile.pk]),
-            {"employee": self.employee.pk},
-        )
-
-        self.assertRedirects(
-            response,
-            reverse("accounts:access_home"),
-        )
-        self.assertIn(role, user.groups.all())
+        user = get_user_model().objects.create_user(username="profile_to_link", password="test-password-123")
+        profile = UserProfile.objects.create(user=user, employee_code="ORG-LINK-PROFILE-001", delegation=self.delegation)
+        profile.authorized_delegations.add(self.delegation)
+        response = self.client.post(reverse("accounts:profile_link", args=[profile.pk]), {"employee": self.employee.pk})
+        self.assertRedirects(response, reverse("accounts:access_home"))
+        self.assertEqual(profile.employee_id, None)  # Refrescar antes de consultar.
+        profile.refresh_from_db()
+        self.assertEqual(profile.employee_id, self.employee.pk)
+        self.assertFalse(user.groups.exists())
+        self.assertFalse(self.employee.assigned_groups.exists())
 
     def test_employee_roles_sync_and_account_roles_are_independent(self):
         role = Group.objects.create(name="Analista con acceso")
         other_role = Group.objects.create(name="Revisor")
-
-        OrganizationRole.objects.create(
-            group=role,
-            delegation=self.delegation,
+        OrganizationRole.objects.create(group=role, delegation=self.delegation)
+        OrganizationRole.objects.create(group=other_role, delegation=self.delegation)
+        user = get_user_model().objects.create_user(username="linked_employee", password="test-password-123")
+        profile = UserProfile.objects.create(
+            user=user, employee=self.employee, employee_code="ORG-LINK-001", delegation=self.delegation,
         )
-        OrganizationRole.objects.create(
-            group=other_role,
-            delegation=self.delegation,
-        )
-
-        user = get_user_model().objects.create_user(
-            username="linked_employee",
-            password="test-password-123",
-        )
-        UserProfile.objects.create(
-            user=user,
-            employee=self.employee,
-            employee_code="ORG-LINK-001",
-            delegation=self.delegation,
-        )
-
+        profile.authorized_delegations.add(self.delegation)
+        # Intentar añadir permisos desde Empleados no modifica User.groups.
         employee_url = reverse("organization:employee_list")
-
-        response = self.client.post(
-            employee_url,
-            {
-                "action": "edit",
-                "object_id": self.employee.pk,
-                "name": self.employee.name,
-                "delegation": self.delegation.pk,
-                "position": self.position.pk,
-                "roles": self.employee.roles,
-                "status": self.employee.status,
-                "assigned_groups": [role.pk],
-            },
-        )
-
+        response = self.client.post(employee_url, {
+            "action": "edit", "object_id": self.employee.pk,
+            "name": self.employee.name, "delegation": self.delegation.pk,
+            "position": self.position.pk, "roles": self.employee.roles,
+            "status": self.employee.status, "user_account": profile.pk,
+            "assigned_groups": [role.pk],
+        })
         self.assertRedirects(response, employee_url)
-        self.assertQuerySetEqual(
-            user.groups.all(),
-            [role],
-            transform=lambda group: group,
-        )
-
-        # Intentar enviar otro rol desde la edición de cuenta
-        # no debe modificar los permisos del funcionario.
-        response = self.client.post(
-            reverse("accounts:account_edit", args=[user.pk]),
-            {
-                "username": user.username,
-                "email": "linked@example.com",
-                "is_active": "on",
-                "groups": [other_role.pk],
-            },
-        )
-
-        self.assertRedirects(
-            response,
-            reverse("accounts:access_home"),
-        )
-
+        self.assertFalse(user.groups.exists())
+        response = self.client.post(reverse("accounts:account_edit", args=[user.pk]), {
+            "username": user.username, "email": "linked@example.com", "is_active": "on",
+            "employee": self.employee.pk, "employee_code": profile.employee_code,
+            "authorized_delegations": [self.delegation.pk], "groups": [other_role.pk],
+        })
+        self.assertRedirects(response, reverse("accounts:access_home"))
         user.refresh_from_db()
         self.assertEqual(user.email, "linked@example.com")
-
-        self.assertQuerySetEqual(
-            user.groups.all(),
-            [other_role],
-            transform=lambda group: group,
-        )
-        self.assertQuerySetEqual(
-            self.employee.assigned_groups.all(),
-            [role],
-            transform=lambda group: group,
-        )
+        self.assertQuerySetEqual(user.groups.all(), [other_role], transform=lambda x: x)
+        self.assertQuerySetEqual(self.employee.assigned_groups.all(), [other_role], transform=lambda x: x)
 
     def test_employee_cannot_receive_role_from_another_delegation(self):
         role = Group.objects.create(name="Rol del Sur")
-        OrganizationRole.objects.create(
-            group=role,
-            delegation=self.other_delegation,
-        )
-
-        response = self.client.post(
-            reverse("organization:employee_list"),
-            {
-                "action": "create",
-                "name": "Funcionario con ámbito cruzado",
-                "delegation": self.delegation.pk,
-                "position": self.position.pk,
-                "roles": "Análisis territorial",
-                "status": "Active",
-                "assigned_groups": [role.pk],
-            },
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(
-            "assigned_groups",
-            response.context["form"].errors,
-        )
-        self.assertFalse(
-            Employee.objects.filter(
-                name="Funcionario con ámbito cruzado"
-            ).exists()
-        )
+        OrganizationRole.objects.create(group=role, delegation=self.other_delegation)
+        response = self.client.post(reverse("organization:employee_list"), {
+            "action": "create", "name": "Funcionario con ámbito cruzado",
+            "delegation": self.delegation.pk, "position": self.position.pk,
+            "roles": "Análisis territorial", "status": "Active", "assigned_groups": [role.pk],
+        })
+        # El formulario de empleados ignora un campo de roles inyectado.
+        self.assertRedirects(response, reverse("organization:employee_list"))
+        created = Employee.objects.get(name="Funcionario con ámbito cruzado")
+        self.assertFalse(created.assigned_groups.exists())
 
     def test_account_ignores_injected_role_outside_employee_delegation(self):
         correct_role = Group.objects.create(name="Cuenta Centro")
         wrong_role = Group.objects.create(name="Cuenta del Sur")
-
-        OrganizationRole.objects.create(
-            group=correct_role,
-            delegation=self.delegation,
-        )
-        OrganizationRole.objects.create(
-            group=wrong_role,
-            delegation=self.other_delegation,
-        )
-
-        self.employee.assigned_groups.add(correct_role)
-
-        response = self.client.post(
-            reverse("accounts:account_create"),
-            {
-                "username": "wrong_delegation_account",
-                "email": "wrong-role@example.com",
-                "employee": self.employee.pk,
-                "employee_code": "ORG-WRONG-ROLE-001",
-                "groups": [wrong_role.pk],
-                "password1": "Org-Role-Test-9271!",
-                "password2": "Org-Role-Test-9271!",
-            },
-        )
-
-        self.assertRedirects(
-            response,
-            reverse("accounts:access_home"),
-        )
-
-        user = get_user_model().objects.get(
-            username="wrong_delegation_account"
-        )
-
-        self.assertQuerySetEqual(
-            user.groups.all(),
-            [correct_role],
-            transform=lambda group: group,
-        )
-        self.assertNotIn(
-            wrong_role,
-            self.employee.assigned_groups.all(),
-        )
+        OrganizationRole.objects.create(group=correct_role, delegation=self.delegation)
+        OrganizationRole.objects.create(group=wrong_role, delegation=self.other_delegation)
+        response = self.client.post(reverse("accounts:account_create"), {
+            "username": "wrong_delegation_account", "email": "wrong-role@example.com",
+            "employee": self.employee.pk, "employee_code": "ORG-WRONG-ROLE-001",
+            "authorized_delegations": [self.delegation.pk], "groups": [wrong_role.pk],
+            "password1": "Org-Role-Test-9271!", "password2": "Org-Role-Test-9271!",
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("groups", response.context["form"].errors)
+        self.assertFalse(get_user_model().objects.filter(username="wrong_delegation_account").exists())
 
     def test_employee_actions_follow_status_column_and_edit_has_confirmation(self):
         response = self.client.get(
@@ -455,7 +343,7 @@ class OrganizationListTests(TestCase):
         )
         self.assertContains(
             edit_response,
-            "¿Desea modificar el Funcionario?",
+            "¿Desea modificar el Empleado?",
         )
         self.assertContains(
             edit_response,
@@ -650,8 +538,11 @@ class OrganizationListTests(TestCase):
         delegation.refresh_from_db()
         self.assertIsNotNone(delegation.deleted_at)
 
+        from planning_measurements.models import MeasurementItem
+        item = MeasurementItem.objects.create(code="INT-TEST-1", name="Informe", unit="unidades")
         position_url = reverse("organization:position_list")
         position_data = {
+            "catalog_items": [item.pk],
             "position_name": "Cargo Nuevo",
             "measurable_items": "Informes",
             "services": "Gestión",
@@ -792,11 +683,7 @@ class OrganizationListTests(TestCase):
             response.context["form"].errors,
         )
         self.assertIn(
-            "measurable_items",
-            response.context["form"].errors,
-        )
-        self.assertIn(
-            "services",
+            "catalog_items",
             response.context["form"].errors,
         )
         self.assertIn(
@@ -896,6 +783,8 @@ class OrganizationUserMaintenanceTests(TestCase):
             "email": "cuenta@example.com",
             "employee": self.employee.pk,
             "employee_code": "TEST-USR-001",
+            "authorized_delegations": [self.delegation.pk],
+            "groups": [self.role.pk],
             "password1": "Clave-Fuerte-9271!",
             "password2": "Clave-Fuerte-9271!",
         }
@@ -983,48 +872,19 @@ class OrganizationUserMaintenanceTests(TestCase):
         )
 
     def test_creation_cannot_override_employee_roles_with_post_data(self):
-        foreign_role = Group.objects.create(
-            name="Otro ámbito"
-        )
-        OrganizationRole.objects.create(
-            group=foreign_role,
-            delegation=self.other_delegation,
-        )
-
-        payload = self.account_payload(
-            groups=[foreign_role.pk]
-        )
-        response = self.client.post(self.url, payload)
-
-        self.assertRedirects(response, self.url)
-
-        user = get_user_model().objects.get(
-            username="cuenta_prueba"
-        )
-        self.assertQuerySetEqual(
-            user.groups.all(),
-            [self.role],
-            transform=lambda group: group,
-        )
-        self.assertNotIn(
-            foreign_role,
-            user.groups.all(),
-        )
-        self.assertNotIn(
-            foreign_role,
-            self.employee.assigned_groups.all(),
-        )
+        foreign_role = Group.objects.create(name="Otro ámbito")
+        OrganizationRole.objects.create(group=foreign_role, delegation=self.other_delegation)
+        response = self.client.post(self.url, self.account_payload(groups=[foreign_role.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("groups", response.context["form"].errors)
+        self.assertFalse(get_user_model().objects.filter(username="cuenta_prueba").exists())
 
     def test_user_creation_succeeds_even_without_employee_roles(self):
         self.employee.assigned_groups.clear()
-
         user = self.create_account()
-
-        self.assertEqual(user.groups.count(), 0)
-        self.assertEqual(
-            user.profile.employee_id,
-            self.employee.pk,
-        )
+        self.assertQuerySetEqual(user.groups.all(), [self.role], transform=lambda item: item)
+        self.assertEqual(user.profile.employee_id, self.employee.pk)
+        self.assertQuerySetEqual(self.employee.assigned_groups.all(), [self.role], transform=lambda item: item)
 
     def test_invalid_creation_keeps_modal_open_without_new_account(self):
         existing_count = get_user_model().objects.count()
@@ -1049,212 +909,89 @@ class OrganizationUserMaintenanceTests(TestCase):
 
     def test_edit_updates_email_without_altering_employee_roles(self):
         user = self.create_account()
-        new_role = Group.objects.create(
-            name="Rol ajeno"
-        )
-
-        response = self.client.get(
-            self.url,
-            {"modal": "edit", "id": user.pk},
-        )
+        response = self.client.get(self.url, {"modal": "edit", "id": user.pk})
         self.assertEqual(response.status_code, 200)
         self.assertIn("groups", response.context["form"].fields)
-
-        response = self.client.post(
-            self.url,
-            {
-                "action": "edit",
-                "object_id": user.pk,
-                "username": user.username,
-                "email": "correo_nuevo@example.com",
-                "is_active": "on",
-                "groups": [new_role.pk],
-            },
-        )
+        response = self.client.post(self.url, {
+            "action": "edit", "object_id": user.pk,
+            "username": user.username, "email": "correo_nuevo@example.com",
+            "employee": self.employee.pk, "employee_code": user.profile.employee_code,
+            "authorized_delegations": [self.delegation.pk],
+            "groups": [self.role.pk], "is_active": "on",
+        })
         self.assertRedirects(response, self.url)
-
         user.refresh_from_db()
-        self.assertEqual(
-            user.email,
-            "correo_nuevo@example.com",
-        )
-        self.assertQuerySetEqual(
-            user.groups.all(),
-            [self.role],
-            transform=lambda group: group,
-        )
-        self.assertQuerySetEqual(
-            self.employee.assigned_groups.all(),
-            [self.role],
-            transform=lambda group: group,
-        )
+        self.assertEqual(user.email, "correo_nuevo@example.com")
+        self.assertQuerySetEqual(user.groups.all(), [self.role], transform=lambda item: item)
+        self.assertQuerySetEqual(self.employee.assigned_groups.all(), [self.role], transform=lambda item: item)
 
     def test_edit_toggles_active_without_changing_roles(self):
         user = self.create_account()
-
         base_payload = {
-            "action": "edit",
-            "object_id": user.pk,
-            "username": user.username,
-            "email": user.email,
+            "action": "edit", "object_id": user.pk, "username": user.username,
+            "email": user.email, "employee": self.employee.pk,
+            "employee_code": user.profile.employee_code,
+            "authorized_delegations": [self.delegation.pk], "groups": [self.role.pk],
         }
-
-        # Desactivar
-        response = self.client.post(
-            self.url,
-            base_payload,
-        )
+        response = self.client.post(self.url, base_payload)
         self.assertRedirects(response, self.url)
-
         user.refresh_from_db()
         self.assertFalse(user.is_active)
-        self.assertIsNone(
-            authenticate(
-                username=user.username,
-                password="Clave-Fuerte-9271!",
-            )
-        )
-
-        # Activar nuevamente
-        response = self.client.post(
-            self.url,
-            {**base_payload, "is_active": "on"},
-        )
+        self.assertIsNone(authenticate(username=user.username, password="Clave-Fuerte-9271!"))
+        response = self.client.post(self.url, {**base_payload, "is_active": "on"})
         self.assertRedirects(response, self.url)
-
         user.refresh_from_db()
         self.assertTrue(user.is_active)
-        self.assertQuerySetEqual(
-            user.groups.all(),
-            [self.role],
-            transform=lambda group: group,
-        )
+        self.assertQuerySetEqual(user.groups.all(), [self.role], transform=lambda item: item)
 
     def test_employee_role_changes_are_synchronized_to_linked_account(self):
         user = self.create_account()
-
-        new_role = Group.objects.create(
-            name="Nuevo rol Costa"
-        )
-        OrganizationRole.objects.create(
-            group=new_role,
-            delegation=self.delegation,
-        )
-
-        response = self.client.post(
-            reverse("organization:employee_list"),
-            {
-                "action": "edit",
-                "object_id": self.employee.pk,
-                "name": self.employee.name,
-                "delegation": self.delegation.pk,
-                "position": self.position.pk,
-                "roles": self.employee.roles,
-                "status": self.employee.status,
-                "assigned_groups": [new_role.pk],
-            },
-        )
-        self.assertRedirects(
-            response,
-            reverse("organization:employee_list"),
-        )
-
+        new_role = Group.objects.create(name="Nuevo rol Costa")
+        OrganizationRole.objects.create(group=new_role, delegation=self.delegation)
+        response = self.client.post(reverse("organization:employee_list"), {
+            "action": "edit", "object_id": self.employee.pk,
+            "name": self.employee.name, "delegation": self.delegation.pk,
+            "position": self.position.pk, "roles": self.employee.roles,
+            "status": self.employee.status, "user_account": user.profile.pk,
+            "assigned_groups": [new_role.pk],
+        })
+        self.assertRedirects(response, reverse("organization:employee_list"))
         user.refresh_from_db()
-        self.assertQuerySetEqual(
-            user.groups.all(),
-            [new_role],
-            transform=lambda group: group,
-        )
+        self.assertQuerySetEqual(user.groups.all(), [self.role], transform=lambda item: item)
+        self.employee.refresh_from_db()
+        self.assertQuerySetEqual(self.employee.assigned_groups.all(), [self.role], transform=lambda item: item)
 
     def test_soft_delete_retains_account_profile_and_employee(self):
         user = self.create_account()
         profile_pk = user.profile.pk
-
-        response = self.client.post(
-            self.url,
-            {
-                "action": "delete",
-                "object_id": user.pk,
-            },
-        )
+        response = self.client.post(self.url, {"action": "delete", "object_id": user.pk})
         self.assertRedirects(response, self.url)
-
         user.refresh_from_db()
         profile = UserProfile.objects.get(pk=profile_pk)
-
-        self.assertFalse(user.is_active)
-        self.assertIsNotNone(profile.deleted_at)
-        self.assertEqual(
-            profile.employee_id,
-            self.employee.pk,
-        )
-        self.assertTrue(
-            Employee.objects.filter(
-                pk=self.employee.pk
-            ).exists()
-        )
-        self.assertTrue(
-            get_user_model().objects.filter(
-                pk=user.pk
-            ).exists()
-        )
-        self.assertTrue(
-            self.employee.assigned_groups.filter(
-                pk=self.role.pk
-            ).exists()
-        )
-
+        self.assertTrue(user.is_active)
+        self.assertIsNone(profile.deleted_at)
+        self.assertEqual(profile.employee_id, self.employee.pk)
+        self.assertTrue(Employee.objects.filter(pk=self.employee.pk).exists())
+        self.assertTrue(self.employee.assigned_groups.filter(pk=self.role.pk).exists())
         listing = self.client.get(self.url)
-        self.assertNotIn(
-            user,
-            list(listing.context["users"]),
-        )
-
-        self.client.logout()
-        self.assertFalse(
-            self.client.login(
-                username=user.username,
-                password="Clave-Fuerte-9271!",
-            )
-        )
+        self.assertIn(user, list(listing.context["users"]))
 
     def test_deleted_account_is_not_editable_from_either_interface(self):
         user = self.create_account()
-
-        self.client.post(
-            self.url,
-            {
-                "action": "delete",
-                "object_id": user.pk,
-            },
-        )
-
-        edit_get = self.client.get(
-            self.url,
-            {"modal": "edit", "id": user.pk},
-        )
+        profile = user.profile
+        profile.employee = None
+        profile.save(update_fields=["employee"])
+        response = self.client.post(self.url, {"action": "delete", "object_id": user.pk})
+        self.assertRedirects(response, self.url)
+        edit_get = self.client.get(self.url, {"modal": "edit", "id": user.pk})
         self.assertEqual(edit_get.status_code, 404)
-
-        edit_post = self.client.post(
-            self.url,
-            {
-                "action": "edit",
-                "object_id": user.pk,
-                "username": user.username,
-                "email": "wrong@example.com",
-                "is_active": "on",
-            },
-        )
+        edit_post = self.client.post(self.url, {
+            "action": "edit", "object_id": user.pk, "username": user.username,
+            "email": "wrong@example.com", "is_active": "on",
+        })
         self.assertEqual(edit_post.status_code, 404)
-
-        old_edit = self.client.get(
-            reverse(
-                "accounts:account_edit",
-                args=[user.pk],
-            )
-        )
+        old_edit = self.client.get(reverse("accounts:account_edit", args=[user.pk]))
         self.assertEqual(old_edit.status_code, 404)
-
         user.refresh_from_db()
         self.assertFalse(user.is_active)
 

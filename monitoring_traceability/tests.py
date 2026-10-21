@@ -2,6 +2,7 @@ from django.test import TestCase
 from datetime import date
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.core import management
 from django.core.exceptions import ValidationError
 from django.test import TestCase, RequestFactory
@@ -265,6 +266,10 @@ class TraceabilityModelsTest(TestCase):
 			commitment_date=date(2026, 7, 1),
 		)
 
+		user.user_permissions.add(*Permission.objects.filter(
+			content_type__app_label="monitoring_traceability",
+			codename__in=["view_commitment", "add_commitmentcomment"],
+		))
 		self.client.force_login(user)
 		response = self.client.post(
 			"/monitoring/compromisos/",
@@ -322,6 +327,12 @@ class TraceabilityModelsTest(TestCase):
 			).exists()
 		)
 
+		comment_permissions = Permission.objects.filter(
+			content_type__app_label="monitoring_traceability",
+			codename__in=["view_commitment", "delete_commitmentcomment"],
+		)
+		creator.user_permissions.add(*comment_permissions)
+		other_user.user_permissions.add(*comment_permissions)
 		self.client.force_login(other_user)
 		self.client.post(
 			"/monitoring/compromisos/",

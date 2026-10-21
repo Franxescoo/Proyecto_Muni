@@ -1,7 +1,9 @@
 from django import forms
 from django.contrib.auth import get_user_model
-from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.contrib.auth.models import Group, Permission
+from organization.permission_labels import SpanishPermissionMultipleChoiceField
+from accounts.permissions import allowed_delegation_ids
 from django.db.models import Q
 
 from organization.models import (
@@ -14,6 +16,35 @@ from .models import UserProfile
 from registration_validation.models import Service
 from planning_measurements.models import MeasurementItem
 
+class UsuarioOCorreoAuthenticationForm(AuthenticationForm):
+    """Permite iniciar sesión con usuario o correo electrónico."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["username"].max_length = 254
+        self.fields["username"].widget.attrs["maxlength"] = 254
+
+    def clean(self):
+        identificador = self.cleaned_data.get("username")
+
+        if identificador and "@" in identificador:
+            usuarios = get_user_model()._default_manager
+
+            # Primero comprobar si es un nombre de usuario.
+            if not usuarios.filter(username=identificador).exists():
+
+                # Buscar una cuenta con ese correo.
+                coincidencias = list(
+                    usuarios.filter(
+                        email__iexact=identificador
+                    ).values_list("username", flat=True)[:2]
+                )
+
+                # Solo permitir el correo si pertenece a una cuenta.
+                if len(coincidencias) == 1:
+                    self.cleaned_data["username"] = coincidencias[0]
+
+        return super().clean()
 
 class BootstrapMixin:
     """Aplica estilos de Bootstrap a los formularios."""
@@ -39,11 +70,12 @@ class BootstrapMixin:
 class GroupForm(BootstrapMixin, forms.ModelForm):
     """Permite crear y editar grupos y sus permisos."""
 
-    permissions = forms.ModelMultipleChoiceField(
+    permissions = SpanishPermissionMultipleChoiceField(
         label="Permisos",
         queryset=Permission.objects.filter(
             content_type__app_label__in=[
                 "organization",
+                "accounts",
                 "planning_measurements",
                 "registration_validation",
                 "monitoring_traceability",
@@ -234,220 +266,273 @@ class EmployeeForm(BootstrapMixin, forms.ModelForm):
         self.apply_bootstrap()
 
 
-class AccountCreateForm(BootstrapMixin, UserCreationForm):
-    """Crea una cuenta vinculada a un funcionario y sus grupos."""
+def _active_delegations():
+    return Delegation.objects.filter(deleted_at__isnull=True).order_by("name")
 
+
+def _role_scope_valid(groups, delegations):
+    """Los roles solo actúan donde coincide su alcance con la autorización."""
+    permitted = set(delegations.values_list("pk", flat=True))
+    for group in groups:
+        role = getattr(group, "organization_role", None)
+        if role is None:
+            return False
+        scope = set(role.application_delegations.values_list("pk", flat=True))
+        if not scope:
+            scope = {role.delegation_id}  # Compatibilidad con roles antiguos.
+        if not permitted.intersection(scope):
+            return False
+    return True
+
+
+def _restrict_account_actor_choices(form, actor, action):
+    """No permitir asignar delegaciones o roles fuera del alcance del administrador."""
+    if actor is None or actor.is_superuser:
+        return
+    scope = allowed_delegation_ids(
+        actor, f"accounts.{action}_userprofile", active_only=False,
+    )
+    form.fields["authorized_delegations"].queryset = form.fields[
+        "authorized_delegations"
+    ].queryset.filter(pk__in=scope)
+    form.fields["employee"].queryset = form.fields["employee"].queryset.filter(
+        delegation_id__in=scope
+    )
+    allowed_permissions = actor.get_all_permissions()
+    permitted_groups = []
+    for group in form.fields["groups"].queryset.prefetch_related(
+        "permissions__content_type", "organization_role__application_delegations"
+    ):
+        if any(f"{perm.content_type.app_label}.{perm.codename}" not in allowed_permissions
+               for perm in group.permissions.all()):
+            continue
+        role = getattr(group, "organization_role", None)
+        if role is None:
+            continue
+        role_scope = set(role.application_delegations.values_list("pk", flat=True))
+        if not role_scope:
+            role_scope = {role.delegation_id}
+        if role_scope.issubset(scope):
+            permitted_groups.append(group.pk)
+    form.fields["groups"].queryset = form.fields["groups"].queryset.filter(
+        pk__in=permitted_groups
+    )
+
+
+class AccountCreateForm(BootstrapMixin, UserCreationForm):
+    """Crear cuenta, delegaciones y roles sin alterar la delegación del empleado."""
     employee = forms.ModelChoiceField(
-        label="Funcionario existente (opcional)",
-        queryset=Employee.objects.none(),
+        label="Empleado vinculado (opcional)", queryset=Employee.objects.none(),
         required=False,
     )
-
-    delegation = forms.ModelChoiceField(
-        label="Delegación autorizada",
-        queryset=Delegation.objects.none(),
-        required=True,
+    employee_code = forms.CharField(label="Código de empleado", max_length=30)
+    authorized_delegations = forms.ModelMultipleChoiceField(
+        label="Delegaciones autorizadas", queryset=Delegation.objects.none(),
+        widget=forms.CheckboxSelectMultiple, required=True,
     )
-
-    employee_code = forms.CharField(
-        label="Código de funcionario",
-        max_length=30,
-    )
-
     groups = forms.ModelMultipleChoiceField(
-        label="Roles asignados",
-        queryset=Group.objects.filter(
-            organization_role__isnull=False
-        ).select_related(
-            "organization_role__delegation"
-        ).order_by("organization_role__delegation__name", "name"),
-        widget=forms.CheckboxSelectMultiple,
-        required=True,
-        help_text="Selecciona uno o varios roles creados en Organización.",
+        label="Roles asignados", queryset=Group.objects.none(),
+        widget=forms.CheckboxSelectMultiple, required=True,
     )
 
     class Meta:
         model = get_user_model()
-        fields = [
-            "username",
-            "email",
-            "employee",
-            "delegation",
-            "employee_code",
-            "groups",
-            "password1",
-            "password2",
-        ]
-        labels = {
-            "username": "Nombre de usuario",
-            "email": "Correo",
-        }
+        fields = ["username", "first_name", "last_name", "email", "employee",
+                  "employee_code", "authorized_delegations", "groups",
+                  "password1", "password2"]
+        labels = {"username": "Nombre de usuario", "first_name": "Nombre",
+                  "last_name": "Apellidos", "email": "Correo"}
 
     def __init__(self, *args, **kwargs):
+        self.actor = kwargs.pop("actor", None)
         super().__init__(*args, **kwargs)
-
-        self.fields["employee"].queryset = (
-            Employee.objects.filter(
-                deleted_at__isnull=True,
-                user_profile__isnull=True,
-                position__deleted_at__isnull=True,
-                delegation__deleted_at__isnull=True,
-            )
-            .select_related("position", "delegation")
-            .order_by("name")
-        )
-
+        self.fields["employee"].queryset = Employee.objects.filter(
+            deleted_at__isnull=True, user_profile__isnull=True,
+            delegation__deleted_at__isnull=True,
+        ).select_related("delegation").order_by("name")
+        self.fields["authorized_delegations"].queryset = _active_delegations()
+        self.fields["groups"].queryset = Group.objects.filter(
+            organization_role__isnull=False
+        ).prefetch_related("organization_role__application_delegations").order_by("name")
+        self.fields["email"].required = True
         self.fields["password1"].label = "Contraseña"
         self.fields["password2"].label = "Confirmar contraseña"
-
-        self.fields["delegation"].queryset = (
-            Delegation.objects.filter(
-                deleted_at__isnull=True
-            ).order_by("name")
-        )
-
+        _restrict_account_actor_choices(self, self.actor, "add")
         self.apply_bootstrap()
+
+    def clean_email(self):
+        correo = self.cleaned_data["email"].strip()
+
+        if get_user_model()._default_manager.filter(
+            email__iexact=correo
+        ).exists():
+            raise forms.ValidationError(
+                "Este correo ya pertenece a otra cuenta."
+            )
+
+        return correo
 
     def clean_employee_code(self):
         code = self.cleaned_data["employee_code"].strip()
-
-        if UserProfile.objects.filter(
-            employee_code=code
-        ).exists():
-            raise forms.ValidationError(
-                "El código ya pertenece a otra cuenta."
-            )
-
+        if UserProfile.objects.filter(employee_code__iexact=code).exists():
+            raise forms.ValidationError("El código ya pertenece a otra cuenta.")
         return code
 
     def clean(self):
-        cleaned_data = super().clean()
-
-        employee = cleaned_data.get("employee")
-        delegation = cleaned_data.get("delegation")
-        groups = cleaned_data.get("groups")
-
-        if employee and delegation:
-            if employee.delegation_id != delegation.pk:
-                self.add_error(
-                    "delegation",
-                    "La delegación debe coincidir con la del funcionario.",
-                )
-
-        if delegation and groups:
-            if groups.exclude(
-                organization_role__delegation_id=delegation.pk
-            ).exists():
-                self.add_error(
-                    "groups",
-                    "Solo puedes asignar roles de la delegación seleccionada.",
-                )
-
-        return cleaned_data
-
+        data = super().clean()
+        employee = data.get("employee")
+        delegations = data.get("authorized_delegations")
+        groups = data.get("groups")
+        if employee and delegations and not delegations.filter(pk=employee.delegation_id).exists():
+            self.add_error("authorized_delegations", "Incluye la delegación principal del empleado.")
+        if groups and delegations and not _role_scope_valid(groups, delegations):
+            self.add_error("groups", "Cada rol debe coincidir con alguna delegación autorizada.")
+        return data
 
 
 class AccountEditForm(BootstrapMixin, forms.ModelForm):
-    """Permite editar la cuenta y sus roles de acceso."""
-
+    """Edita perfil y cuenta; no modifica contraseñas ni da privilegios de superusuario."""
+    employee = forms.ModelChoiceField(label="Empleado vinculado (opcional)",
+                                       queryset=Employee.objects.none(), required=False)
+    employee_code = forms.CharField(label="Código de empleado", max_length=30)
+    authorized_delegations = forms.ModelMultipleChoiceField(
+        label="Delegaciones autorizadas", queryset=Delegation.objects.none(),
+        widget=forms.CheckboxSelectMultiple, required=True,
+    )
     groups = forms.ModelMultipleChoiceField(
-        label="Roles asignados",
-        queryset=Group.objects.none(),
-        widget=forms.CheckboxSelectMultiple(),
-        required=True,
-        help_text="Selecciona los roles que tendrá el usuario.",
+        label="Roles asignados", queryset=Group.objects.none(),
+        widget=forms.CheckboxSelectMultiple, required=True,
+    )
+    can_delete_closed_period = forms.BooleanField(
+        label="Permiso individual: eliminar períodos cerrados", required=False,
+        help_text="Requiere además permiso normal de eliminación de períodos; no se hereda de un rol.",
     )
 
     class Meta:
         model = get_user_model()
-
-        fields = [
-            "username",
-            "email",
-            "is_active",
-            "groups",
-        ]
-
-        labels = {
-            "username": "Nombre de usuario",
-            "email": "Correo",
-            "is_active": "Cuenta activa",
-        }
+        fields = ["username", "first_name", "last_name", "email", "is_active",
+                  "employee", "employee_code", "authorized_delegations",
+                  "groups", "can_delete_closed_period"]
+        labels = {"username": "Nombre de usuario", "first_name": "Nombre",
+                  "last_name": "Apellidos", "email": "Correo", "is_active": "Cuenta activa"}
 
     def __init__(self, *args, **kwargs):
+        self.actor = kwargs.pop("actor", None)
         super().__init__(*args, **kwargs)
-
-        profile = UserProfile.objects.filter(
-            user=self.instance,
-            deleted_at__isnull=True,
-        ).first()
-
-        current_group_ids = list(
-            self.instance.groups.values_list("pk", flat=True)
-        )
-
-        group_scope = Q(pk__in=current_group_ids)
-
-        if profile and profile.delegation_id:
-            group_scope |= Q(
-                organization_role__delegation_id=profile.delegation_id
-            )
-
-        self.fields["groups"].queryset = (
-            Group.objects.filter(
-                group_scope,
-                organization_role__isnull=False,
-            )
-            .distinct()
-            .select_related("organization_role__delegation")
-            .order_by("name")
-        )
-
+        self.profile = UserProfile.objects.filter(user=self.instance, deleted_at__isnull=True).first()
+        selected = list(self.profile.authorized_delegations.values_list("pk", flat=True)) if self.profile else []
+        if self.profile and self.profile.delegation_id and not selected:
+            selected = [self.profile.delegation_id]
+        self.fields["authorized_delegations"].initial = selected
+        self.fields["authorized_delegations"].queryset = Delegation.objects.filter(
+            Q(deleted_at__isnull=True) | Q(pk__in=selected)
+        ).distinct().order_by("name")
+        current_employee_id = self.profile.employee_id if self.profile else None
+        self.fields["employee"].queryset = Employee.objects.filter(
+            Q(deleted_at__isnull=True, user_profile__isnull=True) | Q(pk=current_employee_id)
+        ).distinct().order_by("name")
+        self.fields["employee"].initial = current_employee_id
+        self.fields["employee_code"].initial = self.profile.employee_code if self.profile else ""
+        self.fields["groups"].queryset = Group.objects.filter(
+            organization_role__isnull=False
+        ).prefetch_related("organization_role__application_delegations").order_by("name")
+        self.fields["groups"].initial = self.instance.groups.all()
+        self.fields["can_delete_closed_period"].initial = self.instance.user_permissions.filter(
+            codename="delete_closed_period", content_type__app_label="planning_measurements"
+        ).exists() if self.instance.pk else False
         self.fields["email"].required = True
-
+        _restrict_account_actor_choices(self, self.actor, "change")
+        if self.actor is not None and not self.actor.is_superuser:
+            # La facultad de borrar períodos cerrados solo puede delegarse de forma individual.
+            self.fields["can_delete_closed_period"].disabled = not self.actor.has_perm(
+                "planning_measurements.delete_closed_period"
+            )
         self.apply_bootstrap()
 
-    def clean_groups(self):
-        groups = self.cleaned_data["groups"]
+    def clean_email(self):
+        correo = self.cleaned_data["email"].strip()
 
-        profile = UserProfile.objects.filter(
-            user=self.instance,
-            deleted_at__isnull=True,
-        ).first()
+        existentes = get_user_model()._default_manager.filter(
+            email__iexact=correo
+        )
 
-        if not profile or not profile.delegation_id:
+        if existentes.exclude(pk=self.instance.pk).exists():
             raise forms.ValidationError(
-                "El usuario debe tener una delegación autorizada."
+                "Este correo ya pertenece a otra cuenta."
             )
 
-        if groups.exclude(
-            organization_role__delegation_id=profile.delegation_id
-        ).exists():
-            raise forms.ValidationError(
-                "Solo puedes asignar roles de la delegación del usuario."
-            )
+        return correo
 
-        return groups
+    def clean_employee_code(self):
+        code = self.cleaned_data["employee_code"].strip()
+        duplicate = UserProfile.objects.filter(employee_code__iexact=code)
+        if self.profile:
+            duplicate = duplicate.exclude(pk=self.profile.pk)
+        if duplicate.exists():
+            raise forms.ValidationError("El código ya pertenece a otra cuenta.")
+        return code
+
+    def clean(self):
+        data = super().clean()
+        employee = data.get("employee")
+        delegations = data.get("authorized_delegations")
+        groups = data.get("groups")
+        if not self.profile:
+            raise forms.ValidationError("La cuenta no tiene un perfil activo.")
+        if employee and delegations and not delegations.filter(pk=employee.delegation_id).exists():
+            self.add_error("authorized_delegations", "Incluye la delegación principal del empleado.")
+        if groups and delegations and not _role_scope_valid(groups, delegations):
+            self.add_error("groups", "Cada rol debe coincidir con alguna delegación autorizada.")
+        if employee and UserProfile.objects.exclude(pk=self.profile.pk).filter(employee=employee).exists():
+            self.add_error("employee", "Este empleado ya tiene otra cuenta, incluso si está archivada.")
+        return data
 
     def save(self, commit=True):
-        account = super().save(commit=commit)
-
-        if commit:
-            from .services import sync_user_groups
+        if not commit:
+            return super().save(commit=False)
+        from django.db import transaction
+        from .services import sync_user_groups
+        from django.contrib.auth.models import Permission
+        with transaction.atomic():
+            account = super().save(commit=False)
+            account.save()
+            account.groups.set(self.cleaned_data["groups"])
+            profile = UserProfile.objects.select_for_update().get(pk=self.profile.pk)
+            old_employee = profile.employee
+            new_employee = self.cleaned_data["employee"]
+            delegations = self.cleaned_data["authorized_delegations"]
+            primary = new_employee.delegation if new_employee else delegations.first()
+            profile.employee = new_employee
+            profile.employee_code = self.cleaned_data["employee_code"]
+            profile.delegation = primary
+            profile.save(update_fields=["employee", "employee_code", "delegation", "updated_at"])
+            profile.authorized_delegations.set(delegations)
+            if old_employee and old_employee.pk != getattr(new_employee, "pk", None):
+                old_employee.assigned_groups.clear()
+            # Solo permiso otorgado de forma directa, no por grupos.
+            privilege = Permission.objects.filter(
+                codename="delete_closed_period", content_type__app_label="planning_measurements"
+            ).first()
+            if privilege and (
+                self.actor is None or self.actor.is_superuser or
+                self.actor.has_perm("planning_measurements.delete_closed_period")
+            ):
+                if self.cleaned_data["can_delete_closed_period"]:
+                    account.user_permissions.add(privilege)
+                else:
+                    account.user_permissions.remove(privilege)
             sync_user_groups(account)
-
-        return account
-
+            return account
 
 
 class ProfileLinkForm(BootstrapMixin, forms.ModelForm):
-    """Vincula un perfil existente con un funcionario."""
+    """Vincula un perfil existente con un empleado."""
 
     class Meta:
         model = UserProfile
         fields = ["employee", "profile_photo"]
         labels = {
-            "employee": "Funcionario",
+            "employee": "Empleado",
             "profile_photo": "Foto de perfil",
         }
 
@@ -469,5 +554,11 @@ class ProfileLinkForm(BootstrapMixin, forms.ModelForm):
             .order_by("name")
         )
 
+        authorized = list(self.instance.authorized_delegations.values_list("pk", flat=True))
+        if not authorized and self.instance.delegation_id:
+            authorized = [self.instance.delegation_id]
+        self.fields["employee"].queryset = self.fields["employee"].queryset.filter(
+            delegation_id__in=authorized
+        )
         self.fields["employee"].required = True
         self.apply_bootstrap()

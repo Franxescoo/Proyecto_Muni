@@ -1,4 +1,5 @@
 from django import forms
+from accounts.permissions import allowed_delegation_ids
 from django.core.validators import FileExtensionValidator
 from django.db.models import Q
 from organization.models import Delegation, Employee
@@ -159,22 +160,10 @@ class ActivityForm(BootstrapMixin, forms.ModelForm):
             .order_by("name")
         )
         if user is not None and not user.is_superuser:
-            profile = getattr(user, "profile", None)
-            delegation_id = (
-                profile.delegation_id
-                if profile is not None
-                else None
-            )
-            if delegation_id is None:
-                goals = goals.none()
-                employees = employees.none()
-            else:
-                goals = goals.filter(
-                    employee__delegation_id=delegation_id,
-                )
-                employees = employees.filter(
-                    delegation_id=delegation_id,
-                )
+            action = "change" if self.instance.pk else "add"
+            permitted = allowed_delegation_ids(user, f"registration_validation.{action}_activity")
+            goals = goals.filter(employee__delegation_id__in=permitted)
+            employees = employees.filter(delegation_id__in=permitted)
         self.fields["goal"].queryset = goals
         self.fields["author"].queryset = employees
 
@@ -323,22 +312,10 @@ class EvidenceForm(BootstrapMixin, forms.ModelForm):
             .order_by("name")
         )
         if user is not None and not user.is_superuser:
-            profile = getattr(user, "profile", None)
-            delegation_id = (
-                profile.delegation_id
-                if profile is not None
-                else None
-            )
-            if delegation_id is None:
-                activities = activities.none()
-                employees = employees.none()
-            else:
-                activities = activities.filter(
-                    author__delegation_id=delegation_id,
-                )
-                employees = employees.filter(
-                    delegation_id=delegation_id,
-                )
+            action = "change" if self.instance.pk else "add"
+            permitted = allowed_delegation_ids(user, f"registration_validation.{action}_evidence")
+            activities = activities.filter(author__delegation_id__in=permitted)
+            employees = employees.filter(delegation_id__in=permitted)
         self.fields["activity"].queryset = activities
         self.fields["author"].queryset = employees
         self.fields["file_link"].required = False
@@ -555,22 +532,10 @@ class ValidationForm(BootstrapMixin, forms.ModelForm):
             .order_by("name")
         )
         if user is not None and not user.is_superuser:
-            profile = getattr(user, "profile", None)
-            delegation_id = (
-                profile.delegation_id
-                if profile is not None
-                else None
-            )
-            if delegation_id is None:
-                evidences = evidences.none()
-                employees = employees.none()
-            else:
-                evidences = evidences.filter(
-                    activity__author__delegation_id=delegation_id,
-                )
-                employees = employees.filter(
-                    delegation_id=delegation_id,
-                )
+            action = "change" if self.instance.pk else "add"
+            permitted = allowed_delegation_ids(user, f"registration_validation.{action}_validation")
+            evidences = evidences.filter(activity__author__delegation_id__in=permitted)
+            employees = employees.filter(delegation_id__in=permitted)
         self.fields["evidence"].queryset = evidences
         self.fields["verifier"].queryset = employees
         self.fields["observation"].required = False
@@ -1026,6 +991,7 @@ class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
         existing = bool(self.instance.pk)
+        self.request_user = user
         # Solo relaciones activas y no archivadas para nuevos registros.
         type_condition = Q(deleted_at__isnull=True, status=True)
         sub_condition = Q(
@@ -1062,16 +1028,10 @@ class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
         employees = Employee.objects.filter(employee_condition)
         # Los usuarios normales solo trabajan en su delegación.
         if user is not None and not user.is_superuser:
-            profile = getattr(user, "profile", None)
-            delegation_id = (
-                profile.delegation_id if profile is not None else None
-            )
-            if delegation_id is None:
-                delegations = delegations.none()
-                employees = employees.none()
-            else:
-                delegations = delegations.filter(pk=delegation_id)
-                employees = employees.filter(delegation_id=delegation_id)
+            action = "change" if self.instance.pk else "add"
+            permitted = allowed_delegation_ids(user, f"registration_validation.{action}_attentionentry")
+            delegations = delegations.filter(pk__in=permitted)
+            employees = employees.filter(delegation_id__in=permitted)
         self.fields["attention_type"].queryset = attention_types.order_by(
             "name", "attention_type_id"
         )
@@ -1090,8 +1050,27 @@ class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
             "La subatención debe pertenecer al tipo de atención seleccionado."
         )
         self.fields["responsible_employee"].help_text = (
-            "El funcionario debe pertenecer a la delegación elegida."
+            "El empleado debe pertenecer a la delegación elegida."
         )
+        # La delegación activa se obtiene del contexto validado por middleware.
+        # Para una cuenta sin perfil empleado se conserva la selección explícita
+        # de responsable, pero SIEMPRE se registra su cuenta en registered_by.
+        if user is not None and not user.is_superuser:
+            selected_id = getattr(user, "sgr_active_delegation_id", None)
+            if selected_id is not None:
+                self.fields["delegation"].initial = selected_id
+                self.fields["delegation"].disabled = True
+            profile = getattr(user, "profile", None)
+            linked_employee = getattr(profile, "employee", None)
+            if (
+                linked_employee is not None and not existing
+                and (selected_id is None or linked_employee.delegation_id == selected_id)
+            ):
+                self.fields["responsible_employee"].initial = linked_employee.pk
+                self.fields["responsible_employee"].disabled = True
+                self.fields["responsible_employee"].help_text = (
+                    "Se asigna automáticamente tu empleado vinculado."
+                )
 
         for field_name in (
             "attention_type", "sub_attention", "delegation", "responsible_employee"
@@ -1159,6 +1138,19 @@ class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
                 self.add_error(
                     "delegation", "Selecciona una delegación no eliminada."
                 )
+        user = self.request_user
+        if user is not None and not user.is_superuser:
+            active = getattr(user, "sgr_active_delegation_id", None)
+            if active is not None and delegation is not None and delegation.pk != active:
+                self.add_error("delegation", "La delegación no coincide con el contexto activo.")
+            profile = getattr(user, "profile", None)
+            linked_employee = getattr(profile, "employee", None)
+            if (
+                linked_employee is not None and not self.instance.pk
+                and (active is None or linked_employee.delegation_id == active)
+            ):
+                if employee is None or employee.pk != linked_employee.pk:
+                    self.add_error("responsible_employee", "El responsable debe ser tu empleado vinculado.")
         if employee is not None:
             old_employee_id = (
                 self.instance.responsible_employee_id if self.instance.pk else None

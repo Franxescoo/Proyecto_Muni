@@ -68,6 +68,8 @@ class AccountTests(TestCase):
             "email": "usuario@example.com",
             "employee": self.employee.pk,
             "employee_code": "ACC-TEST-001",
+            "authorized_delegations": [self.delegation.pk],
+            "groups": [self.role.pk],
             "password1": "Clave-Segura-9271!",
             "password2": "Clave-Segura-9271!",
         }
@@ -139,31 +141,14 @@ class AccountTests(TestCase):
             "Clave-Segura-9271!",
         )
 
-    def test_create_account_cannot_assign_roles_manually(self):
-        other_role = Group.objects.create(
-            name="Rol no autorizado"
-        )
-
+    def test_create_account_rejects_role_without_organization_scope(self):
+        other_role = Group.objects.create(name="Rol no autorizado")
         response = self.client.post(
-            self.create_url,
-            self.account_data(
-                groups=[other_role.pk]
-            ),
+            self.create_url, self.account_data(groups=[other_role.pk])
         )
-
-        self.assertRedirects(response, self.home_url)
-
-        user = get_user_model().objects.get(
-            username="usuario_prueba"
-        )
-
-        self.assertIn(self.role, user.groups.all())
-        self.assertNotIn(other_role, user.groups.all())
-
-        self.assertNotIn(
-            other_role,
-            self.employee.assigned_groups.all(),
-        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("groups", response.context["form"].errors)
+        self.assertFalse(get_user_model().objects.filter(username="usuario_prueba").exists())
 
     def test_invalid_password_confirmation_prevents_creation(self):
         response = self.client.post(
@@ -185,43 +170,32 @@ class AccountTests(TestCase):
             ).exists()
         )
 
-    def test_account_edit_updates_data_without_changing_roles(self):
+    def test_account_edit_rejects_role_outside_authorized_scope(self):
         user = self.create_account()
-
-        other_role = Group.objects.create(
-            name="Rol enviado manualmente"
-        )
-
-        edit_url = reverse(
-            "accounts:account_edit",
-            args=[user.pk],
-        )
-
-        response = self.client.post(
-            edit_url,
-            {
-                "username": user.username,
-                "email": "nuevo_correo@example.com",
-                "is_active": "on",
-                "groups": [other_role.pk],
-            },
-        )
-
-        self.assertRedirects(response, self.home_url)
-
+        unauthorized = Group.objects.create(name="Rol enviado manualmente")
+        edit_url = reverse("accounts:account_edit", args=[user.pk])
+        payload = {
+            "username": user.username,
+            "email": "nuevo_correo@example.com",
+            "is_active": "on",
+            "employee": self.employee.pk,
+            "employee_code": "ACC-TEST-001",
+            "authorized_delegations": [self.delegation.pk],
+            "groups": [unauthorized.pk],
+        }
+        response = self.client.post(edit_url, payload)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("groups", response.context["form"].errors)
         user.refresh_from_db()
-
-        self.assertEqual(
-            user.email,
-            "nuevo_correo@example.com",
-        )
+        self.assertNotEqual(user.email, payload["email"])
+        self.assertNotIn(unauthorized, user.groups.all())
+        payload["groups"] = [self.role.pk]
+        response = self.client.post(edit_url, payload)
+        self.assertRedirects(response, self.home_url)
+        user.refresh_from_db()
+        self.assertEqual(user.email, payload["email"])
         self.assertIn(self.role, user.groups.all())
-        self.assertNotIn(other_role, user.groups.all())
-
-        self.assertIn(
-            self.role,
-            self.employee.assigned_groups.all(),
-        )
+        self.assertIn(self.role, self.employee.assigned_groups.all())
 
     def test_inactive_account_cannot_login(self):
         user = self.create_account()
@@ -236,6 +210,10 @@ class AccountTests(TestCase):
             {
                 "username": user.username,
                 "email": user.email,
+                "employee": self.employee.pk,
+                "employee_code": "ACC-TEST-001",
+                "authorized_delegations": [self.delegation.pk],
+                "groups": [self.role.pk],
             },
         )
 

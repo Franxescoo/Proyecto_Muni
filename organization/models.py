@@ -12,6 +12,11 @@ class Delegation(BaseModel):
     commune = models.CharField(max_length=100, blank=True)
     status = models.CharField(max_length=50)
     scope = models.CharField(max_length=150)
+    responsible = models.ForeignKey(
+        "organization.Employee", null=True, blank=True,
+        on_delete=models.PROTECT, related_name="responsible_for_delegations",
+        verbose_name="Responsable de delegación",
+    )
 
     class Meta:
         verbose_name = "Delegation"
@@ -21,7 +26,23 @@ class Delegation(BaseModel):
         return self.name
 
 
+class DelegationResponsibilityLog(models.Model):
+    delegation = models.ForeignKey("organization.Delegation", on_delete=models.PROTECT,
+                                   related_name="responsibility_history")
+    previous_responsible = models.ForeignKey("organization.Employee", null=True, blank=True,
+        on_delete=models.PROTECT, related_name="previous_responsibility_changes")
+    new_responsible = models.ForeignKey("organization.Employee", null=True, blank=True,
+        on_delete=models.PROTECT, related_name="new_responsibility_changes")
+    changed_by = models.ForeignKey("auth.User", on_delete=models.PROTECT)
+    changed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Cambio de responsable de delegación"
+        verbose_name_plural = "Cambios de responsable de delegación"
+
+
 class OrganizationRole(models.Model):
+    description = models.TextField(blank=True, verbose_name="Descripción")
     group = models.OneToOneField(
         "auth.Group",
         on_delete=models.CASCADE,

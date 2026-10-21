@@ -10,7 +10,9 @@ from django.views.decorators.http import require_POST
 from django.db import transaction
 from django.utils.http import url_has_allowed_host_and_scheme
 
+from organization.exports import workbook_response
 from organization.models import PositionFunction
+from accounts.permissions import allowed_delegation_ids
 
 from .forms import (
     GoalForm,
@@ -18,7 +20,7 @@ from .forms import (
     PeriodForm,
     MeasurementItemForm,
 )
-from .models import Goal, Period, MeasurementItem
+from .models import Goal, Period, MeasurementItem, PeriodArchiveLog
 from .calculations import (
     InvalidPeriodWeights,
     validate_period_weights,
@@ -61,7 +63,7 @@ def ensure_open_period(period):
         )
 
 
-def scoped_goals(user):
+def scoped_goals(user, permission="planning_measurements.view_goal"):
     """Metas activas pertenecientes a períodos no archivados."""
 
     goals = Goal.objects.filter(
@@ -76,23 +78,22 @@ def scoped_goals(user):
     if user.is_superuser:
         return goals
 
-    profile = getattr(user, "profile", None)
-
-    if profile is None:
-        return goals.none()
-
-    delegation_ids = set(
-        profile.authorized_delegations.values_list("pk", flat=True)
-    )
-    if profile.delegation_id:
-        delegation_ids.add(profile.delegation_id)
+    delegation_ids = allowed_delegation_ids(user, permission)
     if not delegation_ids:
         return goals.none()
+    return goals.filter(employee__delegation_id__in=delegation_ids)
 
-    return goals.filter(
-        employee__delegation_id__in=delegation_ids
-    )
 
+
+def may_archive_period(user, period):
+    """Permiso normal de eliminación y permiso directo adicional si está cerrado."""
+    if not (user.is_superuser or user.has_perm("planning_measurements.delete_period")):
+        return False
+    if period.status == Period.Status.CLOSED and not user.is_superuser:
+        return user.user_permissions.filter(
+            content_type__app_label="planning_measurements", codename="delete_closed_period"
+        ).exists()
+    return True
 
 
 def run_bulk_delete(request, queryset):
@@ -142,6 +143,11 @@ def run_bulk_delete(request, queryset):
             "Esta acción no está disponible."
         )
 
+    if queryset.model is Goal and not request.user.is_superuser:
+        queryset = queryset.filter(
+            pk__in=scoped_goals(request.user, "planning_measurements.delete_goal").values("pk")
+        )
+
     with transaction.atomic():
         selected = list(
             queryset.filter(pk__in=ids).select_for_update()
@@ -154,13 +160,11 @@ def run_bulk_delete(request, queryset):
 
         if queryset.model is Period:
             for period in selected:
-                if period.goals.filter(
-                    deleted_at__isnull=True
-                ).exists():
+                if not may_archive_period(request.user, period):
+                    raise PermissionDenied("Falta el permiso individual para archivar un período cerrado.")
+                if period.goals.exists():
                     raise PermissionDenied(
-                        "No se puede eliminar el período "
-                        f"{period.start_date} - {period.end_date} "
-                        "porque tiene metas asociadas."
+                        "No se puede archivar este período: conserva metas o historial asociado."
                     )
 
         elif queryset.model is Goal:
@@ -179,6 +183,12 @@ def run_bulk_delete(request, queryset):
             deleted_at=now,
             updated_at=now
         )
+        if queryset.model is Period:
+            PeriodArchiveLog.objects.bulk_create([
+                PeriodArchiveLog(period=obj, user=request.user,
+                                 was_closed=obj.status == Period.Status.CLOSED)
+                for obj in selected
+            ])
 
     messages.success(
         request,
@@ -607,6 +617,11 @@ def period_list(request):
         "closed_periods": base_periods.filter(
             Q(status="Closed") | Q(status="Cerrado")
         ).count(),
+        "can_archive_closed_period": (
+            request.user.is_superuser or request.user.user_permissions.filter(
+                content_type__app_label="planning_measurements", codename="delete_closed_period"
+            ).exists()
+        ),
     }
 
     return render(request, "planning/period_list.html", context)
@@ -1097,19 +1112,14 @@ def period_assign_existing_goals(request, period_id):
 def period_delete(request, period_id):
     """Archiva un período abierto o cerrado si no tiene metas activas."""
 
-    if not (
-        request.user.is_superuser
-        or request.user.has_perm("planning_measurements.delete_period")
-    ):
-        raise PermissionDenied(
-            "No tienes permiso para eliminar períodos."
-        )
-
     period = get_object_or_404(
         Period,
         pk=period_id,
         deleted_at__isnull=True,
     )
+
+    if not may_archive_period(request.user, period):
+        raise PermissionDenied("No tienes el permiso individual necesario para un período cerrado.")
 
     if request.method == "POST":
         with transaction.atomic():
@@ -1118,8 +1128,10 @@ def period_delete(request, period_id):
                 pk=period_id,
                 deleted_at__isnull=True,
             )
+            if not may_archive_period(request.user, period):
+                raise PermissionDenied("No puedes archivar este período cerrado.")
 
-            if period.goals.filter(deleted_at__isnull=True).exists():
+            if period.goals.exists():
                 raise PermissionDenied(
                     "No se puede eliminar este período porque "
                     "tiene metas asociadas. Debes conservar "
@@ -1131,10 +1143,14 @@ def period_delete(request, period_id):
             period.save(
                 update_fields=["deleted_at", "updated_at"]
             )
+            PeriodArchiveLog.objects.create(
+                period=period, user=request.user,
+                was_closed=period.status == Period.Status.CLOSED,
+            )
 
         messages.success(
             request,
-            "Período eliminado correctamente."
+            "Período archivado correctamente."
         )
         return redirect("planning:period_list")
 
@@ -1245,11 +1261,13 @@ def goal_create(request):
 def goal_edit(request, goal_id):
     # Una meta de otra delegación no está en el queryset: responde 404
     goal = get_object_or_404(scoped_goals(request.user), pk=goal_id)
+    editable_scope = scoped_goals(request.user, "planning_measurements.change_goal").filter(pk=goal_id).exists()
     can_change = (
         request.user.has_perm(
             "planning_measurements.change_goal"
         )
         and goal.period.status != Period.Status.CLOSED
+        and editable_scope
     )
     if request.method == "POST" and (
         not can_change
@@ -1302,7 +1320,7 @@ def goal_delete(request, goal_id):
 
     # Respeta la delegación del usuario y excluye metas archivadas.
     goal = get_object_or_404(
-        scoped_goals(request.user),
+        scoped_goals(request.user, "planning_measurements.delete_goal"),
         pk=goal_id
     )
 
@@ -1388,6 +1406,8 @@ def get_item_list_context(request):
     page, querystring = paginate(request, items)
 
     return {
+        "page_size": request.session.get("planning_page_size", PAGE_SIZE),
+        "page_size_options": PAGE_SIZE_OPTIONS,
         "page": page,
         "query": query,
         "querystring": querystring,
@@ -1401,6 +1421,27 @@ def get_item_list_context(request):
     }
 
 
+
+
+@access("planning_measurements.view_measurementitem")
+def item_export(request):
+    """Mismo alcance y filtros que el listado de ítems."""
+    items = MeasurementItem.objects.filter(deleted_at__isnull=True)
+    query = request.GET.get("q", "").strip()
+    if query:
+        items = items.filter(Q(code__icontains=query) | Q(name__icontains=query) | Q(description__icontains=query))
+    selected_type = request.GET.get("item_type", "")
+    if selected_type in ("quantitative", "percentage"):
+        items = items.filter(item_type=selected_type)
+    selected_status = request.GET.get("status", "")
+    if selected_status == "active":
+        items = items.filter(is_active=True)
+    elif selected_status == "inactive":
+        items = items.filter(is_active=False)
+    return workbook_response("items_medicion.xlsx", ["Código", "Nombre", "Descripción", "Tipo", "Unidad", "Estado"], [
+        (obj.code, obj.name, obj.description, obj.get_item_type_display(), obj.unit, "Activo" if obj.is_active else "Inactivo")
+        for obj in items.order_by("code")
+    ])
 
 
 @access("planning_measurements.view_measurementitem")

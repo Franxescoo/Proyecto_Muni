@@ -18,15 +18,6 @@
                 </p>
             </div>
 
-            {% if perms.registration_validation.add_attentionentry %}
-            <a
-                href="{% url 'registration:attention_entry_create' %}"
-                class="btn btn-light fw-semibold"
-            >
-                <i class="bi bi-plus-lg me-2"></i>
-                Agregar ingreso
-            </a>
-            {% endif %}
         </div>
     </section>
 
@@ -65,14 +56,19 @@
     </div>
 
     <!-- LISTADO -->
-    <section class="section-card p-3 p-md-4">
-        <div class="mb-4">
-            <h2 class="h5 fw-bold mb-1">
-                Listado de ingresos de atención
-            </h2>
-            <p class="text-muted small mb-0">
-                Consulta y administra las solicitudes registradas.
-            </p>
+    <section class="section-card p-3 p-md-4 sgr-catalog">
+        <div class="catalog-toolbar">
+            <div>
+                <h2 class="h5 fw-bold mb-1">Listado de ingresos de atención</h2>
+                <p class="text-muted small mb-0">Consulta y administra las solicitudes registradas.</p>
+            </div>
+            <div class="catalog-toolbar-actions">
+                {% if perms.registration_validation.add_attentionentry %}
+                <a href="{% url 'registration:attention_entry_create' %}" class="btn btn-success">
+                    <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>Agregar ingreso
+                </a>
+                {% endif %}
+            </div>
         </div>
 
         <!-- FILTROS -->
@@ -262,6 +258,9 @@
 
                         <td>
                             {{ entry.responsible_employee.name }}
+                            {% if entry.registered_by %}
+                            <div class="small text-muted">Registrado por {{ entry.registered_by.username }}</div>
+                            {% endif %}
                         </td>
 
                         <td class="text-nowrap">
@@ -280,7 +279,7 @@
                                     title="Modificar ingreso"
                                 >
                                     <i class="bi bi-pencil-square"></i>
-                                    <span class="d-none d-xl-inline ms-1">
+                                    <span class="ms-1">
                                         Modificar
                                     </span>
                                 </a>
@@ -300,7 +299,7 @@
                                         title="Eliminar ingreso"
                                     >
                                         <i class="bi bi-trash"></i>
-                                        <span class="d-none d-xl-inline ms-1">
+                                        <span class="ms-1">
                                             Eliminar
                                         </span>
                                     </button>
@@ -335,57 +334,14 @@
         </div>
 
         <!-- PAGINACIÓN -->
-        {% if is_paginated %}
-        <nav
-            class="mt-4"
-            aria-label="Paginación de ingresos de atención"
-        >
-            <ul class="pagination justify-content-center flex-wrap mb-0">
-                {% if page_obj.has_previous %}
-                <li class="page-item">
-                    <a
-                        class="page-link"
-                        href="?page={{ page_obj.previous_page_number }}&amp;q={{ query|urlencode }}&amp;attention_type={{ selected_attention_type|urlencode }}&amp;delegation={{ selected_delegation|urlencode }}"
-                    >
-                        Anterior
-                    </a>
-                </li>
-                {% else %}
-                <li class="page-item disabled">
-                    <span class="page-link">Anterior</span>
-                </li>
-                {% endif %}
-
-                <li class="page-item active">
-                    <span class="page-link">
-                        {{ page_obj.number }} de {{ paginator.num_pages }}
-                    </span>
-                </li>
-
-                {% if page_obj.has_next %}
-                <li class="page-item">
-                    <a
-                        class="page-link"
-                        href="?page={{ page_obj.next_page_number }}&amp;q={{ query|urlencode }}&amp;attention_type={{ selected_attention_type|urlencode }}&amp;delegation={{ selected_delegation|urlencode }}"
-                    >
-                        Siguiente
-                    </a>
-                </li>
-                {% else %}
-                <li class="page-item disabled">
-                    <span class="page-link">Siguiente</span>
-                </li>
-                {% endif %}
-            </ul>
-        </nav>
-        {% endif %}
+        {% include "shared/catalog_pagination.html" with page_data=page_obj page_querystring=request.GET.urlencode item_label="ingresos de atención" %}
     </section>
 </div>
 
 <!-- MODAL DE CREACIÓN Y MODIFICACIÓN -->
 {% if open_modal %}
 <div
-    class="modal fade"
+    class="modal fade sgr-upgraded-modal"
     id="attentionEntryModal"
     tabindex="-1"
     aria-labelledby="attentionEntryModalLabel"
@@ -398,7 +354,9 @@
                 {% csrf_token %}
 
                 <div class="modal-header">
-                    <h2
+                    <div class="sgr-modal-title-block">
+                        <div class="sgr-modal-eyebrow"><i class="bi bi-shield-check me-2" aria-hidden="true"></i>REGISTRO Y VALIDACIÓN</div>
+                        <h2
                         class="modal-title fs-5 fw-bold"
                         id="attentionEntryModalLabel"
                     >
@@ -410,6 +368,8 @@
                             Registrar ingreso de atención
                         {% endif %}
                     </h2>
+                        <p class="sgr-modal-subtitle mb-0">Consulta o completa la información del registro de forma segura.</p>
+                    </div>
 
                     <a
                         href="{% url 'registration:attention_entry_list' %}"
@@ -419,6 +379,7 @@
                 </div>
 
                 <div class="modal-body">
+                    <div class="sgr-form-section-title"><span class="sgr-section-icon"><i class="bi bi-card-list" aria-hidden="true"></i></span><span>Datos del ingreso de atención</span></div>
                     <p class="text-muted small mb-4">
                         Completa los datos de la solicitud.
                         Los campos marcados con * son obligatorios.
@@ -563,8 +524,8 @@
                     <!-- DATOS AUTOMÁTICOS -->
                     <div class="alert alert-light border mt-4 mb-0">
                         <i class="bi bi-info-circle me-2"></i>
-                        La fecha y hora de registro se generan
-                        automáticamente al guardar la solicitud.
+                        La cuenta que registra la atención es <strong>{{ request.user.username }}</strong>
+                        y se guarda automáticamente junto con la fecha y hora de registro.
 
                         {% if form.instance.pk %}
                         <div class="small mt-2">

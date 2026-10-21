@@ -1,0 +1,23 @@
+{# Mismo formato en todos los listados; incluso cuando solo hay una página. #}
+{% if page_data.number %}
+<div class="catalog-pagination mt-3">
+    <p class="text-muted small mb-2 catalog-pagination-count">
+        Mostrando {{ page_data.start_index }}–{{ page_data.end_index }} de {{ page_data.paginator.count }} {{ item_label }}.
+    </p>
+    <nav class="d-flex justify-content-center" aria-label="Paginación de {{ item_label }}">
+        <ul class="pagination pagination-sm mb-0 flex-wrap justify-content-center">
+            {% if page_data.has_previous %}
+            <li class="page-item"><a class="page-link" href="?{% if page_querystring %}{{ page_querystring }}&amp;{% endif %}page={{ page_data.previous_page_number }}">Anterior</a></li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link" aria-disabled="true">Anterior</span></li>
+            {% endif %}
+            <li class="page-item active"><span class="page-link" aria-current="page">{{ page_data.number }} / {{ page_data.paginator.num_pages }}</span></li>
+            {% if page_data.has_next %}
+            <li class="page-item"><a class="page-link" href="?{% if page_querystring %}{{ page_querystring }}&amp;{% endif %}page={{ page_data.next_page_number }}">Siguiente</a></li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link" aria-disabled="true">Siguiente</span></li>
+            {% endif %}
+        </ul>
+    </nav>
+</div>
+{% endif %}

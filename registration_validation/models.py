@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import FileExtensionValidator
 from django.db import models
@@ -485,6 +486,14 @@ class AttentionEntry(BaseModel):
         on_delete=models.PROTECT,
         related_name="attention_entries_responsible",
         verbose_name="Responsible employee",
+    )
+
+    registered_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True, blank=True,
+        related_name="registered_attention_entries",
+        verbose_name="Usuario que registra",
     )
 
     registration_date = models.DateTimeField(

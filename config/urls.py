@@ -11,6 +11,8 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
+from django.contrib.auth.views import LoginView
+from accounts.forms import UsuarioOCorreoAuthenticationForm
 
 
 urlpatterns = [
@@ -25,6 +27,14 @@ urlpatterns = [
     # -----------------------------------------------------
     # Autenticación
     # -----------------------------------------------------
+    path(
+        "accounts/login/",
+        LoginView.as_view(
+            authentication_form=UsuarioOCorreoAuthenticationForm
+        ),
+        name="login",
+    ),
+
     path(
         "accounts/",
         include("django.contrib.auth.urls"),

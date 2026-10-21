@@ -12,10 +12,8 @@ def sync_profile(profile):
 
     delegation_id = profile.employee.delegation_id
 
-    if profile.delegation_id != delegation_id:
-        UserProfile.objects.filter(pk=profile.pk).update(
-            delegation_id=delegation_id
-        )
+    # No sobrescribir permisos/alcances del usuario por un cambio al empleado.
+    # La delegación principal del empleado se valida en los formularios.
 
 
 def sync_employee(employee):
@@ -78,15 +76,17 @@ def create_user_account(form):
 
     # Obtener los datos seleccionados.
     employee = form.cleaned_data.get("employee")
-    delegation = form.cleaned_data["delegation"]
+    delegations = form.cleaned_data["authorized_delegations"]
+    delegation = employee.delegation if employee else delegations.first()
 
-    # Crear el perfil, con o sin Funcionario.
-    UserProfile.objects.create(
+    # Crear el perfil, con o sin Empleado.
+    profile = UserProfile.objects.create(
         user=user,
         employee=employee,
         employee_code=form.cleaned_data["employee_code"],
         delegation=delegation,
     )
+    profile.authorized_delegations.set(delegations)
 
     # Guardar los roles seleccionados en Usuarios.
     user.groups.set(

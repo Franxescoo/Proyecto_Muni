@@ -1,6 +1,7 @@
 import json
 
 from django import forms
+from accounts.permissions import allowed_delegation_ids
 
 from organization.models import Employee, PositionFunction
 
@@ -139,13 +140,11 @@ class GoalScopeMixin(BootstrapMixin):
         ).select_related("position")
 
         if user is not None and not user.is_superuser:
-            profile = getattr(user, "profile", None)
-            delegation_id = (
-                profile.delegation_id if profile else None
+            permitted = allowed_delegation_ids(
+                user, "planning_measurements.change_goal" if self.instance.pk
+                else "planning_measurements.add_goal"
             )
-            employees = employees.filter(
-                delegation_id=delegation_id
-            )
+            employees = employees.filter(delegation_id__in=permitted)
 
         self.fields["employee"].queryset = employees
         self._apply_bootstrap()

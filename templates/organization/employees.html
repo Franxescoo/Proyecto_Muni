@@ -5,7 +5,7 @@
     <div class="col-12 col-md-6">
         <div class="section-card metric h-100">
             <div class="value">{{ total_employees }}</div>
-            <div class="label">Funcionarios en el resultado</div>
+            <div class="label">Empleados en el resultado</div>
         </div>
     </div>
     <div class="col-12 col-md-6">
@@ -16,22 +16,24 @@
     </div>
 </div>
 
-<section class="section-card p-3 p-lg-4">
-    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+<section class="section-card p-3 p-lg-4 sgr-catalog">
+    <div class="catalog-toolbar">
         <div>
-            <h2 class="h5 mb-1 fw-bold">Directorio de funcionarios</h2>
-            <p class="text-muted small mb-0">Funcionarios de las delegaciones habilitadas para tu cuenta.</p>
+            <h2 class="h5 mb-1 fw-bold">Directorio de empleados</h2>
+            <p class="text-muted small mb-0">Empleados de las delegaciones habilitadas para tu cuenta.</p>
         </div>
+        <div class="catalog-toolbar-actions">
         {% if perms.organization.add_employee %}
             <a class="btn btn-success" href="?modal=create">
-                <i class="bi bi-plus-lg me-1"></i>Nuevo funcionario
+                <i class="bi bi-plus-lg me-1"></i>Nuevo empleado
             </a>
         {% endif %}
+        </div>
     </div>
 
-    <form class="row g-3 align-items-end mb-3" method="get">
-        <div class="col-12 col-md-6">
-            <label class="filter-label" for="employee-search">Buscar funcionario</label>
+    <form class="row g-3 align-items-end catalog-filters" method="get">
+        <div class="col-12 col-md-5">
+            <label class="filter-label" for="employee-search">Buscar empleado</label>
             <input id="employee-search" name="q" value="{{ request.GET.q }}" class="form-control" placeholder="Nombre, función, cargo o delegación" type="search">
         </div>
         <div class="col-12 col-md-3">
@@ -43,19 +45,23 @@
                 {% endfor %}
             </select>
         </div>
-        <div class="col-12 col-md-3">
+        <div class="col-6 col-md-2">
             <button class="btn btn-dark w-100" type="submit">
                 <i class="bi bi-funnel me-1"></i>Filtrar
             </button>
         </div>
+        <div class="col-6 col-md-2">
+            <a class="btn btn-outline-secondary w-100" href="{% url 'organization:employee_list' %}">Limpiar</a>
+        </div>
     </form>
+    {% include "shared/catalog_page_size.html" with page_size_url="organization:set_page_size" page_size_id="empleados" %}
 
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
             <thead>
                 <tr>
                     <th scope="col"><span class="visually-hidden">Foto de perfil</span></th>
-                    <th>Funcionario</th>
+                    <th>Empleado</th>
                     <th>Delegación</th>
                     <th>Cargo</th>
                     <th>Funciones</th>
@@ -94,18 +100,19 @@
                         </td>
                         <td>
                             <div class="d-flex justify-content-end gap-1">
+                                {% if perms.organization.view_employee %}<a class="btn btn-sm btn-outline-info" href="?modal=view&amp;id={{ employee.pk }}" title="Ver detalles" aria-label="Ver employee {{ employee.name }}"><i class="bi bi-eye me-1" aria-hidden="true"></i>Ver</a>{% endif %}
                                 {% if perms.organization.change_employee %}
-                                    <a class="btn btn-sm btn-light border" href="?modal=edit&amp;id={{ employee.pk }}" title="Modificar funcionario" aria-label="Modificar {{ employee.name }}">
-                                        <i class="bi bi-pencil-square"></i>
+                                    <a class="btn btn-sm btn-light border" href="?modal=edit&amp;id={{ employee.pk }}" title="Modificar empleado" aria-label="Modificar {{ employee.name }}">
+                                        <i class="bi bi-pencil-square me-1" aria-hidden="true"></i>Modificar
                                     </a>
                                 {% endif %}
                                 {% if perms.organization.delete_employee %}
-                                    <form method="post" action="{% url 'organization:employee_list' %}" data-organization-delete data-delete-label="al funcionario {{ employee.name }}">
+                                    <form method="post" action="{% url 'organization:employee_list' %}" data-organization-delete data-delete-label="al empleado {{ employee.name }}">
                                         {% csrf_token %}
                                         <input type="hidden" name="action" value="delete">
                                         <input type="hidden" name="object_id" value="{{ employee.pk }}">
-                                        <button class="btn btn-sm btn-outline-danger" type="submit" title="Eliminar funcionario" aria-label="Eliminar {{ employee.name }}">
-                                            <i class="bi bi-trash3"></i>
+                                        <button class="btn btn-sm btn-outline-danger" type="submit" title="Eliminar empleado" aria-label="Eliminar {{ employee.name }}">
+                                            <i class="bi bi-trash3 me-1" aria-hidden="true"></i>Eliminar
                                         </button>
                                     </form>
                                 {% endif %}
@@ -116,13 +123,14 @@
                     <tr>
                         <td colspan="8" class="text-center py-5">
                             <i class="bi bi-people fs-2 text-muted d-block mb-2"></i>
-                            <span class="text-muted">No hay funcionarios para mostrar.</span>
+                            <span class="text-muted">No hay empleados para mostrar.</span>
                         </td>
                     </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
+    {% include "shared/catalog_pagination.html" with page_data=employees page_querystring=querystring item_label="empleados" %}
 </section>
 
 {% include "organization/_record_modal.html" with form_route="organization:employee_list" %}

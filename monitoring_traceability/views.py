@@ -1,4 +1,5 @@
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, permission_required
+from django.core.exceptions import PermissionDenied
 from django.contrib import messages
 from django.db.models import Prefetch, Q
 from django.shortcuts import render
@@ -11,20 +12,17 @@ from .models import Audit, Commitment, CommitmentComment, Indicator
 from .services import synchronize_indicators_for_goals
 
 
-def _delegation_id(user):
-    profile = getattr(user, "profile", None)
-    return profile.delegation_id if profile else None
+from accounts.permissions import allowed_delegation_ids
 
 
-def _scoped_queryset(queryset, user, relation):
+def _scoped_queryset(queryset, user, relation, permission):
     queryset = queryset.filter(deleted_at__isnull=True)
     if user.is_superuser:
         return queryset
-
-    delegation_id = _delegation_id(user)
-    if delegation_id is None:
+    ids = allowed_delegation_ids(user, permission)
+    if not ids:
         return queryset.none()
-    return queryset.filter(**{f"{relation}__delegation_id": delegation_id})
+    return queryset.filter(**{f"{relation}__delegation_id__in": ids})
 
 
 def _query(value):
@@ -32,24 +30,22 @@ def _query(value):
 
 
 @login_required
+@permission_required("monitoring_traceability.view_indicator", raise_exception=True)
 def indicator_list(request):
     goals = Goal.objects.filter(
         deleted_at__isnull=True,
         period__deleted_at__isnull=True,
     ).select_related("employee", "period")
     if not request.user.is_superuser:
-        delegation_id = _delegation_id(request.user)
-        if delegation_id is None:
-            goals = goals.none()
-        else:
-            goals = goals.filter(employee__delegation_id=delegation_id)
+        allowed_ids = allowed_delegation_ids(request.user, "monitoring_traceability.view_indicator")
+        goals = goals.filter(employee__delegation_id__in=allowed_ids) if allowed_ids else goals.none()
 
     synchronize_indicators_for_goals(goals)
 
     indicators = _scoped_queryset(
         Indicator.objects.select_related("goal", "employee", "goal__period"),
         request.user,
-        "employee",
+        "employee", "monitoring_traceability.view_indicator",
     ).filter(
         goal__deleted_at__isnull=True,
         goal__period__deleted_at__isnull=True,
@@ -86,6 +82,7 @@ def indicator_list(request):
 
 
 @login_required
+@permission_required("monitoring_traceability.view_commitment", raise_exception=True)
 def commitment_list(request):
     commitments = _scoped_queryset(
         Commitment.objects.select_related(
@@ -103,7 +100,7 @@ def commitment_list(request):
             ),
         ),
         request.user,
-        "responsible",
+        "responsible", "monitoring_traceability.view_commitment",
     )
 
     if request.method == "POST":
@@ -116,6 +113,8 @@ def commitment_list(request):
         if commitment is None:
             messages.error(request, "No tienes acceso a ese compromiso.")
         elif action == "delete":
+            if not request.user.has_perm("monitoring_traceability.delete_commitmentcomment"):
+                raise PermissionDenied("No puedes eliminar comentarios.")
             comment = CommitmentComment.objects.filter(
                 comment_id=request.POST.get("comment_id"),
                 commitment=commitment,
@@ -132,6 +131,8 @@ def commitment_list(request):
                 comment.save(update_fields=["deleted_at", "updated_at"])
                 messages.success(request, "Comentario eliminado.")
         else:
+            if not request.user.has_perm("monitoring_traceability.add_commitmentcomment"):
+                raise PermissionDenied("No puedes agregar comentarios.")
             text = _query(request.POST.get("comment"))
             if not text:
                 messages.error(request, "El comentario no puede estar vacío.")
@@ -188,11 +189,12 @@ def commitment_list(request):
 
 
 @login_required
+@permission_required("monitoring_traceability.view_audit", raise_exception=True)
 def audit_list(request):
     audits = _scoped_queryset(
         Audit.objects.select_related("user"),
         request.user,
-        "user",
+        "user", "monitoring_traceability.view_audit",
     )
 
     search = _query(request.GET.get("q"))

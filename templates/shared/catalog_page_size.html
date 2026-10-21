@@ -1,0 +1,12 @@
+{# Preferencia de registros, reutilizada en los seis mantenedores. #}
+<form method="post" action="{% url page_size_url %}" class="d-flex flex-wrap align-items-center gap-2 mb-3 catalog-page-size">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+    <label for="page-size-{{ page_size_id }}" class="small fw-semibold text-secondary mb-0">Registros por página</label>
+    <select id="page-size-{{ page_size_id }}" name="page_size" class="form-select form-select-sm w-auto">
+        {% for size in page_size_options %}
+            <option value="{{ size }}" {% if size == page_size %}selected{% endif %}>{{ size }}</option>
+        {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-secondary btn-sm">Guardar preferencia</button>
+</form>
