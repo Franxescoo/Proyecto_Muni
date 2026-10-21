@@ -73,17 +73,22 @@ def _require_permission(user, action, model_name):
 
 
 def _limit_form_choices(form, user):
-	if isinstance(form, EmployeeForm) and not user.is_superuser:
-		form.fields["delegation"].queryset = Delegation.objects.filter(
-			pk=_delegation_id(user),
-			deleted_at__isnull=True,
-		)
-		form.fields["assigned_groups"].disabled = True
-		form.fields["assigned_groups"].queryset = (
-			form.instance.assigned_groups.all()
-			if form.instance.pk
-			else Group.objects.none()
-		)
+    if isinstance(form, EmployeeForm) and not user.is_superuser:
+
+        delegation_id = _delegation_id(user)
+
+        form.fields["delegation"].queryset = (
+            Delegation.objects.filter(
+                pk=delegation_id,
+                deleted_at__isnull=True,
+            )
+        )
+
+        form.fields["user_account"].queryset = (
+            form.fields["user_account"].queryset.filter(
+                delegation_id=delegation_id
+            )
+        )
 
 
 def _handle_mutations(
@@ -123,9 +128,31 @@ def _handle_mutations(
 		form = form_class(request.POST, request.FILES, instance=instance)
 		_limit_form_choices(form, request.user)
 		if form.is_valid():
-			saved = form.save()
+
 			if isinstance(form, EmployeeForm):
-				sync_employee(saved)
+
+				with transaction.atomic():
+
+					saved = form.save()
+
+					# Cuenta seleccionada para el funcionario.
+					profile = form.cleaned_data.get("user_account")
+
+					if profile:
+
+						# Vincular la cuenta si aún está disponible.
+						if profile.employee_id is None:
+							profile.employee = saved
+
+							profile.save(
+								update_fields=["employee", "updated_at"]
+							)
+
+					# Copiar los roles del Usuario al Funcionario.
+					sync_employee(saved)
+
+			else:
+				saved = form.save()
 			verb = "creado" if modal_action == "create" else "actualizado"
 			messages.success(
 				request,
@@ -423,6 +450,7 @@ def position_list(request):
 	)
 
 
+
 @login_required
 def user_list(request):
     """Mantenedor de usuarios con modales de creación y edición."""
@@ -440,7 +468,8 @@ def user_list(request):
     if request.method == "POST":
         modal_action = request.POST.get("action", "")
         object_id = request.POST.get("object_id", "")
-		
+
+        # ELIMINAR USUARIO
         if modal_action == "delete":
             if not object_id.isdecimal():
                 raise PermissionDenied("Usuario no válido.")
@@ -465,7 +494,17 @@ def user_list(request):
                     )
                     return redirect("organization:user_list")
 
-                # El usuario pierde acceso al sistema.
+                # Impedir eliminar usuarios vinculados a funcionarios.
+                if profile.employee_id is not None:
+                    messages.error(
+                        request,
+                        "No puedes eliminar este usuario porque está "
+                        "vinculado a un funcionario. "
+                        "Primero debes desvincularlo."
+                    )
+                    return redirect("organization:user_list")
+
+                # Desactivar la cuenta.
                 account.is_active = False
                 account.save(update_fields=["is_active"])
 
@@ -481,10 +520,11 @@ def user_list(request):
             )
             return redirect("organization:user_list")
 
-
+        # CREAR USUARIO
         if modal_action == "create":
             form = AccountCreateForm(request.POST)
 
+        # EDITAR USUARIO
         elif modal_action == "edit":
             account = get_object_or_404(
                 get_user_model(),
@@ -492,6 +532,7 @@ def user_list(request):
                 is_superuser=False,
                 profile__deleted_at__isnull=True,
             )
+
             form = AccountEditForm(
                 request.POST,
                 instance=account,
@@ -504,10 +545,12 @@ def user_list(request):
 
         modal_open = True
 
+        # VALIDAR Y GUARDAR
         if form.is_valid():
             try:
                 if modal_action == "create":
                     create_user_account(form)
+
                 else:
                     with transaction.atomic():
                         form.save()
@@ -528,10 +571,12 @@ def user_list(request):
                         else "Usuario modificado correctamente."
                     ),
                 )
+
                 return redirect("organization:user_list")
 
         mark_invalid_fields(form)
 
+    # ABRIR MODALES DESDE GET
     else:
         modal_action = request.GET.get("modal", "")
         object_id = request.GET.get("id", "")
@@ -547,15 +592,17 @@ def user_list(request):
                 is_superuser=False,
                 profile__deleted_at__isnull=True,
             )
+
             form = AccountEditForm(instance=account)
             modal_open = True
 
+    # LISTADO DE USUARIOS ACTIVOS Y INACTIVOS
     users = (
         get_user_model().objects
         .filter(
-			is_superuser=False,
-			profile__deleted_at__isnull=True,
-		)
+            is_superuser=False,
+            profile__deleted_at__isnull=True,
+        )
         .select_related(
             "profile",
             "profile__employee",
@@ -565,6 +612,7 @@ def user_list(request):
         .order_by("username")
     )
 
+    # CONTEXTO DE LA PLANTILLA
     context = {
         "users": users,
         "total_users": users.count(),

@@ -73,6 +73,19 @@ MODULES = [
              "url": "registration:validation_list",
              "perm": "registration_validation.view_validation"},
             {
+                "title": "Servicios",
+                "icon": "bi-gear-wide-connected",
+                "url": "registration:service_list",
+                "perm": "registration_validation.view_service",
+            },
+
+            {
+                "title": "Tipos de actividad",
+                "icon": "bi-list-check",
+                "url": "registration:activity_type_list",
+                "perm": "registration_validation.view_activitytype",
+            },
+            {
                 "title": "Tipos de atención",
                 "icon": "bi-card-checklist",
                 "url": "registration:attention_type_list",

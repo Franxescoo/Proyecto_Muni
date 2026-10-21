@@ -52,6 +52,14 @@ class Activity(BaseModel):
         related_name="activities_created",
         verbose_name="Author",
     )
+    activity_type = models.ForeignKey(
+        "registration_validation.ActivityType",
+        on_delete=models.PROTECT,
+        related_name="activities",
+        null=True,
+        blank=True,
+        verbose_name="Tipo de actividad",
+    )
 
     date = models.DateField(
         verbose_name="Date",
@@ -270,7 +278,44 @@ class Validation(BaseModel):
             f"{self.decision}"
         )
 
+# ---------------------------------------------------------
+# Catálogo de Tipos de Actividad
+# ---------------------------------------------------------
 
+class ActivityType(BaseModel):
+    activity_type_id = models.BigAutoField(
+        primary_key=True,
+        verbose_name="Activity Type ID",
+    )
+
+    code = models.CharField(
+        max_length=50,
+        unique=True,
+        verbose_name="Code",
+    )
+
+    name = models.CharField(
+        max_length=150,
+        verbose_name="Name",
+    )
+
+    description = models.TextField(
+        blank=True,
+        verbose_name="Description",
+    )
+
+    status = models.BooleanField(
+        default=True,
+        verbose_name="Status",
+    )
+
+    class Meta:
+        verbose_name = "Activity Type"
+        verbose_name_plural = "Activity Types"
+        ordering = ("name", "activity_type_id")
+
+    def __str__(self):
+        return f"{self.code} - {self.name}"
 # ---------------------------------------------------------
 # Tipo de Atención
 # ---------------------------------------------------------
@@ -307,6 +352,45 @@ class AttentionType(BaseModel):
         verbose_name = "Attention Type"
         verbose_name_plural = "Attention Types"
         ordering = ("name", "attention_type_id")
+
+    def __str__(self):
+        return f"{self.code} - {self.name}"
+
+# ---------------------------------------------------------
+# Catálogo de Servicios
+# ---------------------------------------------------------
+
+class Service(BaseModel):
+    service_id = models.BigAutoField(
+        primary_key=True,
+        verbose_name="ID del servicio",
+    )
+
+    code = models.CharField(
+        max_length=50,
+        unique=True,
+        verbose_name="Código",
+    )
+
+    name = models.CharField(
+        max_length=150,
+        verbose_name="Nombre",
+    )
+
+    description = models.TextField(
+        blank=True,
+        verbose_name="Descripción",
+    )
+
+    status = models.BooleanField(
+        default=True,
+        verbose_name="Estado",
+    )
+
+    class Meta:
+        verbose_name = "Servicio"
+        verbose_name_plural = "Servicios"
+        ordering = ("name", "service_id")
 
     def __str__(self):
         return f"{self.code} - {self.name}"

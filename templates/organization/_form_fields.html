@@ -17,15 +17,53 @@
     </div>
 </div>
 {% endif %}
+
 <div class="row g-3">
     {% for field in form %}
-    {% if not form.profile_photo or field.name != 'profile_photo' and field.name != 'name' %}
-    <div class="{% if field.name == 'roles' or field.name == 'assigned_groups' or field.name == 'permissions' or field.name == 'measurable_items' or field.name == 'services' or field.name == 'weightings' %}col-12{% else %}col-12 col-md-6{% endif %}">
-        <label class="form-label fw-semibold" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %}<span class="text-danger"> *</span>{% endif %}</label>
-        {% if field.name == 'assigned_groups' or field.name == 'permissions' or field.name == 'groups' %}<div class="organization-choice-list">{{ field }}</div>{% else %}{{ field }}{% endif %}
-        {% if field.errors %}<div class="invalid-feedback d-block">{% for error in field.errors %}<div>{{ error }}</div>{% endfor %}</div>{% endif %}
-        {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
-    </div>
-    {% endif %}
+        {% if not form.profile_photo or field.name != 'profile_photo' and field.name != 'name' %}
+
+            <div class="{% if field.name == 'roles' or field.name == 'assigned_groups' or field.name == 'permissions' or field.name == 'measurable_items' or field.name == 'services' or field.name == 'catalog_services' or field.name == 'catalog_items' or field.name == 'weightings' %}col-12{% else %}col-12 col-md-6{% endif %}">
+
+                <label
+                    class="form-label fw-semibold"
+                    for="{{ field.id_for_label }}">
+
+                    {{ field.label }}
+
+                    {% if field.field.required %}
+                        <span class="text-danger">*</span>
+                    {% endif %}
+
+                </label>
+
+                {% if field.name == 'assigned_groups' or field.name == 'permissions' or field.name == 'groups' or field.name == 'catalog_services' or field.name == 'catalog_items'%}
+
+                    <div class="organization-choice-list">
+                        {{ field }}
+                    </div>
+
+                {% else %}
+
+                    {{ field }}
+
+                {% endif %}
+
+                {% if field.errors %}
+                    <div class="invalid-feedback d-block">
+                        {% for error in field.errors %}
+                            <div>{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+
+                {% if field.help_text %}
+                    <div class="form-text">
+                        {{ field.help_text }}
+                    </div>
+                {% endif %}
+
+            </div>
+
+        {% endif %}
     {% endfor %}
 </div>

@@ -26,6 +26,14 @@ from .views import (
     AttentionEntryDeleteView,
     AttentionEntryListView,
     AttentionEntryUpdateView,
+    ActivityTypeCreateView,
+    ActivityTypeDeleteView,
+    ActivityTypeListView,
+    ActivityTypeUpdateView,
+    ServiceListView,
+    ServiceCreateView,
+    ServiceUpdateView,
+    ServiceDeleteView,
     set_page_size,
 )
 
@@ -113,6 +121,60 @@ urlpatterns = [
         "validations/<int:validation_id>/delete/",
         ValidationDeleteView.as_view(),
         name="validation_delete",
+    ),
+    # -----------------------------------------------------
+    # Servicios
+    # -----------------------------------------------------
+
+    path(
+        "services/",
+        ServiceListView.as_view(),
+        name="service_list",
+    ),
+
+    path(
+        "services/new/",
+        ServiceCreateView.as_view(),
+        name="service_create",
+    ),
+
+    path(
+        "services/<int:service_id>/edit/",
+        ServiceUpdateView.as_view(),
+        name="service_update",
+    ),
+
+    path(
+        "services/<int:service_id>/delete/",
+        ServiceDeleteView.as_view(),
+        name="service_delete",
+    ),
+    # -----------------------------------------------------
+    # Tipos de actividad
+    # -----------------------------------------------------
+
+    path(
+        "activity-types/",
+        ActivityTypeListView.as_view(),
+        name="activity_type_list",
+    ),
+
+    path(
+        "activity-types/new/",
+        ActivityTypeCreateView.as_view(),
+        name="activity_type_create",
+    ),
+
+    path(
+        "activity-types/<int:activity_type_id>/edit/",
+        ActivityTypeUpdateView.as_view(),
+        name="activity_type_update",
+    ),
+
+    path(
+        "activity-types/<int:activity_type_id>/delete/",
+        ActivityTypeDeleteView.as_view(),
+        name="activity_type_delete",
     ),
 
     # -----------------------------------------------------

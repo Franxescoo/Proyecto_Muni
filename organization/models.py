@@ -42,7 +42,19 @@ class PositionFunction(BaseModel):
     position_id = models.BigAutoField(primary_key=True)
     position_name = models.CharField(max_length=150)
     measurable_items = models.TextField()
+    catalog_items = models.ManyToManyField(
+        "planning_measurements.MeasurementItem",
+        blank=True,
+        related_name="associated_positions",
+        verbose_name="Ítems de medición del catálogo",
+    )
     services = models.TextField()
+    catalog_services = models.ManyToManyField(
+        "registration_validation.Service",
+        blank=True,
+        related_name="positions",
+        verbose_name="Servicios del catálogo",
+    )
     weightings = models.TextField()
     validity_start = models.DateField()
     validity_end = models.DateField()

@@ -1,0 +1,217 @@
+
+{% if open_modal %}
+
+<div class="modal fade"
+     id="serviceModal"
+     tabindex="-1"
+     aria-labelledby="serviceModalLabel"
+     aria-hidden="true">
+
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+
+        <div class="modal-content">
+
+            <form method="post" novalidate>
+
+                {% csrf_token %}
+
+                <!-- Encabezado -->
+                <div class="modal-header">
+
+                    <h5 class="modal-title fw-bold"
+                        id="serviceModalLabel">
+
+                        {% if object %}
+                            Modificar servicio
+                        {% else %}
+                            Nuevo servicio
+                        {% endif %}
+
+                    </h5>
+
+                    <a
+                        href="{% url 'registration:service_list' %}"
+                        class="btn-close"
+                        aria-label="Cerrar">
+                    </a>
+
+                </div>
+
+                <!-- Contenido -->
+                <div class="modal-body">
+
+                    {% if form.non_field_errors %}
+
+                        <div class="alert alert-danger">
+                            {% for error in form.non_field_errors %}
+                                <div>{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                    {% endif %}
+
+                    <div class="row g-3">
+
+                        <!-- Código -->
+                        <div class="col-md-6">
+
+                            <label
+                                for="{{ form.code.id_for_label }}"
+                                class="form-label fw-semibold">
+
+                                {{ form.code.label }}
+                                <span class="text-danger">*</span>
+
+                            </label>
+
+                            {{ form.code }}
+
+                            <div class="form-text">
+                                Código único. Ejemplo: SER-001.
+                            </div>
+
+                            {% for error in form.code.errors %}
+                                <div class="text-danger small mt-1">
+                                    {{ error }}
+                                </div>
+                            {% endfor %}
+
+                        </div>
+
+                        <!-- Estado -->
+                        <div class="col-md-6">
+
+                            <label
+                                for="{{ form.status.id_for_label }}"
+                                class="form-label fw-semibold">
+
+                                {{ form.status.label }}
+                                <span class="text-danger">*</span>
+
+                            </label>
+
+                            {{ form.status }}
+
+                            <div class="form-text">
+                                Selecciona si el servicio está activo.
+                            </div>
+
+                            {% for error in form.status.errors %}
+                                <div class="text-danger small mt-1">
+                                    {{ error }}
+                                </div>
+                            {% endfor %}
+
+                        </div>
+
+                        <!-- Nombre -->
+                        <div class="col-12">
+
+                            <label
+                                for="{{ form.name.id_for_label }}"
+                                class="form-label fw-semibold">
+
+                                {{ form.name.label }}
+                                <span class="text-danger">*</span>
+
+                            </label>
+
+                            {{ form.name }}
+
+                            <div class="form-text">
+                                Nombre del servicio municipal.
+                            </div>
+
+                            {% for error in form.name.errors %}
+                                <div class="text-danger small mt-1">
+                                    {{ error }}
+                                </div>
+                            {% endfor %}
+
+                        </div>
+
+                        <!-- Descripción -->
+                        <div class="col-12">
+
+                            <label
+                                for="{{ form.description.id_for_label }}"
+                                class="form-label fw-semibold">
+
+                                {{ form.description.label }}
+
+                                <span class="text-muted small">
+                                    (Opcional)
+                                </span>
+
+                            </label>
+
+                            {{ form.description }}
+
+                            <div class="form-text">
+                                Describe brevemente el servicio.
+                            </div>
+
+                            {% for error in form.description.errors %}
+                                <div class="text-danger small mt-1">
+                                    {{ error }}
+                                </div>
+                            {% endfor %}
+
+                        </div>
+
+                    </div>
+
+                    <!-- Información -->
+                    <div class="alert alert-light border mt-4 mb-0">
+
+                        <small class="text-muted">
+
+                            <i class="bi bi-info-circle me-1"></i>
+
+                            Los campos marcados con
+                            <span class="text-danger">*</span>
+                            son obligatorios.
+
+                            El código del servicio no puede repetirse.
+
+                        </small>
+
+                    </div>
+
+                </div>
+
+                <!-- Botones -->
+                <div class="modal-footer">
+
+                    <a
+                        href="{% url 'registration:service_list' %}"
+                        class="btn btn-secondary">
+
+                        Cancelar
+                    </a>
+
+                    <button
+                        type="submit"
+                        class="btn btn-primary">
+
+                        <i class="bi bi-check-lg me-1"></i>
+
+                        {% if object %}
+                            Guardar cambios
+                        {% else %}
+                            Guardar servicio
+                        {% endif %}
+
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endif %}

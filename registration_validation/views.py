@@ -29,15 +29,19 @@ from .forms import (
     SubAttentionForm,
     EvidenceForm,
     ValidationForm,
+    ActivityTypeForm,
+    ServiceForm,
 )
 from .models import (
     Activity,
     AttentionEntry,
     AttentionType,
+    ActivityType,
     Evidence,
     EvidenceFile,
     SubAttention,
     Validation,
+    Service,
 )
 
 
@@ -91,8 +95,6 @@ def set_page_size(request):
 
 # ---------------------------------------------------------
 # Utilidades de Activity
-
-
 # ---------------------------------------------------------
 
 
@@ -1492,6 +1494,526 @@ class ValidationDeleteView(
         )
         return HttpResponseRedirect(
             self.get_success_url(),
+        )
+
+
+# ---------------------------------------------------------
+# Servicios: catálogo general
+# ---------------------------------------------------------
+
+def scoped_services():
+    """Retorna los servicios que no están archivados."""
+    return Service.objects.filter(deleted_at__isnull=True)
+
+
+def filtered_services(request):
+    """Permite buscar y filtrar servicios."""
+    services = scoped_services()
+
+    query = request.GET.get("q", "").strip()
+    selected_status = request.GET.get("status", "").strip()
+
+    if query:
+        services = services.filter(
+            Q(code__icontains=query)
+            | Q(name__icontains=query)
+            | Q(description__icontains=query)
+        )
+
+    if selected_status == "active":
+        services = services.filter(status=True)
+
+    elif selected_status == "inactive":
+        services = services.filter(status=False)
+
+    return services.order_by("name", "service_id")
+
+
+def service_metrics():
+    """Calcula los indicadores del mantenedor."""
+    services = scoped_services()
+
+    return {
+        "total_services": services.count(),
+        "active_services": services.filter(
+            status=True
+        ).count(),
+        "inactive_services": services.filter(
+            status=False
+        ).count(),
+    }
+
+
+class ServicePermissionMixin(
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+):
+    """Controla el acceso mediante permisos Django."""
+
+    login_url = "login"
+    raise_exception = True
+
+    def handle_no_permission(self):
+        if self.request.user.is_authenticated:
+            raise PermissionDenied(
+                "No tienes permisos para realizar esta operación."
+            )
+
+        return redirect_to_login(
+            self.request.get_full_path(),
+            self.get_login_url(),
+            self.get_redirect_field_name(),
+        )
+
+
+class ServiceScopeMixin:
+    """Impide editar o eliminar servicios archivados."""
+
+    def get_queryset(self):
+        return scoped_services()
+
+
+class ServiceFormMixin:
+    """Entrega el usuario actual al formulario."""
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["user"] = self.request.user
+        return kwargs
+
+
+class ServicePageContextMixin:
+    """Prepara el contexto para los formularios modales."""
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        context["services"] = filtered_services(self.request)
+
+        context["query"] = self.request.GET.get(
+            "q", ""
+        ).strip()
+
+        context["selected_status"] = self.request.GET.get(
+            "status", ""
+        ).strip()
+
+        context.update(service_metrics())
+
+        context.update(
+            registration_page_size_context(self.request)
+        )
+
+        context["open_modal"] = True
+
+        return context
+
+
+# ---------------------------------------------------------
+# READ: Listar y buscar servicios
+# ---------------------------------------------------------
+
+class ServiceListView(
+    ServicePermissionMixin,
+    RegistrationPaginationMixin,
+    ListView,
+):
+    model = Service
+
+    permission_required = (
+        "registration_validation.view_service"
+    )
+
+    template_name = (
+        "registration_validation/service_list.html"
+    )
+
+    context_object_name = "services"
+
+    def get_queryset(self):
+        return filtered_services(self.request)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        context["query"] = self.request.GET.get(
+            "q", ""
+        ).strip()
+
+        context["selected_status"] = self.request.GET.get(
+            "status", ""
+        ).strip()
+
+        context.update(service_metrics())
+
+        return context
+
+
+# ---------------------------------------------------------
+# CREATE: Crear servicios
+# ---------------------------------------------------------
+
+class ServiceCreateView(
+    ServicePermissionMixin,
+    ServiceFormMixin,
+    ServicePageContextMixin,
+    CreateView,
+):
+    model = Service
+
+    form_class = ServiceForm
+
+    permission_required = (
+        "registration_validation.add_service"
+    )
+
+    template_name = (
+        "registration_validation/service_list.html"
+    )
+
+    success_url = reverse_lazy(
+        "registration:service_list"
+    )
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+
+        messages.success(
+            self.request,
+            "Servicio creado correctamente.",
+        )
+
+        return response
+
+
+# ---------------------------------------------------------
+# UPDATE: Modificar servicios
+# ---------------------------------------------------------
+
+class ServiceUpdateView(
+    ServicePermissionMixin,
+    ServiceScopeMixin,
+    ServiceFormMixin,
+    ServicePageContextMixin,
+    UpdateView,
+):
+    model = Service
+
+    form_class = ServiceForm
+
+    permission_required = (
+        "registration_validation.change_service"
+    )
+
+    template_name = (
+        "registration_validation/service_list.html"
+    )
+
+    pk_url_kwarg = "service_id"
+
+    success_url = reverse_lazy(
+        "registration:service_list"
+    )
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+
+        messages.success(
+            self.request,
+            "Servicio actualizado correctamente.",
+        )
+
+        return response
+
+
+# ---------------------------------------------------------
+# DELETE: Eliminación lógica
+# ---------------------------------------------------------
+
+class ServiceDeleteView(
+    ServicePermissionMixin,
+    ServiceScopeMixin,
+    DeleteView,
+):
+    model = Service
+
+    permission_required = (
+        "registration_validation.delete_service"
+    )
+
+    pk_url_kwarg = "service_id"
+
+    success_url = reverse_lazy(
+        "registration:service_list"
+    )
+
+    # Solo permite eliminar mediante POST.
+    http_method_names = ["post"]
+
+    def form_valid(self, form):
+        self.object.deleted_at = timezone.now()
+
+        self.object.save(
+            update_fields=["deleted_at", "updated_at"]
+        )
+
+        messages.success(
+            self.request,
+            "Servicio archivado correctamente.",
+        )
+
+        return HttpResponseRedirect(
+            self.get_success_url()
+        )
+
+# ---------------------------------------------------------
+# Tipo de Actividad: catálogo general
+# ---------------------------------------------------------
+
+def scoped_activity_types():
+    return ActivityType.objects.filter(
+        deleted_at__isnull=True
+    )
+
+
+def filtered_activity_types(request):
+    types = scoped_activity_types()
+
+    query = request.GET.get("q", "").strip()
+    selected_status = request.GET.get(
+        "status", ""
+    ).strip()
+
+    if query:
+        types = types.filter(
+            Q(code__icontains=query)
+            | Q(name__icontains=query)
+            | Q(description__icontains=query)
+        )
+
+    if selected_status == "active":
+        types = types.filter(status=True)
+
+    elif selected_status == "inactive":
+        types = types.filter(status=False)
+
+    return types.order_by(
+        "name",
+        "activity_type_id",
+    )
+
+
+def activity_type_metrics():
+    types = scoped_activity_types()
+
+    return {
+        "total_activity_types": types.count(),
+        "active_activity_types": types.filter(
+            status=True
+        ).count(),
+        "inactive_activity_types": types.filter(
+            status=False
+        ).count(),
+    }
+
+
+class ActivityTypePermissionMixin(
+    LoginRequiredMixin,
+    PermissionRequiredMixin,
+):
+    login_url = "login"
+    raise_exception = True
+
+    def handle_no_permission(self):
+        if self.request.user.is_authenticated:
+            raise PermissionDenied(
+                "No tienes permisos para realizar esta operación."
+            )
+
+        return redirect_to_login(
+            self.request.get_full_path(),
+            self.get_login_url(),
+            self.get_redirect_field_name(),
+        )
+
+
+class ActivityTypeScopeMixin:
+
+    def get_queryset(self):
+        return scoped_activity_types()
+
+
+class ActivityTypeFormMixin:
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs["user"] = self.request.user
+        return kwargs
+
+
+class ActivityTypePageContextMixin:
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        context["activity_types"] = (
+            filtered_activity_types(self.request)
+        )
+
+        context["query"] = self.request.GET.get(
+            "q", ""
+        ).strip()
+
+        context["selected_status"] = self.request.GET.get(
+            "status", ""
+        ).strip()
+
+        context.update(activity_type_metrics())
+        context.update(
+            registration_page_size_context(self.request)
+        )
+
+        context["open_modal"] = True
+
+        return context
+
+
+class ActivityTypeListView(
+    ActivityTypePermissionMixin,
+    RegistrationPaginationMixin,
+    ListView,
+):
+    model = ActivityType
+
+    permission_required = (
+        "registration_validation.view_activitytype"
+    )
+
+    template_name = (
+        "registration_validation/activity_type_list.html"
+    )
+
+    context_object_name = "activity_types"
+
+    def get_queryset(self):
+        return filtered_activity_types(self.request)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        context["query"] = self.request.GET.get(
+            "q", ""
+        ).strip()
+
+        context["selected_status"] = self.request.GET.get(
+            "status", ""
+        ).strip()
+
+        context.update(activity_type_metrics())
+
+        return context
+
+
+class ActivityTypeCreateView(
+    ActivityTypePermissionMixin,
+    ActivityTypeFormMixin,
+    ActivityTypePageContextMixin,
+    CreateView,
+):
+    model = ActivityType
+    form_class = ActivityTypeForm
+
+    permission_required = (
+        "registration_validation.add_activitytype"
+    )
+
+    template_name = (
+        "registration_validation/activity_type_list.html"
+    )
+
+    success_url = reverse_lazy(
+        "registration:activity_type_list"
+    )
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+
+        messages.success(
+            self.request,
+            "Tipo de actividad creado correctamente.",
+        )
+
+        return response
+
+
+class ActivityTypeUpdateView(
+    ActivityTypePermissionMixin,
+    ActivityTypeScopeMixin,
+    ActivityTypeFormMixin,
+    ActivityTypePageContextMixin,
+    UpdateView,
+):
+    model = ActivityType
+    form_class = ActivityTypeForm
+
+    permission_required = (
+        "registration_validation.change_activitytype"
+    )
+
+    template_name = (
+        "registration_validation/activity_type_list.html"
+    )
+
+    pk_url_kwarg = "activity_type_id"
+
+    success_url = reverse_lazy(
+        "registration:activity_type_list"
+    )
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+
+        messages.success(
+            self.request,
+            "Tipo de actividad actualizado correctamente.",
+        )
+
+        return response
+
+
+class ActivityTypeDeleteView(
+    ActivityTypePermissionMixin,
+    ActivityTypeScopeMixin,
+    DeleteView,
+):
+    model = ActivityType
+
+    permission_required = (
+        "registration_validation.delete_activitytype"
+    )
+
+    pk_url_kwarg = "activity_type_id"
+
+    success_url = reverse_lazy(
+        "registration:activity_type_list"
+    )
+
+    http_method_names = ["post"]
+
+    def form_valid(self, form):
+        self.object.deleted_at = timezone.now()
+
+        self.object.save(
+            update_fields=["deleted_at", "updated_at"]
+        )
+
+        messages.success(
+            self.request,
+            "Tipo de actividad archivado correctamente.",
+        )
+
+        return HttpResponseRedirect(
+            self.get_success_url()
         )
 
 # ---------------------------------------------------------
