@@ -46,3 +46,21 @@ class UserProfile(BaseModel):
         related_name="authorized_user_profiles",
         verbose_name="Delegaciones autorizadas",
     )
+
+
+class PasswordRecoveryCode(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="password_recovery_codes",
+    )
+    code_hash = models.CharField(max_length=128)
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=("user", "expires_at")),
+        ]

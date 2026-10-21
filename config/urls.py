@@ -12,11 +12,10 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 from django.contrib.auth.views import LoginView
-from django.contrib.auth.views import PasswordResetView
 from accounts.forms import (
-    InstitutionalPasswordResetForm,
     UsuarioOCorreoAuthenticationForm,
 )
+from accounts import views as account_views
 
 
 urlpatterns = [
@@ -41,13 +40,18 @@ urlpatterns = [
 
     path(
         "accounts/password_reset/",
-        PasswordResetView.as_view(
-            form_class=InstitutionalPasswordResetForm,
-            email_template_name="registration/password_reset_email.txt",
-            html_email_template_name="registration/password_reset_email.html",
-            subject_template_name="registration/password_reset_subject.txt",
-        ),
+        account_views.password_reset_request,
         name="password_reset",
+    ),
+    path(
+        "accounts/password_reset/verify/",
+        account_views.password_reset_verify,
+        name="password_reset_verify",
+    ),
+    path(
+        "accounts/password_reset/password/",
+        account_views.password_reset_password,
+        name="password_reset_password",
     ),
 
     path(

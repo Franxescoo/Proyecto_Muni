@@ -8,6 +8,7 @@ from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 
 from organization.models import Employee, PositionFunction
 
@@ -19,6 +20,13 @@ from .forms import (
     ProfileLinkForm,
 )
 from .models import UserProfile
+from .models import PasswordRecoveryCode
+from .recovery import create_recovery_code, send_recovery_code, valid_recovery_code
+from .recovery_forms import (
+    RecoveryCodeForm,
+    RecoveryPasswordForm,
+    RecoveryRequestForm,
+)
 from .services import (
     sync_employee,
     sync_position,
@@ -26,6 +34,94 @@ from .services import (
     sync_user_groups,
 )
 from .services import create_user_account
+
+
+RECOVERY_SESSION_KEY = "password_recovery_code_id"
+RECOVERY_VERIFIED_SESSION_KEY = "password_recovery_verified"
+
+
+def password_reset_request(request):
+    form = RecoveryRequestForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        user = form.find_user()
+        if user is not None and user.email:
+            recovery, code = create_recovery_code(user)
+            send_recovery_code(request, user, code)
+            request.session[RECOVERY_SESSION_KEY] = recovery.pk
+            return redirect("password_reset_verify")
+        return redirect("password_reset_done")
+
+    return render(
+        request,
+        "registration/password_reset_form.html",
+        {"form": form},
+    )
+
+
+def password_reset_verify(request):
+    recovery_id = request.session.get(RECOVERY_SESSION_KEY)
+    if not recovery_id:
+        return redirect("password_reset")
+
+    recovery = get_object_or_404(
+        PasswordRecoveryCode.objects.select_related("user"),
+        pk=recovery_id,
+    )
+    form = RecoveryCodeForm(request.POST or None)
+    if request.method == "POST":
+        if not valid_recovery_code(recovery, request.POST.get("code", "")):
+            form.add_error("code", "El código es incorrecto o ya expiró.")
+        elif form.is_valid():
+            request.session[RECOVERY_VERIFIED_SESSION_KEY] = True
+            return redirect("password_reset_password")
+
+    return render(
+        request,
+        "registration/password_reset_verify.html",
+        {"form": form, "expires_at": recovery.expires_at},
+    )
+
+
+def password_reset_password(request):
+    recovery_id = request.session.get(RECOVERY_SESSION_KEY)
+    if not request.session.get(RECOVERY_VERIFIED_SESSION_KEY) or not recovery_id:
+        return redirect("password_reset")
+
+    recovery = get_object_or_404(
+        PasswordRecoveryCode.objects.select_related("user"),
+        pk=recovery_id,
+    )
+    if recovery.expires_at <= timezone.now() or recovery.used_at is not None:
+        request.session.pop(RECOVERY_SESSION_KEY, None)
+        request.session.pop(RECOVERY_VERIFIED_SESSION_KEY, None)
+        return redirect("password_reset")
+
+    form = RecoveryPasswordForm(recovery.user, request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        with transaction.atomic():
+            locked = PasswordRecoveryCode.objects.select_for_update().get(
+                pk=recovery.pk,
+            )
+            if locked.used_at is not None or locked.expires_at <= timezone.now():
+                form.add_error(
+                    None,
+                    "El código ha expirado. Solicita uno nuevo.",
+                )
+            else:
+                user = locked.user
+                user.set_password(form.cleaned_data["new_password1"])
+                user.save(update_fields=["password"])
+                locked.used_at = timezone.now()
+                locked.save(update_fields=["used_at"])
+                request.session.pop(RECOVERY_SESSION_KEY, None)
+                request.session.pop(RECOVERY_VERIFIED_SESSION_KEY, None)
+                return redirect("login")
+
+    return render(
+        request,
+        "registration/password_reset_password.html",
+        {"form": form},
+    )
 
 
 def administrator_required(view):

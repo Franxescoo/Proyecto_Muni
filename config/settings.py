@@ -133,7 +133,7 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/6.1/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'es-cl'
 
 # Los instantes se conservan en UTC (USE_TZ=True); Django los muestra en hora local chilena.
 TIME_ZONE = 'America/Santiago'
