@@ -1,5 +1,5 @@
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.auth.mixins import (
     LoginRequiredMixin,
     PermissionRequiredMixin,
@@ -20,6 +20,8 @@ from django.views.generic import (
     ListView,
     UpdateView,
 )
+from organization.exports import workbook_response
+from accounts.permissions import allowed_delegation_ids
 from organization.models import Delegation
 from planning_measurements.models import Period
 from .forms import (
@@ -98,7 +100,7 @@ def set_page_size(request):
 # ---------------------------------------------------------
 
 
-def scoped_activities(user):
+def scoped_activities(user, permission="registration_validation.view_activity"):
     """
     Retorna únicamente las actividades que el usuario
     puede visualizar según su delegación.
@@ -120,18 +122,11 @@ def scoped_activities(user):
     )
     if user.is_superuser:
         return activities
-    profile = getattr(
-        user,
-        "profile",
-        None,
-    )
-    if (
-        profile is None
-        or profile.delegation_id is None
-    ):
+    allowed_ids = allowed_delegation_ids(user, permission)
+    if not allowed_ids:
         return activities.none()
     return activities.filter(
-        author__delegation_id=profile.delegation_id,
+        author__delegation_id__in=allowed_ids,
     )
 
 
@@ -228,7 +223,7 @@ def activity_metrics(user):
 # ---------------------------------------------------------
 
 
-def scoped_evidences(user):
+def scoped_evidences(user, permission="registration_validation.view_evidence"):
     """
     Retorna únicamente las evidencias visibles para
     el usuario según la delegación de su actividad.
@@ -253,20 +248,11 @@ def scoped_evidences(user):
     )
     if user.is_superuser:
         return evidences
-    profile = getattr(
-        user,
-        "profile",
-        None,
-    )
-    if (
-        profile is None
-        or profile.delegation_id is None
-    ):
+    allowed_ids = allowed_delegation_ids(user, permission)
+    if not allowed_ids:
         return evidences.none()
     return evidences.filter(
-        activity__author__delegation_id=(
-            profile.delegation_id
-        ),
+        activity__author__delegation_id__in=allowed_ids,
     )
 
 
@@ -455,7 +441,7 @@ def save_evidence_files(evidence, form):
 # ---------------------------------------------------------
 
 
-def scoped_validations(user):
+def scoped_validations(user, permission="registration_validation.view_validation"):
     """
     Retorna únicamente las validaciones visibles para
     el usuario según la delegación de la actividad
@@ -483,20 +469,11 @@ def scoped_validations(user):
     )
     if user.is_superuser:
         return validations
-    profile = getattr(
-        user,
-        "profile",
-        None,
-    )
-    if (
-        profile is None
-        or profile.delegation_id is None
-    ):
+    allowed_ids = allowed_delegation_ids(user, permission)
+    if not allowed_ids:
         return validations.none()
     return validations.filter(
-        evidence__activity__author__delegation_id=(
-            profile.delegation_id
-        ),
+        evidence__activity__author__delegation_id__in=allowed_ids,
     )
 
 
@@ -644,7 +621,7 @@ class ActivityScopeMixin:
 
     def get_queryset(self):
         return scoped_activities(
-            self.request.user,
+            self.request.user, self.permission_required,
         )
 
 
@@ -756,7 +733,7 @@ class EvidenceScopeMixin:
 
     def get_queryset(self):
         return scoped_evidences(
-            self.request.user,
+            self.request.user, self.permission_required,
         )
 
 
@@ -859,7 +836,7 @@ class ValidationScopeMixin:
 
     def get_queryset(self):
         return scoped_validations(
-            self.request.user,
+            self.request.user, self.permission_required,
         )
 
 
@@ -930,6 +907,9 @@ class RegistrationPaginationMixin:
                 self.request,
             )
         )
+        params = self.request.GET.copy()
+        params.pop("page", None)
+        context["page_querystring"] = params.urlencode()
         return context
 
 
@@ -2241,6 +2221,10 @@ def filtered_sub_attentions(request):
     elif selected_status == "inactive":
         sub_attentions = sub_attentions.filter(status=False)
 
+    selected_type = request.GET.get("attention_type", "").strip()
+    if selected_type.isdecimal():
+        sub_attentions = sub_attentions.filter(attention_type_id=selected_type)
+
     return sub_attentions.order_by("name", "sub_attention_id")
 
 
@@ -2301,6 +2285,8 @@ class SubAttentionPageContextMixin:
         context["selected_status"] = self.request.GET.get(
             "status", ""
         ).strip()
+        context["selected_type"] = self.request.GET.get("attention_type", "")
+        context["attention_type_options"] = scoped_attention_types().order_by("name")
         context.update(sub_attention_metrics())
         context.update(registration_page_size_context(self.request))
         context["open_modal"] = True
@@ -2326,6 +2312,8 @@ class SubAttentionListView(
         context["selected_status"] = self.request.GET.get(
             "status", ""
         ).strip()
+        context["selected_type"] = self.request.GET.get("attention_type", "")
+        context["attention_type_options"] = scoped_attention_types().order_by("name")
         context.update(sub_attention_metrics())
         return context
 
@@ -2414,7 +2402,7 @@ class SubAttentionDeleteView(
 # ---------------------------------------------------------
 
 
-def scoped_attention_entries(user):
+def scoped_attention_entries(user, permission="registration_validation.view_attentionentry"):
     """Limita los ingresos visibles a la delegación del usuario.
 
     Los superusuarios pueden consultar todas las delegaciones.
@@ -2429,21 +2417,17 @@ def scoped_attention_entries(user):
             "delegation",
             "responsible_employee",
             "responsible_employee__delegation",
+            "registered_by",
         )
     )
 
     if user.is_superuser:
         return entries
 
-    profile = getattr(user, "profile", None)
-    delegation_id = (
-        profile.delegation_id if profile is not None else None
-    )
-
-    if delegation_id is None:
+    allowed_ids = allowed_delegation_ids(user, permission)
+    if not allowed_ids:
         return entries.none()
-
-    return entries.filter(delegation_id=delegation_id)
+    return entries.filter(delegation_id__in=allowed_ids)
 
 
 def filtered_attention_entries(request):
@@ -2546,7 +2530,7 @@ class AttentionEntryScopeMixin:
     """Protege las operaciones sobre ingresos ya existentes."""
 
     def get_queryset(self):
-        return scoped_attention_entries(self.request.user)
+        return scoped_attention_entries(self.request.user, self.permission_required)
 
 
 class AttentionEntryFormMixin:
@@ -2606,6 +2590,7 @@ class AttentionEntryCreateView(
     success_url = reverse_lazy("registration:attention_entry_list")
 
     def form_valid(self, form):
+        form.instance.registered_by = self.request.user
         response = super().form_valid(form)
         messages.success(
             self.request,
@@ -2659,3 +2644,22 @@ class AttentionEntryDeleteView(
         )
         return HttpResponseRedirect(self.get_success_url())
 
+
+
+@login_required
+@permission_required("registration_validation.view_attentiontype", raise_exception=True)
+def attention_type_export(request):
+    """Exporta exactamente los filtros aplicados al catálogo."""
+    return workbook_response("tipos_atencion.xlsx", ["Código", "Nombre", "Descripción", "Estado"], [
+        (obj.code, obj.name, obj.description, "Activo" if obj.status else "Inactivo")
+        for obj in filtered_attention_types(request)
+    ])
+
+
+@login_required
+@permission_required("registration_validation.view_subattention", raise_exception=True)
+def sub_attention_export(request):
+    return workbook_response("subatenciones.xlsx", ["Código", "Nombre", "Tipo de atención", "Estado"], [
+        (obj.code, obj.name, obj.attention_type.name, "Activo" if obj.status else "Inactivo")
+        for obj in filtered_sub_attentions(request).select_related("attention_type")
+    ])

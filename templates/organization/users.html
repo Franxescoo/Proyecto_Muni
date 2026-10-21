@@ -13,17 +13,7 @@
         </div>
     </div>
 
-    <form class="row g-3 align-items-end mb-3" method="get">
-        <div class="col-12 col-md-9">
-            <label class="filter-label" for="user-search">Buscar usuario</label>
-            <input id="user-search" name="q" value="{{ search }}" class="form-control" placeholder="Usuario, correo, funcionario o delegación" type="search">
-        </div>
-        <div class="col-12 col-md-3">
-            <button class="btn btn-dark w-100" type="submit">
-                <i class="bi bi-funnel me-1"></i>Filtrar
-            </button>
-        </div>
-    </form>
+
 
     <div class="col-12 col-md-4">
         <div class="section-card metric h-100">
@@ -42,38 +32,48 @@
 </div>
 
 <!-- LISTADO DE USUARIOS -->
-<section class="section-card p-3 p-lg-4">
-    <div class="d-flex justify-content-end mb-3">
-        <a href="?modal=create" class="btn btn-success">
-            <i class="bi bi-plus-lg me-1"></i>
-            Crear usuario
-        </a>
-        <a href="{% url 'organization:user_export' %}?{{ request.GET.urlencode }}" class="btn btn-outline-secondary ms-2">
-            <i class="bi bi-file-earmark-excel me-1"></i>Exportar Excel
-        </a>
+<section class="section-card p-3 p-lg-4 sgr-catalog">
+    <div class="catalog-toolbar">
+        <div>
+            <h2 class="h5 mb-1 fw-bold">Administración de usuarios</h2>
+            <p class="text-muted small mb-0">Cuentas registradas en el sistema y sus roles asignados.</p>
+        </div>
+        <div class="catalog-toolbar-actions">
+            {% if perms.accounts.add_userprofile %}<a href="?modal=create" class="btn btn-success"><i class="bi bi-plus-lg me-1"></i>Crear usuario</a>{% endif %}
+            <a href="{% url 'organization:user_export' %}?{{ request.GET.urlencode }}" class="btn btn-outline-secondary"><i class="bi bi-file-earmark-excel me-1"></i>Exportar Excel</a>
+        </div>
     </div>
-
-    <div class="mb-3">
-        <h2 class="h5 mb-1 fw-bold">
-            Administración de usuarios
-        </h2>
-
-        <p class="text-muted small mb-0">
-            Cuentas registradas en el sistema y sus roles asignados.
-        </p>
-    </div>
-
-    <form class="row g-3 align-items-end mb-3" method="get">
-        <div class="col-12 col-md-9">
+    <form class="row g-3 align-items-end catalog-filters" method="get">
+        <div class="col-12 col-lg-4">
             <label class="filter-label" for="user-search">Buscar usuario</label>
-            <input id="user-search" name="q" value="{{ search }}" class="form-control" placeholder="Usuario, correo, funcionario o delegación" type="search">
+            <input id="user-search" name="q" value="{{ search }}" class="form-control" placeholder="Usuario, correo o empleado" type="search">
         </div>
-        <div class="col-12 col-md-3">
-            <button class="btn btn-dark w-100" type="submit">
-                <i class="bi bi-funnel me-1"></i>Filtrar
-            </button>
+        <div class="col-12 col-md-4 col-lg-3">
+            <label class="filter-label" for="user-delegation">Delegación autorizada</label>
+            <select id="user-delegation" name="delegation" class="form-select">
+                <option value="">Todas las delegaciones</option>
+                {% for delegation in delegation_options %}<option value="{{ delegation.pk }}" {% if selected_delegation == delegation.pk|stringformat:"s" %}selected{% endif %}>{{ delegation.name }}</option>{% endfor %}
+            </select>
         </div>
+        <div class="col-12 col-md-4 col-lg-2">
+            <label class="filter-label" for="user-role">Rol</label>
+            <select id="user-role" name="role" class="form-select">
+                <option value="">Todos los roles</option>
+                {% for role in role_options %}<option value="{{ role.pk }}" {% if selected_role == role.pk|stringformat:"s" %}selected{% endif %}>{{ role.name }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="col-12 col-md-4 col-lg-3">
+            <label class="filter-label" for="user-status">Estado</label>
+            <select id="user-status" name="status" class="form-select">
+                <option value="">Todos los estados</option>
+                <option value="active" {% if selected_status == "active" %}selected{% endif %}>Activo</option>
+                <option value="inactive" {% if selected_status == "inactive" %}selected{% endif %}>Inactivo</option>
+            </select>
+        </div>
+        <div class="col-6 col-md-3"><button class="btn btn-dark w-100" type="submit"><i class="bi bi-funnel me-1"></i>Filtrar</button></div>
+        <div class="col-6 col-md-3"><a class="btn btn-outline-secondary w-100" href="{% url 'organization:user_list' %}">Limpiar</a></div>
     </form>
+    {% include "shared/catalog_page_size.html" with page_size_url="organization:set_page_size" page_size_id="usuarios" %}
 
     <div class="table-responsive">
 
@@ -83,7 +83,7 @@
                 <tr>
                     <th>Usuario</th>
                     <th>Correo</th>
-                    <th>Funcionario</th>
+                    <th>Empleado</th>
                     <th>Código</th>
                     <th>Delegaciones autorizadas</th>
                     <th>Roles asignados</th>
@@ -107,7 +107,7 @@
                     </td>
 
                     <td>
-                        {{ account.profile.employee.name|default:"Sin funcionario" }}
+                        {{ account.profile.employee.name|default:"Sin empleado" }}
                     </td>
 
                     <td>
@@ -149,18 +149,21 @@
                     
                     <td class="text-end">
                         <div class="d-flex justify-content-end gap-1">
+                                <a class="btn btn-sm btn-outline-info" href="?modal=view&amp;id={{ account.pk }}" title="Ver detalles" aria-label="Ver account {{ account.username }}"><i class="bi bi-eye me-1" aria-hidden="true"></i>Ver</a>
 
                             <!-- MODIFICAR USUARIO -->
-                            <a
+                            {% if perms.accounts.change_userprofile %}<a
                                 href="?modal=edit&amp;id={{ account.pk }}"
                                 class="btn btn-sm btn-light border"
                                 title="Modificar usuario"
                                 aria-label="Modificar {{ account.username }}"
                             >
-                                <i class="bi bi-pencil-square"></i>
+                                <i class="bi bi-pencil-square me-1" aria-hidden="true"></i>Modificar
                             </a>
 
+                            {% endif %}
                             <!-- ELIMINAR USUARIO -->
+                            {% if perms.accounts.delete_userprofile %}
                             <form
                                 method="post"
                                 action="{% url 'organization:user_list' %}"
@@ -188,11 +191,11 @@
                                     title="Eliminar usuario"
                                     aria-label="Eliminar {{ account.username }}"
                                 >
-                                    <i class="bi bi-trash3"></i>
+                                    <i class="bi bi-trash3 me-1" aria-hidden="true"></i>Eliminar
                                 </button>
 
                             </form>
-
+                            {% endif %}
                         </div>
                     </td>
 
@@ -219,15 +222,7 @@
 
     </div>
 
-    {% if users.has_other_pages %}
-        <nav class="mt-3" aria-label="Paginación de usuarios">
-            <ul class="pagination justify-content-center mb-0">
-                {% if users.has_previous %}<li class="page-item"><a class="page-link" href="?{{ query_string.urlencode }}&page={{ users.previous_page_number }}">Anterior</a></li>{% endif %}
-                <li class="page-item active"><span class="page-link">{{ users.number }} / {{ users.paginator.num_pages }}</span></li>
-                {% if users.has_next %}<li class="page-item"><a class="page-link" href="?{{ query_string.urlencode }}&page={{ users.next_page_number }}">Siguiente</a></li>{% endif %}
-            </ul>
-        </nav>
-    {% endif %}
+    {% include "shared/catalog_pagination.html" with page_data=users page_querystring=querystring item_label="usuarios" %}
 </section>
 
 {% include "organization/_record_modal.html" with form_route="organization:user_list" %}

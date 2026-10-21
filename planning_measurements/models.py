@@ -21,6 +21,7 @@ class Period(BaseModel):
     class Meta:
         verbose_name = "Period"
         verbose_name_plural = "Periods"
+        permissions = [("delete_closed_period", "Puede archivar períodos cerrados sin historial")]
 
     class Status(models.TextChoices):
         ACTIVE = "Active", "Activo"
@@ -60,6 +61,17 @@ class Period(BaseModel):
 
     def __str__(self):
         return f"Period {self.start_date} to {self.end_date}"
+
+
+class PeriodArchiveLog(models.Model):
+    period = models.ForeignKey("planning_measurements.Period", on_delete=models.PROTECT, related_name="archive_logs")
+    user = models.ForeignKey("auth.User", on_delete=models.PROTECT, related_name="period_archive_logs")
+    archived_at = models.DateTimeField(auto_now_add=True)
+    was_closed = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = "Registro de archivado de período"
+        verbose_name_plural = "Registros de archivado de períodos"
 
 
 class Goal(BaseModel):

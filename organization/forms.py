@@ -10,8 +10,10 @@ from accounts.forms import (
     PositionForm as AccountsPositionForm,
 )
 
-from .models import Delegation, OrganizationRole, PositionFunction
+from .models import Delegation, OrganizationRole, PositionFunction, Employee
 from accounts.models import UserProfile
+from accounts.permissions import allowed_delegation_ids
+from .permission_labels import SpanishPermissionMultipleChoiceField
 
 STATUS_CHOICES = (
     ("", "Selecciona un estado"),
@@ -45,6 +47,10 @@ class OrganizationRoleForm(BootstrapMixin, forms.Form):
         max_length=150,
         min_length=3,
     )
+    description = forms.CharField(
+        label="Descripción", widget=forms.Textarea(attrs={"rows": 2}),
+        required=True, max_length=1000,
+    )
     delegations = forms.ModelMultipleChoiceField(
         label="Delegaciones de aplicación",
         queryset=Delegation.objects.filter(
@@ -53,11 +59,12 @@ class OrganizationRoleForm(BootstrapMixin, forms.Form):
         widget=forms.CheckboxSelectMultiple,
         required=True,
     )
-    permissions = forms.ModelMultipleChoiceField(
+    permissions = SpanishPermissionMultipleChoiceField(
         label="Permisos",
         queryset=Permission.objects.filter(
             content_type__app_label__in=[
                 "organization",
+                "accounts",
                 "planning_measurements",
                 "registration_validation",
                 "monitoring_traceability",
@@ -74,21 +81,87 @@ class OrganizationRoleForm(BootstrapMixin, forms.Form):
 
     def __init__(self, *args, **kwargs):
         self.group = kwargs.pop("group", None)
+        self.actor = kwargs.pop("actor", None)
+
         initial = dict(kwargs.pop("initial", {}))
-        bound_data = args[0] if args else kwargs.get("data")
-        if self.group and bound_data is None:
+
+        if self.group:
             initial.setdefault("name", self.group.name)
             initial.setdefault("permissions", self.group.permissions.all())
+
             role = OrganizationRole.objects.filter(
                 group=self.group
             ).prefetch_related("application_delegations").first()
+
             if role:
+                initial.setdefault("description", role.description)
                 initial.setdefault(
                     "delegations",
                     role.application_delegations.values_list("pk", flat=True),
                 )
+
         kwargs["initial"] = initial
         super().__init__(*args, **kwargs)
+
+        self._preserved_permission_ids = set()
+
+        if self.actor is not None and not self.actor.is_superuser:
+            owned = self.actor.get_all_permissions()
+
+            if self.group:
+                self._preserved_permission_ids = {
+                    p.pk
+                    for p in self.group.permissions.select_related("content_type")
+                    if f"{p.content_type.app_label}.{p.codename}" not in owned
+                }
+
+            permitted = [
+                (name.split(".", 1)[0], name.split(".", 1)[1])
+                for name in owned
+            ]
+
+            from django.db.models import Q
+            from functools import reduce
+            from operator import or_
+
+            lookup = [
+                Q(content_type__app_label=app, codename=code)
+                for app, code in permitted
+            ]
+
+            self.fields["permissions"].queryset = (
+                self.fields["permissions"].queryset.filter(
+                    reduce(or_, lookup)
+                )
+                if lookup
+                else self.fields["permissions"].queryset.none()
+            )
+
+            scopes = allowed_delegation_ids(
+                self.actor,
+                "organization.change_organizationrole"
+                if self.group
+                else "organization.add_organizationrole",
+                active_only=False,
+            )
+
+            self.fields["delegations"].queryset = (
+                self.fields["delegations"].queryset.filter(pk__in=scopes)
+            )
+
+            if self._preserved_permission_ids:
+                self.fields["delegations"].disabled = True
+
+                self.fields["delegations"].help_text = (
+                    "Las delegaciones quedan bloqueadas porque este rol "
+                    "tiene permisos que no puedes administrar."
+                )
+
+                self.fields["permissions"].help_text = (
+                    "Puedes modificar los permisos que posees. "
+                    "Los demás se conservarán sin cambios."
+                )
+
         self.apply_bootstrap()
 
     def clean_name(self):
@@ -115,11 +188,19 @@ class OrganizationRoleForm(BootstrapMixin, forms.Form):
             group = self.group or Group()
             group.name = self.cleaned_data["name"]
             group.save()
-            group.permissions.set(self.cleaned_data["permissions"])
+            selected = {
+                p.pk for p in self.cleaned_data["permissions"]
+            }
+
+            group.permissions.set(
+                selected | self._preserved_permission_ids
+            )
             role, _ = OrganizationRole.objects.update_or_create(
                 group=group,
                 defaults={"delegation": self.cleaned_data["delegations"].first()},
             )
+            role.description = self.cleaned_data["description"].strip()
+            role.save(update_fields=["description"])
             role.application_delegations.set(self.cleaned_data["delegations"])
         return group
 
@@ -129,28 +210,56 @@ class DelegationForm(BootstrapMixin, forms.ModelForm):
 
     class Meta:
         model = Delegation
-        fields = ["name", "scope", "status"]
+        fields = ["code", "name", "address", "commune", "scope", "responsible", "status"]
         labels = {
-            "name": "Nombre de la delegación",
-            "scope": "Ámbito",
-            "status": "Estado",
+            "code": "Código", "name": "Nombre de la delegación",
+            "address": "Dirección", "commune": "Comuna", "scope": "Ámbito",
+            "responsible": "Responsable de delegación", "status": "Estado",
         }
         widgets = {
-            "name": forms.TextInput(
-                attrs={"placeholder": "Ej. Delegación Centro"}
-            ),
-            "scope": forms.TextInput(
-                attrs={"placeholder": "Ej. Urbano o rural"}
-            ),
-            "status": forms.TextInput(
-                attrs={"placeholder": "Ej. Active"}
-            ),
+            "name": forms.TextInput(attrs={"placeholder": "Ej. Delegación Centro"}),
+            "scope": forms.TextInput(attrs={"placeholder": "Ej. Urbano o rural"}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["code"].required = True
+        self.fields["address"].required = True
+        self.fields["commune"].required = True
+        from .models import Employee
+        employees = Employee.objects.filter(deleted_at__isnull=True, status__iexact="Active")
+        if self.instance.pk:
+            employees = employees.filter(delegation=self.instance)
+            if self.instance.responsible_id:
+                employees = Employee.objects.filter(
+                    Q(pk=self.instance.responsible_id) | Q(pk__in=employees.values("pk"))
+                )
+        else:
+            employees = employees.none()  # No existe delegación aún: asignar responsable después.
+            self.fields["responsible"].help_text = (
+                "Guarda primero la delegación y luego asigna su responsable al editarla."
+            )
+        self.fields["responsible"].queryset = employees.order_by("name")
         self.apply_bootstrap()
         _configure_status_choices(self)
+
+    def clean_code(self):
+        code = self.cleaned_data["code"].strip()
+        qs = Delegation.objects.filter(code__iexact=code)
+        if self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise ValidationError("El código ya está registrado.")
+        return code
+
+    def clean(self):
+        data = super().clean()
+        responsible = data.get("responsible")
+        if responsible and (
+            not self.instance.pk or responsible.delegation_id != self.instance.pk
+        ):
+            self.add_error("responsible", "El responsable debe pertenecer a esta delegación.")
+        return data
 
     def clean_name(self):
         name = self.cleaned_data["name"].strip()
@@ -351,6 +460,14 @@ class EmployeeForm(AccountsEmployeeForm):
         profile = cleaned_data.get("user_account")
         delegation = cleaned_data.get("delegation")
 
+        if self.instance.pk and (
+            Employee.objects.filter(pk=self.instance.pk, responsible_for_delegations__isnull=False).exists()
+        ):
+            if delegation and delegation.pk != self.instance.delegation_id:
+                self.add_error("delegation", "Este empleado es responsable de una delegación; cambia primero el responsable.")
+            if cleaned_data.get("status") not in ("Active", "Activo"):
+                self.add_error("status", "Primero cambia el responsable de la delegación.")
+
         existing_profile = None
 
         if self.instance.pk:
@@ -369,7 +486,7 @@ class EmployeeForm(AccountsEmployeeForm):
             )
 
         if profile and delegation:
-            if profile.delegation_id != delegation.pk:
+            if not profile.authorized_delegations.filter(pk=delegation.pk).exists() and profile.delegation_id != delegation.pk:
                 self.add_error(
                     "user_account",
                     "La cuenta debe pertenecer "

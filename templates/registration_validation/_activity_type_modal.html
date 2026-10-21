@@ -1,6 +1,6 @@
 {% if open_modal %}
 
-<div class="modal fade"
+<div class="modal fade sgr-upgraded-modal"
      id="activityTypeModal"
      tabindex="-1"
      aria-labelledby="activityTypeModalLabel"
@@ -16,7 +16,9 @@
 
                 <div class="modal-header">
 
-                    <h5 class="modal-title fw-bold"
+                    <div class="sgr-modal-title-block">
+                        <div class="sgr-modal-eyebrow"><i class="bi bi-shield-check me-2" aria-hidden="true"></i>REGISTRO Y VALIDACIÓN</div>
+                        <h5 class="modal-title fw-bold"
                         id="activityTypeModalLabel">
 
                         {% if object %}
@@ -26,6 +28,8 @@
                         {% endif %}
 
                     </h5>
+                        <p class="sgr-modal-subtitle mb-0">Consulta o completa la información del registro de forma segura.</p>
+                    </div>
 
                     <a
                         href="{% url 'registration:activity_type_list' %}"
@@ -36,6 +40,7 @@
                 </div>
 
                 <div class="modal-body">
+                    <div class="sgr-form-section-title"><span class="sgr-section-icon"><i class="bi bi-card-list" aria-hidden="true"></i></span><span>Datos del tipo de actividad</span></div>
 
                     {% if form.non_field_errors %}
                         <div class="alert alert-danger">

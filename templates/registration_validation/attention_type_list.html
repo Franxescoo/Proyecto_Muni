@@ -71,9 +71,9 @@
 
 
     <!-- Listado -->
-    <section class="section-card p-3 p-lg-4">
+    <section class="section-card p-3 p-lg-4 sgr-catalog">
 
-        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+        <div class="catalog-toolbar">
 
             <div>
                 <h2 class="h5 mb-1 fw-bold">
@@ -86,10 +86,11 @@
                 </p>
             </div>
 
+            <div class="catalog-toolbar-actions">
             {% if perms.registration_validation.add_attentiontype %}
 
             <a href="{% url 'registration:attention_type_create' %}"
-               class="btn btn-outline-secondary btn-sm">
+               class="btn btn-success">
 
                 <i class="bi bi-plus-lg me-1"></i>
                 Agregar tipo de atención
@@ -98,12 +99,14 @@
 
             {% endif %}
 
+            <a href="{% url 'registration:attention_type_export' %}?{{ request.GET.urlencode }}" class="btn btn-outline-secondary"><i class="bi bi-file-earmark-excel me-1"></i>Exportar Excel</a>
+            </div>
         </div>
 
 
         <!-- Filtros -->
         <form method="get"
-              class="row g-3 align-items-end mb-3">
+              class="row g-3 align-items-end catalog-filters">
 
             <div class="col-12 col-md-5">
 
@@ -177,52 +180,9 @@
         </form>
 
 
-        <!-- Registros por página -->
         {% if not open_modal %}
-
-        <form method="post"
-              action="{% url 'registration:set_page_size' %}"
-              class="d-flex flex-wrap align-items-center gap-2 mb-3">
-
-            {% csrf_token %}
-
-            <input type="hidden"
-                   name="next"
-                   value="{{ request.get_full_path }}">
-
-            <label for="attention-type-page-size"
-                   class="form-label mb-0 small text-muted">
-
-                Registros por página
-
-            </label>
-
-            <select id="attention-type-page-size"
-                    name="page_size"
-                    class="form-select form-select-sm w-auto">
-
-                {% for size in page_size_options %}
-
-                <option value="{{ size }}"
-                        {% if size == page_size %}selected{% endif %}>
-
-                    {{ size }}
-
-                </option>
-
-                {% endfor %}
-
-            </select>
-
-            <button type="submit"
-                    class="btn btn-secondary btn-sm">
-                Guardar preferencia
-            </button>
-
-        </form>
-
+            {% include "shared/catalog_page_size.html" with page_size_url="registration:set_page_size" page_size_id="tipos-atencion" %}
         {% endif %}
-
 
         <!-- Tabla -->
         <div class="table-responsive">
@@ -289,7 +249,7 @@
 
                                 <i class="bi bi-pencil"></i>
 
-                                <span class="d-none d-xl-inline ms-1">
+                                <span class="ms-1">
                                     Modificar
                                 </span>
 
@@ -320,7 +280,7 @@
 
                                 <i class="bi bi-trash"></i>
 
-                                <span class="d-none d-xl-inline ms-1">
+                                <span class="ms-1">
                                     Eliminar
                                 </span>
 
@@ -359,62 +319,8 @@
         </div>
 
 
-        <!-- Paginación -->
-        {% if is_paginated %}
-
-        <nav class="mt-4"
-             aria-label="Paginación de tipos de atención">
-
-            <ul class="pagination justify-content-center mb-0">
-
-                {% if page_obj.has_previous %}
-
-                <li class="page-item">
-
-                    <a class="page-link"
-                       href="?page={{ page_obj.previous_page_number }}&q={{ query|urlencode }}&status={{ selected_status|urlencode }}">
-
-                        Anterior
-
-                    </a>
-
-                </li>
-
-                {% endif %}
-
-
-                <li class="page-item active">
-
-                    <span class="page-link">
-
-                        {{ page_obj.number }}
-                        de
-                        {{ page_obj.paginator.num_pages }}
-
-                    </span>
-
-                </li>
-
-
-                {% if page_obj.has_next %}
-
-                <li class="page-item">
-
-                    <a class="page-link"
-                       href="?page={{ page_obj.next_page_number }}&q={{ query|urlencode }}&status={{ selected_status|urlencode }}">
-
-                        Siguiente
-
-                    </a>
-
-                </li>
-
-                {% endif %}
-
-            </ul>
-
-        </nav>
-
+        {% if not open_modal %}
+            {% include "shared/catalog_pagination.html" with page_data=page_obj page_querystring=page_querystring item_label="tipos de atención" %}
         {% endif %}
 
     </section>

@@ -29,17 +29,7 @@
                 </p>
             </div>
 
-            {% if perms.registration_validation.add_subattention %}
 
-            <a href="{% url 'registration:sub_attention_create' %}"
-               class="btn btn-light fw-semibold">
-
-                <i class="bi bi-plus-lg me-2"></i>
-                Agregar subatención
-
-            </a>
-
-            {% endif %}
 
         </div>
 
@@ -101,11 +91,9 @@
          LISTADO Y FILTROS
          ====================================== -->
 
-    <section class="section-card p-3 p-md-4">
+    <section class="section-card p-3 p-md-4 sgr-catalog">
 
-        <div class="d-flex flex-column flex-md-row
-                    justify-content-between align-items-md-center
-                    gap-2 mb-4">
+        <div class="catalog-toolbar">
 
             <div>
                 <h2 class="h5 fw-bold mb-1">
@@ -117,6 +105,10 @@
                 </p>
             </div>
 
+            <div class="catalog-toolbar-actions">
+                {% if perms.registration_validation.add_subattention %}<a href="{% url 'registration:sub_attention_create' %}" class="btn btn-success"><i class="bi bi-plus-lg me-1"></i>Crear subatención</a>{% endif %}
+                <a href="{% url 'registration:sub_attention_export' %}?{{ request.GET.urlencode }}" class="btn btn-outline-secondary"><i class="bi bi-file-earmark-excel me-1"></i>Exportar Excel</a>
+            </div>
         </div>
 
 
@@ -124,9 +116,9 @@
 
         <form method="get"
               action="{% url 'registration:sub_attention_list' %}"
-              class="row g-3 align-items-end mb-4">
+              class="row g-3 align-items-end catalog-filters">
 
-            <div class="col-12 col-lg-6">
+            <div class="col-12 col-lg-3">
 
                 <label for="searchSubAttention"
                        class="filter-label">
@@ -142,6 +134,14 @@
                     placeholder="Buscar por código, nombre o tipo de atención"
                 >
 
+            </div>
+
+            <div class="col-12 col-md-4 col-lg-3">
+                <label for="sub-attention-type" class="filter-label">Tipo de atención</label>
+                <select id="sub-attention-type" name="attention_type" class="form-select">
+                    <option value="">Todos los tipos</option>
+                    {% for type_option in attention_type_options %}<option value="{{ type_option.pk }}" {% if selected_type == type_option.pk|stringformat:"s" %}selected{% endif %}>{{ type_option.name }}</option>{% endfor %}
+                </select>
             </div>
 
             <div class="col-12 col-md-5 col-lg-3">
@@ -181,10 +181,10 @@
 
                     <button
                         type="submit"
-                        class="btn btn-danger flex-fill"
+                        class="btn btn-dark flex-fill"
                     >
-                        <i class="bi bi-search me-1"></i>
-                        Buscar
+                        <i class="bi bi-funnel me-1"></i>
+                        Filtrar
                     </button>
 
                     <a
@@ -193,7 +193,7 @@
                         title="Limpiar filtros"
                         aria-label="Limpiar filtros"
                     >
-                        <i class="bi bi-arrow-clockwise"></i>
+                        Limpiar
                     </a>
 
                 </div>
@@ -203,72 +203,9 @@
         </form>
 
 
-        <!-- Preferencia de registros por página -->
-
-        <div class="d-flex flex-wrap justify-content-between
-                    align-items-center gap-3 mb-3">
-
-            <div class="text-muted small">
-                Subatenciones encontradas:
-                <strong>
-                    {% if paginator %}
-                        {{ paginator.count }}
-                    {% else %}
-                        {{ sub_attentions|length }}
-                    {% endif %}
-                </strong>
-            </div>
-
-            <form
-                method="post"
-                action="{% url 'registration:set_page_size' %}"
-                class="d-flex align-items-center gap-2"
-            >
-
-                {% csrf_token %}
-
-                <input
-                    type="hidden"
-                    name="next"
-                    value="{{ request.get_full_path }}"
-                >
-
-                <label
-                    for="subAttentionPageSize"
-                    class="small text-muted mb-0"
-                >
-                    Mostrar
-                </label>
-
-                <select
-                    id="subAttentionPageSize"
-                    name="page_size"
-                    class="form-select form-select-sm"
-                    style="width: auto;"
-                    onchange="this.form.submit()"
-                >
-
-                    {% for size in page_size_options %}
-
-                    <option
-                        value="{{ size }}"
-                        {% if page_size == size %}selected{% endif %}
-                    >
-                        {{ size }}
-                    </option>
-
-                    {% endfor %}
-
-                </select>
-
-                <span class="small text-muted">
-                    registros
-                </span>
-
-            </form>
-
-        </div>
-
+        {% if not open_modal %}
+            {% include "shared/catalog_page_size.html" with page_size_url="registration:set_page_size" page_size_id="subatenciones" %}
+        {% endif %}
 
         <!-- ======================================
              TABLA DE SUBATENCIONES
@@ -375,11 +312,11 @@
 
                                 <a
                                     href="{% url 'registration:sub_attention_update' sub_attention.sub_attention_id %}"
-                                    class="btn btn-sm btn-outline-primary"
+                                    class="btn btn-sm btn-light border"
                                     title="Modificar subatención"
                                 >
                                     <i class="bi bi-pencil-square"></i>
-                                    <span class="d-none d-xl-inline ms-1">
+                                    <span class="ms-1">
                                         Modificar
                                     </span>
                                 </a>
@@ -404,7 +341,7 @@
                                         data-name="{{ sub_attention.name }}"
                                     >
                                         <i class="bi bi-trash"></i>
-                                        <span class="d-none d-xl-inline ms-1">
+                                        <span class="ms-1">
                                             Eliminar
                                         </span>
                                     </button>
@@ -455,80 +392,8 @@
         </div>
 
 
-        <!-- ======================================
-             PAGINACIÓN
-             ====================================== -->
-
-        {% if is_paginated %}
-
-        <nav aria-label="Paginación de subatenciones"
-             class="mt-4">
-
-            <ul class="pagination justify-content-center
-                       flex-wrap mb-0">
-
-                <!-- Página anterior -->
-
-                {% if page_obj.has_previous %}
-
-                <li class="page-item">
-                    <a
-                        class="page-link"
-                        href="?page={{ page_obj.previous_page_number }}&amp;q={{ query|urlencode }}&amp;status={{ selected_status|urlencode }}"
-                    >
-                        Anterior
-                    </a>
-                </li>
-
-                {% else %}
-
-                <li class="page-item disabled">
-                    <span class="page-link">
-                        Anterior
-                    </span>
-                </li>
-
-                {% endif %}
-
-
-                <!-- Página actual -->
-
-                <li class="page-item active">
-                    <span class="page-link">
-                        {{ page_obj.number }}
-                        de
-                        {{ paginator.num_pages }}
-                    </span>
-                </li>
-
-
-                <!-- Página siguiente -->
-
-                {% if page_obj.has_next %}
-
-                <li class="page-item">
-                    <a
-                        class="page-link"
-                        href="?page={{ page_obj.next_page_number }}&amp;q={{ query|urlencode }}&amp;status={{ selected_status|urlencode }}"
-                    >
-                        Siguiente
-                    </a>
-                </li>
-
-                {% else %}
-
-                <li class="page-item disabled">
-                    <span class="page-link">
-                        Siguiente
-                    </span>
-                </li>
-
-                {% endif %}
-
-            </ul>
-
-        </nav>
-
+        {% if not open_modal %}
+            {% include "shared/catalog_pagination.html" with page_data=page_obj page_querystring=page_querystring item_label="subatenciones" %}
         {% endif %}
 
     </section>
@@ -545,7 +410,7 @@
 {% if open_modal %}
 
 <div
-    class="modal fade"
+    class="modal fade sgr-upgraded-modal"
     id="subAttentionModal"
     tabindex="-1"
     aria-labelledby="subAttentionModalLabel"
@@ -565,7 +430,9 @@
 
                 <div class="modal-header">
 
-                    <h2
+                    <div class="sgr-modal-title-block">
+                        <div class="sgr-modal-eyebrow"><i class="bi bi-shield-check me-2" aria-hidden="true"></i>REGISTRO Y VALIDACIÓN</div>
+                        <h2
                         class="modal-title fs-5 fw-bold"
                         id="subAttentionModalLabel"
                     >
@@ -583,6 +450,8 @@
                         {% endif %}
 
                     </h2>
+                        <p class="sgr-modal-subtitle mb-0">Consulta o completa la información del registro de forma segura.</p>
+                    </div>
 
                     <a
                         href="{% url 'registration:sub_attention_list' %}"
@@ -596,6 +465,7 @@
                 <!-- Campos del formulario -->
 
                 <div class="modal-body">
+                    <div class="sgr-form-section-title"><span class="sgr-section-icon"><i class="bi bi-card-list" aria-hidden="true"></i></span><span>Datos de la subatención</span></div>
 
                     <p class="text-muted small mb-4">
                         Completa los campos para registrar

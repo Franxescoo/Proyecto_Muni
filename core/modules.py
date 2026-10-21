@@ -40,14 +40,14 @@ MODULES = [
     {
         "title": "Organización",
         "cards": [
-            {"title": "Funcionarios", "icon": "bi-people",
+            {"title": "Empleados", "icon": "bi-people",
              "url": "organization:employee_list",
              "perm": "organization.view_employee"},
              {
                 "title": "Usuarios",
                 "icon": "bi-person-gear",
                 "url": "organization:user_list",
-                "admin_only": True,
+                "perm": "accounts.view_userprofile",
             },
             {"title": "Delegaciones", "icon": "bi-building",
              "url": "organization:delegation_list",
@@ -57,7 +57,7 @@ MODULES = [
              "perm": "organization.view_positionfunction"},
               {"title": "Roles y Permisos", "icon": "bi-shield-lock",
              "url": "organization:role_list",
-               "admin_only": True},
+               "perm": "organization.view_organizationrole"},
         ],
     },
     {

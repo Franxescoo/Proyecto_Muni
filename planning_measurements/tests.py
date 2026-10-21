@@ -505,7 +505,7 @@ class PlanningTests(TestCase):
             404,
         )
 
-    def test_delete_permissions_allow_archiving_without_superuser(self):
+    def test_delete_permission_archives_goal_but_preserves_period_history(self):
         # Con el permiso explícito de eliminación,
         # el usuario puede archivar registros.
 
@@ -543,16 +543,11 @@ class PlanningTests(TestCase):
             )
         )
 
-        self.assertEqual(
-            response.status_code,
-            302,
-        )
-
+        # El historial de la meta archivada sigue vinculado al período;
+        # por seguridad no se permite archivar ese período.
+        self.assertEqual(response.status_code, 403)
         self.period.refresh_from_db()
-
-        self.assertIsNotNone(
-            self.period.deleted_at,
-        )
+        self.assertIsNone(self.period.deleted_at)
 
     def test_archived_period_hides_and_blocks_goals(self):
         user = self.account(

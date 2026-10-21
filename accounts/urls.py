@@ -1,10 +1,12 @@
 from django.urls import path
 
 from . import views
+from .delegation_context import change_active_delegation
 
 app_name = "accounts"
 
 urlpatterns = [
+    path("delegation/activate/", change_active_delegation, name="change_active_delegation"),
     path(
         "manage/",
         views.access_home,

@@ -226,7 +226,7 @@
 
             {% if perms.planning_measurements.add_period %}
             <a href="{% url 'planning:period_create' %}"
-               class="btn btn-outline-secondary btn-sm">
+               class="btn btn-success">
                 <i class="bi bi-plus-lg me-1"></i>
                 Agregar período
             </a>
@@ -352,6 +352,7 @@
                                        class="form-check-input sel"
                                        name="_selected_action"
                                        value="{{ period.pk }}"
+                                       {% if period.status == 'Closed' and not can_archive_closed_period %}disabled title="Requiere permiso individual"{% endif %}
                                        aria-label="Seleccionar período {{ period.pk }}">
                             </td>
                             {% endif %}
@@ -431,12 +432,14 @@
 
                                     <!-- ELIMINAR -->
                                     {% if perms.planning_measurements.delete_period %}
+                                    {% if period.status != 'Closed' or can_archive_closed_period %}
                                     <a href="{% url 'planning:period_delete' period.period_id %}"
                                        class="btn btn-sm btn-outline-danger"
                                        data-swal-delete="período">
                                         <i class="bi bi-trash me-1"></i>
                                         Eliminar
                                     </a>
+                                    {% endif %}
                                     {% endif %}
 
                                 </div>
@@ -458,16 +461,8 @@
         </form>
 
 
-        <!-- PAGINACIÓN -->
-        <div class="d-flex flex-wrap justify-content-between align-items-center mt-3 gap-2">
-
-            <p class="text-muted small mb-0">
-                {{ page.paginator.count }} período(s) encontrado(s)
-            </p>
-
-            {% include "planning/_pagination.html" %}
-
-        </div>
+        <!-- Misma paginación visible de los mantenedores (incluye Anterior y Siguiente). -->
+        {% include "shared/catalog_pagination.html" with page_data=page page_querystring=querystring item_label="períodos" %}
 
     </section>
 

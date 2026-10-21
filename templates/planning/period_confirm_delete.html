@@ -12,8 +12,7 @@
             {% if goals_count %}<br><small>Tiene {{ goals_count }} meta(s) asociada(s).</small>{% endif %}
         </div>
         <p class="text-muted">
-            Las metas asociadas se conservarán en la base de datos,
-            pero dejarán de aparecer y de estar disponibles para edición.
+            Por seguridad, únicamente se archivan períodos sin ninguna meta histórica. La operación registra al usuario responsable.
         </p>
         <form method="post">
             {% csrf_token %}

@@ -3,7 +3,7 @@
 <div class="row g-3 align-items-end mb-3">
     <div class="col-12 col-md-4">
         <div class="organization-photo-preview mb-2" id="employee-photo-preview" aria-label="Vista previa de foto de perfil">
-            {% if form.instance.profile_photo %}<img src="{{ form.instance.profile_photo.url }}" alt="Foto actual del funcionario">{% else %}<i class="bi bi-person-circle" aria-hidden="true"></i><img alt="Vista previa de foto" hidden>{% endif %}
+            {% if form.instance.profile_photo %}<img src="{{ form.instance.profile_photo.url }}" alt="Foto actual del empleado">{% else %}<i class="bi bi-person-circle" aria-hidden="true"></i><img alt="Vista previa de foto" hidden>{% endif %}
         </div>
         <label class="form-label fw-semibold" for="{{ form.profile_photo.id_for_label }}">{{ form.profile_photo.label }}</label>
         {{ form.profile_photo }}
@@ -22,7 +22,7 @@
     {% for field in form %}
         {% if not form.profile_photo or field.name != 'profile_photo' and field.name != 'name' %}
 
-            <div class="{% if field.name == 'roles' or field.name == 'assigned_groups' or field.name == 'permissions' or field.name == 'measurable_items' or field.name == 'services' or field.name == 'catalog_services' or field.name == 'catalog_items' or field.name == 'weightings' %}col-12{% else %}col-12 col-md-6{% endif %}">
+            <div class="{% if field.name == 'roles' or field.name == 'authorized_delegations' or field.name == 'delegations' or field.name == 'assigned_groups' or field.name == 'permissions' or field.name == 'measurable_items' or field.name == 'services' or field.name == 'catalog_services' or field.name == 'catalog_items' or field.name == 'weightings' %}col-12{% else %}col-12 col-md-6{% endif %}">
 
                 <label
                     class="form-label fw-semibold"
@@ -36,7 +36,7 @@
 
                 </label>
 
-                {% if field.name == 'assigned_groups' or field.name == 'permissions' or field.name == 'groups' or field.name == 'catalog_services' or field.name == 'catalog_items'%}
+                {% if field.name == 'authorized_delegations' or field.name == 'delegations' or field.name == 'assigned_groups' or field.name == 'permissions' or field.name == 'groups' or field.name == 'catalog_services' or field.name == 'catalog_items'%}
 
                     <div class="organization-choice-list">
                         {{ field }}

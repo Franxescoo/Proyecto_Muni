@@ -45,7 +45,7 @@ def administrator_required(view):
 
 @administrator_required
 def access_home(request):
-    """Muestra grupos, cargos, funcionarios y cuentas."""
+    """Muestra grupos, cargos, empleados y cuentas."""
 
     return render(
         request,
@@ -148,7 +148,7 @@ def position_form(request, pk=None):
 
 @administrator_required
 def employee_form(request, pk=None):
-    """Crea o edita un funcionario y sincroniza su delegación."""
+    """Crea o edita un empleado y sincroniza su delegación."""
 
     employee = (
         get_object_or_404(
@@ -168,7 +168,7 @@ def employee_form(request, pk=None):
     return save_model_form(
         request,
         form,
-        "Editar funcionario" if pk is not None else "Crear funcionario",
+        "Editar empleado" if pk is not None else "Crear empleado",
         on_save=sync_employee,
     )
 
@@ -176,7 +176,7 @@ def employee_form(request, pk=None):
 
 @administrator_required
 def account_create(request):
-    """Crea una cuenta heredando los roles del funcionario."""
+    """Crea una cuenta heredando los roles del empleado."""
 
     form = AccountCreateForm(
         request.POST if request.method == "POST" else None
@@ -190,7 +190,7 @@ def account_create(request):
             form.add_error(
                 None,
                 "No se pudo crear la cuenta. "
-                "El usuario, código o funcionario "
+                "El usuario, código o empleado "
                 "podría estar registrado."
             )
 
@@ -244,7 +244,7 @@ def sync_profile_access(profile):
 
 @administrator_required
 def profile_link(request, pk):
-    """Vincula un perfil existente con un funcionario."""
+    """Vincula un perfil existente con un empleado."""
 
     profile = get_object_or_404(
         UserProfile,
