@@ -1,7 +1,11 @@
+import json
+import os
 import secrets
+import subprocess
 from datetime import timedelta
 
 from django.contrib.auth.hashers import check_password, make_password
+from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 from django.utils import timezone
@@ -42,6 +46,15 @@ def send_recovery_code(request, user, code):
         "registration/password_recovery_code.html",
         context,
     )
+    if settings.MAILER_BACKEND == "phpmailer":
+        _send_with_phpmailer(
+            user.email,
+            subject,
+            text_body,
+            html_body,
+        )
+        return
+
     message = EmailMultiAlternatives(
         subject,
         text_body,
@@ -51,6 +64,28 @@ def send_recovery_code(request, user, code):
     )
     message.attach_alternative(html_body, "text/html")
     message.send()
+
+
+def _send_with_phpmailer(recipient, subject, text_body, html_body):
+    payload = json.dumps({
+        "to": recipient,
+        "subject": subject,
+        "text": text_body,
+        "html": html_body,
+    })
+    environment = os.environ.copy()
+    result = subprocess.run(
+        [settings.PHPMAILER_PHP, settings.PHPMAILER_SCRIPT],
+        input=payload,
+        text=True,
+        capture_output=True,
+        timeout=30,
+        check=False,
+        env=environment,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or "No se recibió detalle del error."
+        raise RuntimeError(f"No se pudo enviar el correo con PHPMailer: {detail}")
 
 
 def valid_recovery_code(recovery, code):

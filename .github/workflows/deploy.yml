@@ -45,6 +45,9 @@ jobs:
           set -e
 
           cd /home/ec2-user/Proyecto_Muni
+          set -a
+          [ -f .env ] && . ./.env
+          set +a
 
           # Comprobar que no hay modificaciones locales
           git diff --quiet
@@ -56,6 +59,13 @@ jobs:
 
           # Instalar dependencias de AWS
           .venv/bin/python -m pip install -r requirements-aws.txt
+
+          # Instalar PHPMailer con Composer cuando el entorno lo habilite
+          if [ "${MAILER_BACKEND:-django}" = "phpmailer" ]; then
+            command -v php >/dev/null
+            command -v composer >/dev/null
+            composer install --no-dev --prefer-dist --optimize-autoloader
+          fi
 
           # Comprobar Django
           .venv/bin/python manage.py check

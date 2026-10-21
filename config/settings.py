@@ -168,6 +168,12 @@ DEFAULT_FROM_EMAIL = os.getenv(
     "DEFAULT_FROM_EMAIL",
     EMAIL_HOST_USER or "webmaster@localhost",
 )
+MAILER_BACKEND = os.getenv("MAILER_BACKEND", "django").lower()
+PHPMAILER_PHP = os.getenv("PHPMAILER_PHP", "php")
+PHPMAILER_SCRIPT = os.getenv(
+    "PHPMAILER_SCRIPT",
+    str(BASE_DIR / "phpmailer" / "send_recovery.php"),
+)
 PASSWORD_RESET_DOMAIN = os.getenv("PASSWORD_RESET_DOMAIN", "127.0.0.1:8000")
 PASSWORD_RESET_SITE_NAME = os.getenv(
     "PASSWORD_RESET_SITE_NAME",
