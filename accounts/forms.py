@@ -1,10 +1,16 @@
 from django import forms
 from django.contrib.auth import get_user_model
-from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
+from django.contrib.auth.forms import (
+    AuthenticationForm,
+    PasswordResetForm,
+    UserCreationForm,
+)
+from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth.models import Group, Permission
 from organization.permission_labels import SpanishPermissionMultipleChoiceField
 from accounts.permissions import allowed_delegation_ids
 from django.db.models import Q
+from django.conf import settings
 
 from organization.models import (
     Delegation,
@@ -45,6 +51,38 @@ class UsuarioOCorreoAuthenticationForm(AuthenticationForm):
                     self.cleaned_data["username"] = coincidencias[0]
 
         return super().clean()
+
+
+class InstitutionalPasswordResetForm(PasswordResetForm):
+    """Envía enlaces con el dominio público configurado para cada entorno."""
+
+    def save(self, *, use_https=False, token_generator=None,
+             from_email=None, request=None, html_email_template_name=None,
+             extra_email_context=None, subject_template_name=None,
+             email_template_name="registration/password_reset_email.txt",
+             domain_override=None):
+        return super().save(
+            use_https=use_https or settings.PASSWORD_RESET_USE_HTTPS,
+            token_generator=token_generator or default_token_generator,
+            from_email=from_email,
+            request=request,
+            html_email_template_name=(
+                html_email_template_name
+                or "registration/password_reset_email.html"
+            ),
+            extra_email_context={
+                "site_name": settings.PASSWORD_RESET_SITE_NAME,
+                **(extra_email_context or {}),
+            },
+            subject_template_name=(
+                subject_template_name
+                or "registration/password_reset_subject.txt"
+            ),
+            email_template_name=email_template_name,
+            domain_override=(
+                domain_override or settings.PASSWORD_RESET_DOMAIN
+            ),
+        )
 
 class BootstrapMixin:
     """Aplica estilos de Bootstrap a los formularios."""

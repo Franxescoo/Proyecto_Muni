@@ -49,6 +49,11 @@ SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "django-insecure-solo-desarrollo-loc
 DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() == "true"
 
 ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",")
+    if origin.strip()
+]
 
 
 # Application definition
@@ -153,11 +158,33 @@ MEDIA_ROOT = BASE_DIR / "media"
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
 
-MAILERS = {
-    'default': {
-        'BACKEND': 'django.core.mail.backends.console.EmailBackend',
-    },
-}
+EMAIL_HOST = os.getenv("EMAIL_HOST", "")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True").lower() == "true"
+EMAIL_USE_SSL = os.getenv("EMAIL_USE_SSL", "False").lower() == "true"
+DEFAULT_FROM_EMAIL = os.getenv(
+    "DEFAULT_FROM_EMAIL",
+    EMAIL_HOST_USER or "webmaster@localhost",
+)
+PASSWORD_RESET_DOMAIN = os.getenv("PASSWORD_RESET_DOMAIN", "127.0.0.1:8000")
+PASSWORD_RESET_SITE_NAME = os.getenv(
+    "PASSWORD_RESET_SITE_NAME",
+    "Municipalidad de La Serena",
+)
+PASSWORD_RESET_USE_HTTPS = (
+    os.getenv("PASSWORD_RESET_USE_HTTPS", "False").lower() == "true"
+)
+if os.getenv("DJANGO_BEHIND_PROXY", "False").lower() == "true":
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# Use SMTP when credentials are configured; keep console output for local
+# development without credentials.
+if EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "home"
