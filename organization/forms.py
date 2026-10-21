@@ -11,6 +11,7 @@ from accounts.forms import (
 )
 
 from .models import Delegation, OrganizationRole, PositionFunction
+from accounts.models import UserProfile
 
 STATUS_CHOICES = (
     ("", "Selecciona un estado"),
@@ -161,15 +162,52 @@ class DelegationForm(BootstrapMixin, forms.ModelForm):
             )
         return scope
 
+class AccountRolePreviewSelect(forms.Select):
+    def create_option(
+        self, name, value, label, selected,
+        index, subindex=None, attrs=None
+    ):
+        option = super().create_option(
+            name, value, label, selected,
+            index, subindex, attrs
+        )
+
+        if value and hasattr(value, "instance"):
+            profile = value.instance
+
+            option["attrs"]["data-roles"] = ", ".join(
+                group.name
+                for group in profile.user.groups.all()
+            )
+
+            option["attrs"]["data-delegation"] = str(
+                profile.delegation_id or ""
+            )
+
+        return option
+
 
 class EmployeeForm(AccountsEmployeeForm):
-    status = forms.ChoiceField(choices=STATUS_CHOICES, label="Estado")
-    assigned_groups = forms.ModelMultipleChoiceField(
-        label="Roles asignados",
-        queryset=Group.objects.order_by("name"),
-        widget=forms.CheckboxSelectMultiple,
+    status = forms.ChoiceField(
+        choices=STATUS_CHOICES,
+        label="Estado",
+    )
+
+    user_account = forms.ModelChoiceField(
+        label="Cuenta de usuario",
+        queryset=UserProfile.objects.none(),
+        widget=AccountRolePreviewSelect(),
         required=False,
-        help_text="Los permisos de estos roles se aplican a la cuenta vinculada.",
+        help_text="Selecciona una cuenta para vincular al funcionario.",
+    )
+
+    assigned_roles_display = forms.CharField(
+        label="Roles del usuario (automático)",
+        required=False,
+        disabled=True,
+        widget=forms.TextInput(
+            attrs={"readonly": "readonly"}
+        ),
     )
 
     class Meta(AccountsEmployeeForm.Meta):
@@ -179,78 +217,151 @@ class EmployeeForm(AccountsEmployeeForm):
             "position",
             "roles",
             "status",
-            "assigned_groups",
+            "user_account",
+            "assigned_roles_display",
             "profile_photo",
         ]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
         _configure_status_choices(self)
-        self.fields["profile_photo"].help_text = "Opcional. PNG, JPG o WebP."
-        self.fields["profile_photo"].widget.attrs.update(
-            {
-                "accept": "image/png,image/jpeg,image/webp",
-                "data-profile-photo-input": "",
-            }
+
+        self.fields["profile_photo"].help_text = (
+            "Opcional. PNG, JPG o WebP."
         )
+
+        self.fields["profile_photo"].widget.attrs.update({
+            "accept": "image/png,image/jpeg,image/webp",
+            "data-profile-photo-input": "",
+        })
+
+        # Cuentas activas disponibles para vincular.
+        available = UserProfile.objects.filter(
+            deleted_at__isnull=True,
+            user__is_superuser=False,
+        )
+
         if self.instance.pk:
-            current_group_ids = self.instance.assigned_groups.values_list(
-                "pk", flat=True
+            available = available.filter(
+                Q(employee__isnull=True, user__is_active=True)
+                | Q(employee=self.instance)
             )
-            self.fields["assigned_groups"].queryset = Group.objects.filter(
-                Q(organization_role__delegation_id=self.instance.delegation_id)
-                | Q(pk__in=current_group_ids)
-            ).order_by("name")
         else:
-            self.fields["assigned_groups"].queryset = Group.objects.filter(
-                organization_role__isnull=False
-            ).select_related(
-                "organization_role__delegation"
-            ).order_by(
-                "organization_role__delegation__name",
-                "name",
+            available = available.filter(
+                employee__isnull=True,
+                user__is_active=True,
             )
+
+        self.fields["user_account"].queryset = (
+            available
+            .select_related("user", "delegation")
+            .prefetch_related("user__groups")
+            .order_by("user__username")
+        )
+
+        self.fields["user_account"].label_from_instance = (
+            lambda profile: (
+                f"{profile.user.username} "
+                f"({profile.employee_code})"
+            )
+        )
+
+        # Cuenta ya vinculada al funcionario.
+        current_profile = None
+
+        if self.instance.pk:
+            current_profile = UserProfile.objects.filter(
+                employee=self.instance,
+                deleted_at__isnull=True,
+            ).first()
+
+        if current_profile:
+            self.fields["user_account"].initial = current_profile.pk
+
+        selected_id = (
+            self.data.get(self.add_prefix("user_account"))
+            if self.is_bound
+            else (
+                current_profile.pk
+                if current_profile
+                else None
+            )
+        )
+
+        selected_profile = None
+
+        if selected_id and str(selected_id).isdigit():
+            selected_profile = (
+                self.fields["user_account"]
+                .queryset.filter(pk=selected_id)
+                .first()
+            )
+
+        if selected_profile:
+            self.fields["assigned_roles_display"].initial = (
+                ", ".join(
+                    group.name
+                    for group in selected_profile.user.groups.all()
+                )
+            )
+
+        self.apply_bootstrap()
 
     def clean_name(self):
         name = self.cleaned_data["name"].strip()
+
         if len(name) < 2:
             raise ValidationError(
                 "El nombre debe tener al menos 2 caracteres."
             )
+
         return name
 
     def clean_roles(self):
         roles = self.cleaned_data["roles"].strip()
+
         if len(roles) < 3:
             raise ValidationError(
-                "La descripción de funciones debe tener al menos 3 caracteres."
+                "La descripción de funciones debe tener "
+                "al menos 3 caracteres."
             )
+
         return roles
 
-    def clean_assigned_groups(self):
-        groups = self.cleaned_data["assigned_groups"]
-        delegation = self.cleaned_data.get("delegation")
-        if delegation is None:
-            return groups
+    def clean(self):
+        cleaned_data = super().clean()
 
-        existing_ids = set()
+        profile = cleaned_data.get("user_account")
+        delegation = cleaned_data.get("delegation")
+
+        existing_profile = None
+
         if self.instance.pk:
-            existing_ids = set(
-                self.instance.assigned_groups.values_list("pk", flat=True)
+            existing_profile = UserProfile.objects.filter(
+                employee=self.instance,
+                deleted_at__isnull=True,
+            ).first()
+
+        if existing_profile and (
+            profile is None
+            or profile.pk != existing_profile.pk
+        ):
+            self.add_error(
+                "user_account",
+                "No se puede quitar ni cambiar una cuenta ya vinculada.",
             )
 
-        for group in groups:
-            role = OrganizationRole.objects.filter(group=group).first()
-            if role is None:
-                if group.pk not in existing_ids:
-                    raise ValidationError(
-                        "Asigna primero este rol a una delegación."
-                    )
-            elif role.delegation_id != delegation.pk:
-                raise ValidationError(
-                    "Solo puedes asignar roles de la delegación del funcionario."
+        if profile and delegation:
+            if profile.delegation_id != delegation.pk:
+                self.add_error(
+                    "user_account",
+                    "La cuenta debe pertenecer "
+                    "a la misma delegación.",
                 )
-        return groups
+
+        return cleaned_data
+
 
 
 class PositionForm(AccountsPositionForm):

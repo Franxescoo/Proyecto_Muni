@@ -1,0 +1,319 @@
+{% extends "registration_validation/base.html" %}
+
+{% block titulo %}
+Tipos de actividad · Registro y validación
+{% endblock %}
+
+{% block contenido %}
+
+<div class="registration-shell pb-4">
+
+    <section class="registration-hero mb-4">
+        <h1 class="fw-bold mb-2">Tipos de actividad</h1>
+        <p class="mb-0">
+            Administración del catálogo de tipos de actividad.
+        </p>
+    </section>
+
+    <div class="row g-3 mb-4">
+
+        <div class="col-md-4">
+            <div class="section-card metric h-100">
+                <div class="value">
+                    {{ total_activity_types }}
+                </div>
+                <div class="label">Total registrados</div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="section-card metric h-100">
+                <div class="value text-success">
+                    {{ active_activity_types }}
+                </div>
+                <div class="label">Activos</div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="section-card metric h-100">
+                <div class="value text-secondary">
+                    {{ inactive_activity_types }}
+                </div>
+                <div class="label">Inactivos</div>
+            </div>
+        </div>
+
+    </div>
+
+    <section class="section-card p-3 p-lg-4">
+
+        <div class="d-flex justify-content-between
+                    align-items-center flex-wrap gap-2 mb-3">
+
+            <h2 class="h5 fw-bold mb-0">
+                Listado de tipos de actividad
+            </h2>
+
+            {% if perms.registration_validation.add_activitytype %}
+                <a href="{% url 'registration:activity_type_create' %}"
+                   class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-plus-lg me-1"></i>
+                    Agregar tipo de actividad
+                </a>
+            {% endif %}
+
+        </div>
+
+        <form method="get" class="row g-3 mb-3">
+
+            <div class="col-md-6">
+                <label class="form-label">Buscar</label>
+                <input
+                    type="search"
+                    name="q"
+                    value="{{ query }}"
+                    class="form-control"
+                    placeholder="Código, nombre o descripción">
+            </div>
+
+            <div class="col-md-3">
+                <label class="form-label">Estado</label>
+
+                <select name="status" class="form-select">
+                    <option value="">Todos</option>
+
+                    <option value="active"
+                        {% if selected_status == "active" %}
+                            selected
+                        {% endif %}>
+                        Activo
+                    </option>
+
+                    <option value="inactive"
+                        {% if selected_status == "inactive" %}
+                            selected
+                        {% endif %}>
+                        Inactivo
+                    </option>
+                </select>
+            </div>
+
+            <div class="col-md-3 d-flex align-items-end gap-2">
+                <button type="submit" class="btn btn-dark">
+                    Filtrar
+                </button>
+
+                <a href="{% url 'registration:activity_type_list' %}"
+                   class="btn btn-outline-secondary">
+                    Limpiar
+                </a>
+            </div>
+
+        </form>
+
+        <div class="table-responsive">
+
+            <table class="table table-hover align-middle">
+
+                <thead>
+                    <tr>
+                        <th>Código</th>
+                        <th>Nombre</th>
+                        <th>Descripción</th>
+                        <th>Estado</th>
+                        <th class="text-end">Acciones</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+
+                    {% for activity_type in activity_types %}
+
+                    <tr>
+
+                        <td>{{ activity_type.code }}</td>
+
+                        <td class="fw-semibold">
+                            {{ activity_type.name }}
+                        </td>
+
+                        <td>
+                            {{ activity_type.description|default:"Sin descripción"|truncatechars:100 }}
+                        </td>
+
+                        <td>
+                            {% if activity_type.status %}
+                                <span class="status status-green">
+                                    Activo
+                                </span>
+                            {% else %}
+                                <span class="status status-muted">
+                                    Inactivo
+                                </span>
+                            {% endif %}
+                        </td>
+
+                        <td class="text-end">
+
+                            {% if perms.registration_validation.change_activitytype %}
+                                <a
+                                    href="{% url 'registration:activity_type_update' activity_type.pk %}"
+                                    class="btn btn-sm btn-light border">
+
+                                    <i class="bi bi-pencil"></i>
+                                    Modificar
+                                </a>
+                            {% endif %}
+
+                            {% if perms.registration_validation.delete_activitytype %}
+
+                                <form
+                                    id="delete-activity-type-{{ activity_type.pk }}"
+                                    method="post"
+                                    action="{% url 'registration:activity_type_delete' activity_type.pk %}"
+                                    class="d-none">
+                                    {% csrf_token %}
+                                </form>
+
+                                <button
+                                    type="button"
+                                    class="btn btn-sm btn-light border text-danger"
+                                    onclick="confirmDeleteActivityType(
+                                        '{{ activity_type.pk }}',
+                                        '{{ activity_type.name|escapejs }}'
+                                    )">
+
+                                    <i class="bi bi-trash"></i>
+                                    Eliminar
+                                </button>
+
+                            {% endif %}
+
+                        </td>
+
+                    </tr>
+
+                    {% empty %}
+
+                    <tr>
+                        <td colspan="5" class="text-center py-4">
+                            No hay tipos de actividad registrados.
+                        </td>
+                    </tr>
+
+                    {% endfor %}
+
+                </tbody>
+            </table>
+
+        </div>
+
+        {% if is_paginated %}
+
+        <nav class="mt-3">
+            <ul class="pagination justify-content-center">
+
+                {% if page_obj.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link"
+                           href="?page={{ page_obj.previous_page_number }}&q={{ query|urlencode }}&status={{ selected_status|urlencode }}">
+                            Anterior
+                        </a>
+                    </li>
+                {% endif %}
+
+                <li class="page-item active">
+                    <span class="page-link">
+                        {{ page_obj.number }} de
+                        {{ page_obj.paginator.num_pages }}
+                    </span>
+                </li>
+
+                {% if page_obj.has_next %}
+                    <li class="page-item">
+                        <a class="page-link"
+                           href="?page={{ page_obj.next_page_number }}&q={{ query|urlencode }}&status={{ selected_status|urlencode }}">
+                            Siguiente
+                        </a>
+                    </li>
+                {% endif %}
+
+            </ul>
+        </nav>
+
+        {% endif %}
+
+    </section>
+
+</div>
+
+{% include "registration_validation/_activity_type_modal.html" %}
+
+{% endblock %}
+
+{% block scripts %}
+
+{{ block.super }}
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<script>
+function confirmDeleteActivityType(id, name) {
+
+    Swal.fire({
+        title: "¿Eliminar tipo de actividad?",
+        text: name,
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonText: "Sí, eliminar",
+        cancelButtonText: "Cancelar",
+        confirmButtonColor: "#a60a17"
+
+    }).then((result) => {
+
+        if (result.isConfirmed) {
+            document.getElementById(
+                "delete-activity-type-" + id
+            ).submit();
+        }
+
+    });
+}
+</script>
+
+{% if open_modal %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+
+    const element = document.getElementById(
+        "activityTypeModal"
+    );
+
+    if (element && window.bootstrap) {
+        new bootstrap.Modal(element).show();
+    }
+
+});
+</script>
+{% endif %}
+
+{% if messages %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+
+    {% for message in messages %}
+    Swal.fire({
+        title: "Notificación",
+        text: "{{ message|escapejs }}",
+        icon: "{% if message.tags == 'success' %}success{% elif message.tags == 'error' %}error{% else %}info{% endif %}",
+        confirmButtonText: "Aceptar",
+        confirmButtonColor: "#a60a17"
+    });
+    {% endfor %}
+
+});
+</script>
+{% endif %}
+
+{% endblock %}

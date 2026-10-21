@@ -8,8 +8,10 @@ from .models import (
     Evidence,
     Validation,
     AttentionType,
+    ActivityType,
     SubAttention,
     AttentionEntry,
+    Service,
     MIN_EVIDENCE_FILES,
     MAX_EVIDENCE_FILES,
     MAX_EVIDENCE_TOTAL_SIZE,
@@ -88,6 +90,7 @@ class ActivityForm(BootstrapMixin, forms.ModelForm):
         fields = [
             "goal",
             "author",
+            "activity_type",
             "date",
             "request_problem",
             "action",
@@ -104,6 +107,7 @@ class ActivityForm(BootstrapMixin, forms.ModelForm):
             "contact": "Contacto",
             "phone": "Teléfono",
             "status": "Estado",
+            "activity_type": "Tipo de actividad",
         }
         widgets = {
             "date": forms.DateInput(
@@ -173,6 +177,32 @@ class ActivityForm(BootstrapMixin, forms.ModelForm):
                 )
         self.fields["goal"].queryset = goals
         self.fields["author"].queryset = employees
+
+        # Mostrar solamente tipos de actividad activos
+        # y que no estén archivados.
+        activity_types = ActivityType.objects.filter(
+            status=True,
+            deleted_at__isnull=True,
+        )
+
+        # Si estamos editando una actividad, conservar
+        # su tipo anterior aunque esté inactivo.
+        if self.instance.pk and self.instance.activity_type_id:
+            activity_types = ActivityType.objects.filter(
+                Q(status=True, deleted_at__isnull=True)
+                | Q(pk=self.instance.activity_type_id)
+            )
+
+        self.fields["activity_type"].queryset = (
+            activity_types.order_by("name")
+        )
+
+        # Obligatorio para actividades nuevas.
+        # Opcional para actividades antiguas sin clasificar.
+        self.fields["activity_type"].required = (
+            self.instance.pk is None
+        )
+
         self._apply_bootstrap()
 
     def clean(self):
@@ -569,8 +599,195 @@ class ValidationForm(BootstrapMixin, forms.ModelForm):
         return cleaned_data
 
 # ---------------------------------------------------------
-# Formulario de Tipo de Atención
+# Formulario de Tipo de Actividad
+# ---------------------------------------------------------
 
+class ActivityTypeForm(BootstrapMixin, forms.ModelForm):
+
+    STATUS_CHOICES = [
+        ("True", "Activo"),
+        ("False", "Inactivo"),
+    ]
+
+    status = forms.TypedChoiceField(
+        label="Estado",
+        choices=STATUS_CHOICES,
+        coerce=lambda value: value == "True",
+        empty_value=None,
+        required=True,
+    )
+
+    class Meta:
+        model = ActivityType
+
+        fields = [
+            "code",
+            "name",
+            "description",
+            "status",
+        ]
+
+        labels = {
+            "code": "Código",
+            "name": "Nombre",
+            "description": "Descripción",
+            "status": "Estado",
+        }
+
+        widgets = {
+            "code": forms.TextInput(
+                attrs={
+                    "placeholder": "Ej.: ACT-001",
+                    "maxlength": 50,
+                },
+            ),
+            "name": forms.TextInput(
+                attrs={
+                    "placeholder": "Nombre del tipo de actividad",
+                    "maxlength": 150,
+                },
+            ),
+            "description": forms.Textarea(
+                attrs={
+                    "rows": 3,
+                    "placeholder": (
+                        "Descripción del tipo de actividad (opcional)"
+                    ),
+                },
+            ),
+        }
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["description"].required = False
+        self._apply_bootstrap()
+
+    def clean_code(self):
+        code = self.cleaned_data["code"].strip()
+
+        if (
+            ActivityType.objects
+            .filter(code__iexact=code)
+            .exclude(pk=self.instance.pk)
+            .exists()
+        ):
+            raise forms.ValidationError(
+                "Ya existe un tipo de actividad con este código."
+            )
+
+        return code
+
+    def clean_name(self):
+        name = self.cleaned_data["name"].strip()
+
+        if not name:
+            raise forms.ValidationError(
+                "Debes ingresar el nombre del tipo de actividad."
+            )
+
+        return name
+
+    def clean_description(self):
+        return self.cleaned_data.get(
+            "description", ""
+        ).strip()
+
+# ---------------------------------------------------------
+# Formulario de Servicios
+# ---------------------------------------------------------
+
+class ServiceForm(BootstrapMixin, forms.ModelForm):
+
+    STATUS_CHOICES = [
+        ("True", "Activo"),
+        ("False", "Inactivo"),
+    ]
+
+    status = forms.TypedChoiceField(
+        label="Estado",
+        choices=STATUS_CHOICES,
+        coerce=lambda value: value == "True",
+        empty_value=None,
+        required=True,
+    )
+
+    class Meta:
+        model = Service
+
+        fields = [
+            "code",
+            "name",
+            "description",
+            "status",
+        ]
+
+        labels = {
+            "code": "Código",
+            "name": "Nombre",
+            "description": "Descripción",
+            "status": "Estado",
+        }
+
+        widgets = {
+            "code": forms.TextInput(
+                attrs={
+                    "placeholder": "Ej.: SER-001",
+                    "maxlength": 50,
+                },
+            ),
+            "name": forms.TextInput(
+                attrs={
+                    "placeholder": "Nombre del servicio",
+                    "maxlength": 150,
+                },
+            ),
+            "description": forms.Textarea(
+                attrs={
+                    "rows": 3,
+                    "placeholder": "Descripción del servicio (opcional)",
+                },
+            ),
+        }
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.fields["description"].required = False
+
+        self._apply_bootstrap()
+
+    def clean_code(self):
+        code = self.cleaned_data["code"].strip()
+
+        if (
+            Service.objects
+            .filter(code__iexact=code)
+            .exclude(pk=self.instance.pk)
+            .exists()
+        ):
+            raise forms.ValidationError(
+                "Ya existe un servicio con este código."
+            )
+
+        return code
+
+    def clean_name(self):
+        name = self.cleaned_data["name"].strip()
+
+        if not name:
+            raise forms.ValidationError(
+                "Debes ingresar el nombre del servicio."
+            )
+
+        return name
+
+    def clean_description(self):
+        return self.cleaned_data.get(
+            "description", ""
+        ).strip()
+
+# ---------------------------------------------------------
+# Formulario de Tipo de Atención
 # ---------------------------------------------------------
 
 

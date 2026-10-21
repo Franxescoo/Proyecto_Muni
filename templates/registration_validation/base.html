@@ -401,6 +401,39 @@
 
         {% endif %}
 
+        
+        <!-- Servicios -->
+
+        {% if perms.registration_validation.view_service %}
+
+        <a class="nav-link{% if request.resolver_match.url_name == 'service_list' or request.resolver_match.url_name == 'service_create' or request.resolver_match.url_name == 'service_update' %} active{% endif %}"
+        href="{% url 'registration:service_list' %}">
+
+            <i class="bi bi-gear-wide-connected"
+            aria-hidden="true"></i>
+
+            Servicios
+
+        </a>
+
+        {% endif %}
+
+
+        <!-- Tipos de actividad -->
+        {% if perms.registration_validation.view_activitytype %}
+
+        <a class="nav-link{% if request.resolver_match.url_name == 'activity_type_list' or request.resolver_match.url_name == 'activity_type_create' or request.resolver_match.url_name == 'activity_type_update' %} active{% endif %}"
+        href="{% url 'registration:activity_type_list' %}">
+
+            <i class="bi bi-list-check"
+            aria-hidden="true"></i>
+
+            Tipos de actividad
+
+        </a>
+
+        {% endif %}
+
 
         <!-- Tipos de atención -->
 
@@ -495,6 +528,12 @@
         const validationEditPattern =
             /^\/registration\/validations\/\d+\/edit\/?$/;
 
+        const serviceEditPattern =
+            /^\/registration\/services\/\d+\/edit\/?$/;
+        
+        const activityTypeEditPattern =
+            /^\/registration\/activity-types\/\d+\/edit\/?$/;
+
         const attentionTypeEditPattern =
             /^\/registration\/attention-types\/\d+\/edit\/?$/;
 
@@ -516,6 +555,12 @@
                 "{% url 'registration:validation_create' %}"
 
             || currentPath ===
+                "{% url 'registration:service_create' %}"
+
+            || currentPath ===
+                "{% url 'registration:activity_type_create' %}"
+
+            || currentPath ===
                 "{% url 'registration:attention_type_create' %}"
 
             || currentPath ===
@@ -529,6 +574,10 @@
             || evidenceEditPattern.test(currentPath)
 
             || validationEditPattern.test(currentPath)
+
+            || serviceEditPattern.test(currentPath)
+
+            || activityTypeEditPattern.test(currentPath)
 
             || attentionTypeEditPattern.test(currentPath)
 

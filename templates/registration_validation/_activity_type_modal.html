@@ -1,0 +1,156 @@
+{% if open_modal %}
+
+<div class="modal fade"
+     id="activityTypeModal"
+     tabindex="-1"
+     aria-labelledby="activityTypeModalLabel"
+     aria-hidden="true">
+
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+
+        <div class="modal-content">
+
+            <form method="post" novalidate>
+
+                {% csrf_token %}
+
+                <div class="modal-header">
+
+                    <h5 class="modal-title fw-bold"
+                        id="activityTypeModalLabel">
+
+                        {% if object %}
+                            Modificar tipo de actividad
+                        {% else %}
+                            Nuevo tipo de actividad
+                        {% endif %}
+
+                    </h5>
+
+                    <a
+                        href="{% url 'registration:activity_type_list' %}"
+                        class="btn-close"
+                        aria-label="Cerrar">
+                    </a>
+
+                </div>
+
+                <div class="modal-body">
+
+                    {% if form.non_field_errors %}
+                        <div class="alert alert-danger">
+                            {{ form.non_field_errors }}
+                        </div>
+                    {% endif %}
+
+                    <div class="row g-3">
+
+                        <div class="col-md-6">
+
+                            <label class="form-label fw-semibold"
+                                   for="{{ form.code.id_for_label }}">
+                                Código *
+                            </label>
+
+                            {{ form.code }}
+
+                            {% for error in form.code.errors %}
+                                <div class="text-danger small mt-1">
+                                    {{ error }}
+                                </div>
+                            {% endfor %}
+
+                        </div>
+
+                        <div class="col-md-6">
+
+                            <label class="form-label fw-semibold"
+                                   for="{{ form.status.id_for_label }}">
+                                Estado *
+                            </label>
+
+                            {{ form.status }}
+
+                            {% for error in form.status.errors %}
+                                <div class="text-danger small mt-1">
+                                    {{ error }}
+                                </div>
+                            {% endfor %}
+
+                        </div>
+
+                        <div class="col-12">
+
+                            <label class="form-label fw-semibold"
+                                   for="{{ form.name.id_for_label }}">
+                                Nombre *
+                            </label>
+
+                            {{ form.name }}
+
+                            {% for error in form.name.errors %}
+                                <div class="text-danger small mt-1">
+                                    {{ error }}
+                                </div>
+                            {% endfor %}
+
+                        </div>
+
+                        <div class="col-12">
+
+                            <label class="form-label fw-semibold"
+                                   for="{{ form.description.id_for_label }}">
+                                Descripción (opcional)
+                            </label>
+
+                            {{ form.description }}
+
+                            {% for error in form.description.errors %}
+                                <div class="text-danger small mt-1">
+                                    {{ error }}
+                                </div>
+                            {% endfor %}
+
+                        </div>
+
+                    </div>
+
+                    <div class="alert alert-light border mt-4 mb-0">
+                        <small>
+                            Los campos marcados con * son obligatorios.
+                            El código debe ser único.
+                        </small>
+                    </div>
+
+                </div>
+
+                <div class="modal-footer">
+
+                    <a href="{% url 'registration:activity_type_list' %}"
+                       class="btn btn-secondary">
+                        Cancelar
+                    </a>
+
+                    <button type="submit" class="btn btn-primary">
+
+                        <i class="bi bi-check-lg me-1"></i>
+
+                        {% if object %}
+                            Guardar cambios
+                        {% else %}
+                            Guardar tipo de actividad
+                        {% endif %}
+
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endif %}
