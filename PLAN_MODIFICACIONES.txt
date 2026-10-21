@@ -1,0 +1,356 @@
+PLAN DE MODIFICACIONES - PROYECTO_MUNI
+=====================================
+
+Documento previo a la implementación.
+
+1. OBJETIVO GENERAL
+-------------------
+
+Mejorar el Sistema de Gestión de Resultados (SGR) para cumplir los requisitos
+de la segunda evaluación y las mejoras solicitadas, sin romper las funciones
+existentes, perder información ni alterar innecesariamente las relaciones
+actuales de la base de datos.
+
+La implementación debe realizarse por etapas, revisando los cambios y las
+migraciones antes de aplicarlos.
+
+
+2. PRINCIPIOS QUE SE DEBEN RESPETAR
+------------------------------------
+
+- Analizar primero el código real, la guía de evaluación, los modelos,
+  formularios, vistas, plantillas, servicios, permisos, señales y pruebas.
+- Verificar el estado de Git y no sobrescribir cambios no confirmados.
+- Crear o verificar un respaldo de la base de datos antes de realizar
+  migraciones.
+- No inventar nombres de modelos, campos, rutas o relaciones.
+- No reemplazar archivos completos si no es necesario.
+- No convertir indiscriminadamente ForeignKey a ManyToManyField.
+- Mantener las relaciones principales que ya utiliza el sistema.
+- No eliminar físicamente datos históricos.
+- Validar los permisos en el backend, no solamente ocultando opciones en la
+  interfaz.
+- Ejecutar pruebas después de cada etapa y detenerse para revisar resultados.
+
+
+3. SITUACIÓN ACTUAL OBSERVADA
+-----------------------------
+
+- UserProfile tiene actualmente una delegación única mediante ForeignKey.
+- OrganizationRole relaciona actualmente un auth.Group con una delegación
+  única.
+- Employee conserva una delegación principal mediante ForeignKey. Esta
+  relación debe mantenerse.
+- Employee ya posee assigned_groups como relación múltiple con auth.Group.
+- La vinculación entre UserProfile y Employee es OneToOne y protegida.
+- Delegation contiene actualmente nombre, estado y ámbito. Se debe comprobar
+  si la guía exige agregar código, dirección y comuna.
+- Los roles se gestionan mediante auth.Group y OrganizationRole.
+- Period está protegido por relaciones históricas y Goal utiliza PROTECT.
+- El sistema ya tiene reglas para impedir modificaciones de metas en períodos
+  cerrados y para proteger información histórica.
+- Existen mantenedores con formularios modales, búsquedas y mensajes que deben
+  conservar su diseño y rutas siempre que sea posible.
+
+
+4. CAMBIOS PLANIFICADOS
+-----------------------
+
+ETAPA 1 - AUDITORÍA Y LÍNEA BASE
+
+- Revisar detalladamente las aplicaciones accounts, organization,
+  planning_measurements, registration_validation y
+  monitoring_traceability.
+- Comparar los requisitos de la guía con las funcionalidades existentes.
+- Separar requisitos obligatorios de la evaluación y mejoras opcionales.
+- Revisar migraciones, datos actuales, respaldo disponible y estado de Git.
+- Ejecutar comprobaciones base:
+  - python manage.py check
+  - python manage.py makemigrations --check --dry-run
+  - python manage.py test
+- Identificar archivos afectados y riesgos antes de modificar modelos.
+
+
+ETAPA 2 - DELEGACIONES MÚLTIPLES PARA USUARIOS Y ROLES
+
+- Permitir que un UserProfile tenga varias delegaciones autorizadas.
+- Permitir que un OrganizationRole tenga varias delegaciones de aplicación.
+- Conservar las asignaciones actuales mediante una migración de datos.
+- No eliminar relaciones antiguas hasta verificar que los datos fueron
+  transferidos correctamente.
+- Mantener Employee.delegation como delegación principal independiente.
+- Mantener separadas las descripciones de funciones y los roles de acceso.
+- Actualizar formularios, servicios, consultas y filtros de alcance.
+- Aplicar esta regla de seguridad:
+
+  Delegaciones efectivas =
+  delegaciones autorizadas del usuario
+  INTERSECCIÓN
+  delegaciones permitidas por el rol.
+
+- Impedir consultas o modificaciones fuera de esa intersección, incluso si el
+  usuario tiene el permiso Django correspondiente.
+
+
+ETAPA 3 - USUARIOS, ROLES Y VINCULACIONES
+
+- Completar la creación y edición de usuarios.
+- Permitir seleccionar una o varias delegaciones autorizadas.
+- Permitir asignar y editar roles.
+- Permitir crear usuarios con o sin funcionario vinculado.
+- Mantener la validación que impide vincular un funcionario a dos perfiles.
+- Mantener el bloqueo de archivado de un usuario vinculado a un funcionario.
+- Permitir desactivar una cuenta vinculada sin destruir su relación.
+- Permitir modificar el estado activo o inactivo.
+- Gestionar la contraseña mediante una operación independiente y segura.
+- Validar que los roles y delegaciones elegidos sean compatibles.
+- Sincronizar la información mostrada en Funcionarios sin convertirla en una
+  segunda fuente de permisos.
+
+
+ETAPA 4 - MANTENEDOR DE DELEGACIONES
+
+- Confirmar con la guía los campos obligatorios:
+  código, nombre, dirección, comuna y estado.
+- Agregar únicamente los campos que falten y sean necesarios.
+- Implementar o completar:
+  crear, listar, editar y archivar delegaciones.
+- Agregar búsqueda parcial por campos relevantes.
+- Mantener filtros al cambiar de página.
+- Mostrar contadores de registros.
+- Agregar o corregir exportación a Excel.
+- Mantener confirmaciones y mensajes SweetAlert2.
+- Validar campos obligatorios y códigos únicos.
+- Proteger relaciones y registros históricos al archivar.
+- Impedir nuevas asignaciones a delegaciones desactivadas cuando corresponda.
+- Aplicar permisos separados para consultar, crear, modificar y archivar.
+
+
+ETAPA 5 - MANTENEDOR DE ROLES
+
+- Mantener la integración con auth.Group.
+- Incorporar descripción si la guía y el modelo lo requieren.
+- Permitir múltiples delegaciones de aplicación.
+- Mantener separados los permisos Django y el alcance por delegación.
+- Conservar los permisos estándar view, add, change y delete.
+- Agregar búsqueda, paginación, contadores y exportación a Excel.
+- Mantener confirmaciones SweetAlert2.
+- Impedir roles duplicados o inconsistentes.
+- Evitar eliminar roles utilizados por cargos, funcionarios o cuentas.
+- Editar permisos y delegaciones sin perder asignaciones existentes.
+
+
+ETAPA 6 - MANTENEDOR DE USUARIOS
+
+- Mostrar correctamente roles y delegaciones autorizadas.
+- Completar búsquedas, paginación, filtros y contadores de usuarios activos,
+  inactivos y totales.
+- Agregar o corregir exportación a Excel.
+- Mantener confirmaciones SweetAlert2.
+- Aplicar validaciones de formularios y del servidor.
+- Conservar datos históricos y evitar eliminaciones físicas.
+
+
+ETAPA 7 - RESPONSABLE DE DELEGACIÓN
+
+- Revisar primero Delegation, Employee, UserProfile y los permisos actuales.
+- Permitir designar, cambiar o retirar el responsable.
+- Mostrar el responsable actual de cada delegación.
+- Validar que esté activo y autorizado para operar en esa delegación.
+- Mantener el historial al reemplazarlo.
+- No otorgar acceso automático a otras delegaciones por ser responsable.
+- Si se necesita un rol, reutilizar el mantenedor de roles existente.
+- La cardinalidad del responsable, uno o varios por delegación, debe definirse
+  según la guía. Si la guía no lo establece, no se debe imponer una restricción
+  sin revisar primero el impacto.
+
+
+ETAPA 8 - PERMISO INDIVIDUAL PARA PERÍODOS CERRADOS
+
+- Revisar los permisos actuales y el mecanismo de auditoría.
+- Crear, si no existe, un permiso individual como delete_closed_period.
+- Permitir concederlo o revocarlo directamente a un usuario.
+- No concederlo automáticamente a todos los usuarios de un rol.
+- Mantener separados los permisos de consultar, crear, modificar y eliminar
+  períodos.
+- Mantener separado el permiso de eliminar un período cerrado del permiso de
+  reabrirlo o modificar sus resultados.
+- Permitir solamente un archivado lógico y seguro cuando el período no tenga
+  metas, mediciones, actividades, evidencias ni registros dependientes.
+- Bloquear la operación si existe información histórica relacionada, salvo que
+  exista una regla de negocio explícita y segura.
+- Registrar quién realizó la operación, cuándo y sobre qué período.
+- Validar también el alcance de delegaciones del usuario.
+
+
+5. MIGRACIONES Y PROTECCIÓN DE DATOS
+-------------------------------------
+
+- Respaldar la base de datos antes de crear o aplicar migraciones.
+- Revisar primero las migraciones existentes.
+- Crear migraciones de esquema solamente donde sean necesarias.
+- Crear migraciones de datos para conservar delegaciones y relaciones actuales.
+- No borrar delegaciones asignadas previamente.
+- No perder roles de usuarios.
+- No eliminar vinculaciones entre usuarios y funcionarios.
+- No modificar la delegación principal de los funcionarios.
+- No eliminar períodos, metas ni registros históricos.
+- Revisar problemas de unicidad relacionados con perfiles archivados.
+- No aplicar migraciones destructivas sin explicar el riesgo y solicitar
+  aprobación.
+
+
+6. PRUEBAS MÍNIMAS
+------------------
+
+Se deben agregar o actualizar pruebas para comprobar:
+
+- Crear usuarios con una y varias delegaciones.
+- Editar usuarios, roles, delegaciones, estado y funcionario.
+- Permitir usuarios sin funcionario vinculado.
+- Impedir vincular un funcionario a dos usuarios.
+- Bloquear el archivado de usuarios vinculados.
+- Crear y modificar roles con varias delegaciones.
+- Impedir acceso fuera de la intersección autorizada.
+- Mantener intacta la delegación principal del funcionario.
+- Crear, cambiar y retirar responsables de delegación.
+- Impedir eliminar períodos cerrados sin permiso especial.
+- Permitir la operación autorizada únicamente bajo condiciones seguras.
+- Proteger períodos con información histórica.
+- Verificar búsqueda, filtros, paginación y exportaciones.
+- Verificar que los módulos existentes continúen funcionando.
+
+
+7. ORDEN DE EJECUCIÓN Y REVISIONES
+----------------------------------
+
+El trabajo se ejecutará en este orden:
+
+1. Auditoría y línea base.
+2. Delegaciones múltiples.
+3. Usuarios, roles y vinculaciones.
+4. Mantenedores.
+5. Responsable de delegación.
+6. Permiso para períodos cerrados.
+7. Pruebas integrales y revisión final.
+
+Al finalizar cada etapa se informará:
+
+- Archivos modificados.
+- Cambios realizados.
+- Migraciones creadas y aplicadas.
+- Pruebas ejecutadas y resultados.
+- Problemas pendientes.
+- Riesgos que requieran decisión.
+
+No se avanzará a una etapa posterior sin revisar que la etapa anterior
+mantenga la compatibilidad del sistema.
+
+
+8. DECISIONES PENDIENTES
+------------------------
+
+- Confirmar en la guía si el responsable de delegación debe ser único o si
+  pueden existir varios responsables.
+- Confirmar cuáles campos de Delegation son obligatorios en la evaluación.
+- Confirmar si el archivado lógico de períodos cerrados es una exigencia de
+  la guía o una mejora adicional.
+- Confirmar la forma de exportación a Excel ya utilizada o esperada por el
+  proyecto.
+- Confirmar el alcance exacto de los permisos administrativos y de los
+  usuarios con acceso global.
+
+
+9. CRITERIO DE FINALIZACIÓN
+---------------------------
+
+El trabajo se considerará terminado solamente cuando:
+
+- Las migraciones sean compatibles y no pierdan información.
+- Los permisos se validen en backend y respeten las delegaciones.
+- Los mantenedores cumplan los requisitos confirmados.
+- Los períodos históricos estén protegidos.
+- Las pruebas nuevas y existentes pasen.
+- python manage.py check no reporte errores.
+- No existan migraciones pendientes inesperadas.
+- Se informe claramente cualquier requisito que quede fuera por no estar
+  definido en la guía o por requerir una decisión del responsable del proyecto.
+
+
+10. PRECISIONES INCORPORADAS ANTES DE IMPLEMENTAR
+-------------------------------------------------
+
+- La guía ya confirma que Delegation debe administrar código, nombre,
+  dirección, comuna y estado.
+- Los mantenedores de Delegation, OrganizationRole y usuarios deben contemplar
+  exportación a Excel, búsqueda y paginación conservando los filtros.
+- El despliegue a AWS se ejecuta mediante GitHub Actions al subir cambios a
+  main. El workflow existente ya ejecuta manage.py migrate --noinput; no se
+  agregará un segundo comando ni se alterará el despliegue sin necesidad.
+- Antes de integrar migraciones a main se debe verificar un respaldo de la
+  base de datos de AWS y documentar un procedimiento de recuperación. El
+  respaldo local sirve para desarrollo y validación, pero no reemplaza el
+  respaldo de producción.
+- Se mantendrán separados:
+  - permisos individuales asignados directamente a un Usuario;
+  - permisos heredados mediante un Rol o auth.Group;
+  - restricciones de alcance por Delegation.
+- El permiso especial para períodos cerrados no se implementará hasta explicar
+  y aprobar su alcance exacto. La propuesta segura es permitir solamente el
+  archivado lógico de un período cerrado que no tenga metas, mediciones,
+  actividades, evidencias ni otros registros dependientes. Nunca permitiría
+  eliminar físicamente información histórica ni archivar un período con
+  dependencias. El permiso tampoco autorizaría reabrir períodos ni modificar
+  sus resultados.
+- No se ejecutarán todas las etapas en una sola operación. Primero se termina
+  la auditoría, se presentan archivos afectados, migraciones propuestas y
+  riesgos, y se espera revisión antes de cambios importantes.
+- El trabajo se mantiene en una rama de trabajo. No se hará push ni merge a
+  main sin aprobación explícita.
+
+
+11. RESULTADO PRELIMINAR DE LA AUDITORÍA
+-----------------------------------------
+
+- La rama actual es una rama de trabajo y contiene cambios no confirmados
+  previos en plantillas de organization. Esos cambios no deben sobrescribirse.
+- La comprobación Django no reporta errores.
+- No había migraciones pendientes antes de la etapa de delegaciones.
+- La suite base tenía 98 pruebas y todas pasaron.
+- Se prepararon localmente relaciones complementarias para delegaciones
+  múltiples, conservando las ForeignKey originales:
+  - UserProfile.authorized_delegations.
+  - OrganizationRole.application_delegations.
+- Se prepararon migraciones de datos que copian las delegaciones existentes.
+- Se creó un respaldo local previo a aplicar esas migraciones.
+- Las migraciones complementarias fueron aplicadas únicamente a la base local
+  y se verificó que las asignaciones existentes se copiaran.
+- AWS, main y el workflow de despliegue no fueron modificados.
+
+La auditoría funcional todavía debe revisar de manera completa los campos de
+Delegation, las exportaciones, búsquedas, paginación, permisos individuales,
+auditoría de períodos y todos los módulos que consumen la delegación única.
+
+
+12. PROGRESO DE IMPLEMENTACIÓN POSTERIOR A LA AUDITORÍA
+---------------------------------------------------------
+
+- Delegation ahora contempla código, dirección y comuna, con validación de
+  código único y campos obligatorios en el formulario.
+- Los listados de Delegation, roles y usuarios incluyen búsqueda y paginación
+  conservando los filtros.
+- Los roles muestran sus delegaciones de aplicación múltiples.
+- Los usuarios muestran sus delegaciones autorizadas múltiples.
+- La creación y edición de usuarios permite administrar funcionario,
+  delegaciones autorizadas y roles, validando que los roles estén dentro del
+  alcance autorizado.
+- Se incorporó exportación real XLSX para Delegation, roles y usuarios.
+- Se agregaron los endpoints protegidos y la dependencia openpyxl a los
+  manifiestos local y AWS.
+- La suite completa continúa pasando con 98 pruebas.
+- La verificación directa de los tres endpoints XLSX respondió HTTP 200 con el
+  tipo MIME correcto usando el usuario administrador local.
+
+Todavía no se implementaron el Responsable de Delegación ni el permiso
+individual para archivar períodos cerrados. Tampoco se ha realizado ninguna
+acción sobre AWS, main, push o merge.

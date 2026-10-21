@@ -90,3 +90,4 @@ Werkzeug==3.1.8
 yarl==1.24.5
 holidays==0.106
 PyMySQL==1.2.3
+openpyxl==3.1.5

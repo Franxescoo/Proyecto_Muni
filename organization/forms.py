@@ -45,11 +45,13 @@ class OrganizationRoleForm(BootstrapMixin, forms.Form):
         max_length=150,
         min_length=3,
     )
-    delegation = forms.ModelChoiceField(
-        label="Delegación",
+    delegations = forms.ModelMultipleChoiceField(
+        label="Delegaciones de aplicación",
         queryset=Delegation.objects.filter(
             deleted_at__isnull=True
         ).order_by("name"),
+        widget=forms.CheckboxSelectMultiple,
+        required=True,
     )
     permissions = forms.ModelMultipleChoiceField(
         label="Permisos",
@@ -79,9 +81,12 @@ class OrganizationRoleForm(BootstrapMixin, forms.Form):
             initial.setdefault("permissions", self.group.permissions.all())
             role = OrganizationRole.objects.filter(
                 group=self.group
-            ).select_related("delegation").first()
+            ).prefetch_related("application_delegations").first()
             if role:
-                initial.setdefault("delegation", role.delegation_id)
+                initial.setdefault(
+                    "delegations",
+                    role.application_delegations.values_list("pk", flat=True),
+                )
         kwargs["initial"] = initial
         super().__init__(*args, **kwargs)
         self.apply_bootstrap()
@@ -95,16 +100,27 @@ class OrganizationRoleForm(BootstrapMixin, forms.Form):
             raise ValidationError("Ya existe un rol con ese nombre.")
         return name
 
+    def clean(self):
+        cleaned_data = super().clean()
+        delegations = cleaned_data.get("delegations")
+        if not delegations:
+            self.add_error(
+                "delegations",
+                "Selecciona al menos una delegación de aplicación.",
+            )
+        return cleaned_data
+
     def save(self):
         with transaction.atomic():
             group = self.group or Group()
             group.name = self.cleaned_data["name"]
             group.save()
             group.permissions.set(self.cleaned_data["permissions"])
-            OrganizationRole.objects.update_or_create(
+            role, _ = OrganizationRole.objects.update_or_create(
                 group=group,
-                defaults={"delegation": self.cleaned_data["delegation"]},
+                defaults={"delegation": self.cleaned_data["delegations"].first()},
             )
+            role.application_delegations.set(self.cleaned_data["delegations"])
         return group
 
 

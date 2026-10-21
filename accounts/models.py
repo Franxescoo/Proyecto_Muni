@@ -39,3 +39,10 @@ class UserProfile(BaseModel):
        null=True, blank=True,
        related_name="user_profiles",
    )
+
+    authorized_delegations = models.ManyToManyField(
+        "organization.Delegation",
+        blank=True,
+        related_name="authorized_user_profiles",
+        verbose_name="Delegaciones autorizadas",
+    )

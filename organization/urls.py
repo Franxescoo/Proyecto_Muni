@@ -10,4 +10,7 @@ urlpatterns = [
     path("delegaciones/", views.delegation_list, name="delegation_list"),
     path("cargos-funciones/", views.position_list, name="position_list"),
     path("usuarios/", views.user_list, name="user_list"),
+    path("delegaciones/exportar/", views.delegation_export, name="delegation_export"),
+    path("roles-permisos/exportar/", views.role_export, name="role_export"),
+    path("usuarios/exportar/", views.user_export, name="user_export"),
 ]

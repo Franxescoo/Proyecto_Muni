@@ -2,6 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.auth.models import Group
 from django.core.exceptions import PermissionDenied
+from django.core.paginator import Paginator
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -17,6 +18,7 @@ from .forms import (
 	mark_invalid_fields,
 )
 from .models import Delegation, Employee, PositionFunction
+from .exports import role_delegations, workbook_response
 
 from django.db import IntegrityError
 
@@ -40,7 +42,25 @@ def organization_access(permission):
 
 def _delegation_id(user):
 	profile = getattr(user, "profile", None)
-	return profile.delegation_id if profile else None
+	if not profile:
+		return None
+	return profile.delegation_id or profile.authorized_delegations.values_list(
+		"pk", flat=True
+	).first()
+
+
+def _delegation_ids(user):
+	if user.is_superuser:
+		return None
+	profile = getattr(user, "profile", None)
+	if not profile:
+		return set()
+	ids = set(
+		profile.authorized_delegations.values_list("pk", flat=True)
+	)
+	if profile.delegation_id:
+		ids.add(profile.delegation_id)
+	return ids
 
 
 def _scoped_queryset(queryset, user, relation):
@@ -48,12 +68,12 @@ def _scoped_queryset(queryset, user, relation):
 	if user.is_superuser:
 		return queryset
 
-	delegation_id = _delegation_id(user)
-	if delegation_id is None:
+	delegation_ids = _delegation_ids(user)
+	if not delegation_ids:
 		return queryset.none()
 	if relation == "pk":
-		return queryset.filter(pk=delegation_id)
-	return queryset.filter(**{relation: delegation_id})
+		return queryset.filter(pk__in=delegation_ids)
+	return queryset.filter(**{f"{relation}__in": delegation_ids})
 
 
 def _query(value):
@@ -201,11 +221,23 @@ def role_list(request):
 
 	groups = Group.objects.select_related(
 		"organization_role__delegation"
+	).prefetch_related(
+		"organization_role__application_delegations"
 	).annotate(
 		permission_count=Count("permissions", distinct=True),
 		account_count=Count("user", distinct=True),
 		employee_count=Count("assigned_employees", distinct=True),
 	).order_by("name")
+	search = _query(request.GET.get("q"))
+	if search:
+		groups = groups.filter(
+			Q(name__icontains=search)
+			| Q(organization_role__delegation__name__icontains=search)
+			| Q(
+				organization_role__application_delegations__name__icontains=
+				search
+			)
+		).distinct()
 	form = None
 	modal_action = ""
 	object_id = ""
@@ -273,8 +305,46 @@ def role_list(request):
 		"page_title": "Roles y Permisos",
 		"page_description": "Crea roles y define los permisos que se asignarán a funcionarios y cuentas.",
 		"page_icon": "bi-shield-lock",
+		"search": search,
 	}
+	paginator = Paginator(groups, 20)
+	context["roles"] = paginator.get_page(request.GET.get("page"))
+	context["query_string"] = request.GET.copy()
+	context["query_string"].pop("page", None)
 	return render(request, "organization/roles.html", context)
+
+
+@login_required
+def role_export(request):
+	if not request.user.is_superuser:
+		raise PermissionDenied
+	groups = Group.objects.select_related(
+		"organization_role__delegation"
+	).prefetch_related("organization_role__application_delegations").order_by(
+		"name"
+	)
+	search = _query(request.GET.get("q"))
+	if search:
+		groups = groups.filter(
+			Q(name__icontains=search)
+			| Q(organization_role__delegation__name__icontains=search)
+			| Q(
+				organization_role__application_delegations__name__icontains=
+				search
+			)
+		).distinct()
+	return workbook_response(
+		"roles.xlsx",
+		["Rol", "Delegaciones de aplicación", "Permisos"],
+		[
+			(
+				group.name,
+				role_delegations(group),
+				group.permissions.count(),
+			)
+			for group in groups
+		],
+	)
 
 
 @organization_access("organization.view_employee")
@@ -356,13 +426,18 @@ def delegation_list(request):
 	status = _query(request.GET.get("status"))
 	if search:
 		delegations = delegations.filter(
-			Q(name__icontains=search) | Q(scope__icontains=search)
+			Q(code__icontains=search)
+			| Q(name__icontains=search)
+			| Q(address__icontains=search)
+			| Q(commune__icontains=search)
+			| Q(scope__icontains=search)
 		)
 	if status:
 		delegations = delegations.filter(status__iexact=status)
+	paginator = Paginator(delegations.order_by("name"), 20)
 
 	context = {
-		"delegations": delegations,
+		"delegations": paginator.get_page(request.GET.get("page")),
 		"total_delegations": delegations.count(),
 		"active_delegations": delegations.filter(
 			Q(status__iexact="active") | Q(status__iexact="activo")
@@ -375,11 +450,47 @@ def delegation_list(request):
 		"page_description": "Consulta las unidades territoriales y sus funcionarios.",
 		"page_icon": "bi-building",
 	}
+	context["query_string"] = request.GET.copy()
+	context["query_string"].pop("page", None)
 	context.update(mutation_context)
 	return render(
 		request,
 		"organization/delegations.html",
 		context,
+	)
+
+
+@organization_access("organization.view_delegation")
+def delegation_export(request):
+	delegations = _scoped_queryset(
+		Delegation.objects.all(), request.user, "pk"
+	).order_by("name")
+	search = _query(request.GET.get("q"))
+	status = _query(request.GET.get("status"))
+	if search:
+		delegations = delegations.filter(
+			Q(code__icontains=search)
+			| Q(name__icontains=search)
+			| Q(address__icontains=search)
+			| Q(commune__icontains=search)
+			| Q(scope__icontains=search)
+		)
+	if status:
+		delegations = delegations.filter(status__iexact=status)
+	return workbook_response(
+		"delegaciones.xlsx",
+		["Código", "Nombre", "Dirección", "Comuna", "Ámbito", "Estado"],
+		[
+			(
+				delegation.code or "",
+				delegation.name,
+				delegation.address,
+				delegation.commune,
+				delegation.scope,
+				delegation.status,
+			)
+			for delegation in delegations
+		],
 	)
 
 
@@ -608,13 +719,28 @@ def user_list(request):
             "profile__employee",
             "profile__delegation",
         )
-        .prefetch_related("groups")
+        .prefetch_related(
+            "groups",
+            "profile__authorized_delegations",
+        )
         .order_by("username")
     )
+    search = _query(request.GET.get("q"))
+    if search:
+        users = users.filter(
+            Q(username__icontains=search)
+            | Q(email__icontains=search)
+            | Q(profile__employee__name__icontains=search)
+            | Q(profile__employee_code__icontains=search)
+            | Q(
+                profile__authorized_delegations__name__icontains=search
+            )
+        ).distinct()
+    paginator = Paginator(users, 20)
 
     # CONTEXTO DE LA PLANTILLA
     context = {
-        "users": users,
+        "users": paginator.get_page(request.GET.get("page")),
         "total_users": users.count(),
         "active_users": users.filter(is_active=True).count(),
         "inactive_users": users.filter(is_active=False).count(),
@@ -636,7 +762,10 @@ def user_list(request):
             "Administra las cuentas de los funcionarios."
         ),
         "page_icon": "bi-person-gear",
+        "search": search,
     }
+    context["query_string"] = request.GET.copy()
+    context["query_string"].pop("page", None)
 
     return render(
         request,
@@ -645,4 +774,40 @@ def user_list(request):
     )
 
 
-
+@login_required
+def user_export(request):
+    if not request.user.is_superuser:
+        raise PermissionDenied
+    users = get_user_model().objects.filter(
+        is_superuser=False,
+        profile__deleted_at__isnull=True,
+    ).select_related("profile").prefetch_related(
+        "profile__authorized_delegations", "groups"
+    ).order_by("username")
+    search = _query(request.GET.get("q"))
+    if search:
+        users = users.filter(
+            Q(username__icontains=search)
+            | Q(email__icontains=search)
+            | Q(profile__employee__name__icontains=search)
+            | Q(profile__employee_code__icontains=search)
+            | Q(profile__authorized_delegations__name__icontains=search)
+        ).distinct()
+    return workbook_response(
+        "usuarios.xlsx",
+        ["Usuario", "Correo", "Código", "Delegaciones", "Roles", "Estado"],
+        [
+            (
+                user.username,
+                user.email,
+                user.profile.employee_code,
+                ", ".join(
+                    delegation.name
+                    for delegation in user.profile.authorized_delegations.all()
+                ),
+                ", ".join(group.name for group in user.groups.all()),
+                "Activo" if user.is_active else "Inactivo",
+            )
+            for user in users
+        ],
+    )

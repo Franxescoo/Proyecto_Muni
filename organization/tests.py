@@ -284,7 +284,7 @@ class OrganizationListTests(TestCase):
         )
         self.assertIn(role, user.groups.all())
 
-    def test_employee_roles_sync_to_account_but_account_edit_cannot_change_them(self):
+    def test_employee_roles_sync_and_account_roles_are_independent(self):
         role = Group.objects.create(name="Analista con acceso")
         other_role = Group.objects.create(name="Revisor")
 
@@ -353,7 +353,7 @@ class OrganizationListTests(TestCase):
 
         self.assertQuerySetEqual(
             user.groups.all(),
-            [role],
+            [other_role],
             transform=lambda group: group,
         )
         self.assertQuerySetEqual(
@@ -612,7 +612,10 @@ class OrganizationListTests(TestCase):
             delegation_url,
             {
                 "action": "create",
+                "code": "DEL-NUEVA",
                 "name": "Delegación Nueva",
+                "address": "Avenida Costera 100",
+                "commune": "La Serena",
                 "scope": "Costero",
                 "status": "Active",
             },
@@ -625,7 +628,10 @@ class OrganizationListTests(TestCase):
             {
                 "action": "edit",
                 "object_id": delegation.pk,
+                "code": "DEL-MOD",
                 "name": "Delegación Modificada",
+                "address": "Avenida Costera 200",
+                "commune": "Coquimbo",
                 "scope": "Costero",
                 "status": "Inactive",
             },
@@ -947,10 +953,7 @@ class OrganizationUserMaintenanceTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.context["modal_open"])
-        self.assertNotIn(
-            "groups",
-            response.context["form"].fields,
-        )
+        self.assertIn("groups", response.context["form"].fields)
         self.assertIn(
             "employee",
             response.context["form"].fields,
@@ -1055,10 +1058,7 @@ class OrganizationUserMaintenanceTests(TestCase):
             {"modal": "edit", "id": user.pk},
         )
         self.assertEqual(response.status_code, 200)
-        self.assertNotIn(
-            "groups",
-            response.context["form"].fields,
-        )
+        self.assertIn("groups", response.context["form"].fields)
 
         response = self.client.post(
             self.url,
