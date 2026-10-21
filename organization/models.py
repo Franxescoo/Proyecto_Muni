@@ -6,7 +6,10 @@ from core.models import BaseModel
 
 class Delegation(BaseModel):
     delegation_id = models.BigAutoField(primary_key=True)
+    code = models.CharField(max_length=30, unique=True, null=True, blank=True)
     name = models.CharField(max_length=150)
+    address = models.CharField(max_length=200, blank=True)
+    commune = models.CharField(max_length=100, blank=True)
     status = models.CharField(max_length=50)
     scope = models.CharField(max_length=150)
 
@@ -28,6 +31,12 @@ class OrganizationRole(models.Model):
         Delegation,
         on_delete=models.PROTECT,
         related_name="organization_roles",
+    )
+    application_delegations = models.ManyToManyField(
+        Delegation,
+        blank=True,
+        related_name="application_roles",
+        verbose_name="Delegaciones de aplicación",
     )
 
     class Meta:

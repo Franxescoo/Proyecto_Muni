@@ -105,14 +105,25 @@ class GoalAdmin(admin.ModelAdmin):
         profile = getattr(request.user, "profile", None)
         return profile.delegation_id if profile else None
 
+    def _user_delegation_ids(self, request):
+        profile = getattr(request.user, "profile", None)
+        if not profile:
+            return set()
+        ids = set(
+            profile.authorized_delegations.values_list("pk", flat=True)
+        )
+        if profile.delegation_id:
+            ids.add(profile.delegation_id)
+        return ids
+
     def get_queryset(self, request):
         qs = super().get_queryset(request).filter(deleted_at__isnull=True)
         if request.user.is_superuser:
             return qs
-        delegation_id = self._user_delegation_id(request)
-        if delegation_id is None:
+        delegation_ids = self._user_delegation_ids(request)
+        if not delegation_ids:
             return qs.none()
-        return qs.filter(employee__delegation_id=delegation_id)
+        return qs.filter(employee__delegation_id__in=delegation_ids)
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "employee":

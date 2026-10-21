@@ -86,14 +86,15 @@ class AccountTests(TestCase):
             username="usuario_prueba"
         )
 
-    def test_create_form_does_not_allow_manual_roles(self):
+    def test_create_form_allows_roles_and_delegations(self):
         form = AccountCreateForm()
 
-        self.assertNotIn("groups", form.fields)
+        self.assertIn("groups", form.fields)
+        self.assertIn("authorized_delegations", form.fields)
         self.assertIn("employee", form.fields)
         self.assertIn("username", form.fields)
 
-    def test_edit_form_does_not_allow_manual_roles(self):
+    def test_edit_form_allows_roles_and_delegations(self):
         user = get_user_model().objects.create_user(
             username="usuario_editar_formulario",
             password="Clave-Segura-9271!",
@@ -101,7 +102,8 @@ class AccountTests(TestCase):
 
         form = AccountEditForm(instance=user)
 
-        self.assertNotIn("groups", form.fields)
+        self.assertIn("groups", form.fields)
+        self.assertIn("authorized_delegations", form.fields)
         self.assertIn("username", form.fields)
         self.assertIn("email", form.fields)
         self.assertIn("is_active", form.fields)

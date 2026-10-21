@@ -1,24 +1,52 @@
 {% if form %}
-<div class="modal fade" id="organization-record-modal" data-has-errors="{% if form.errors %}true{% else %}false{% endif %}" tabindex="-1" aria-labelledby="organization-record-modal-title" aria-hidden="true">
+<div 
+    class="modal fade" 
+    id="organization-record-modal" 
+    data-has-errors="{% if form.errors %}true{% else %}false{% endif %}" 
+    tabindex="-1" 
+    aria-labelledby="organization-record-modal-title" 
+    aria-hidden="true"
+>
     <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable organization-form-dialog">
         <div class="modal-content border-0 shadow">
-            <form method="post" enctype="multipart/form-data" action="{% url form_route %}" data-action="{{ modal_action }}" data-edit-confirmation="{{ edit_confirmation }}" novalidate>
+            <form 
+                method="post" 
+                enctype="multipart/form-data" 
+                action="{% url form_route %}" 
+                data-action="{{ modal_action }}" 
+                data-edit-confirmation="{{ edit_confirmation }}" 
+                novalidate
+            >
                 {% csrf_token %}
                 <input type="hidden" name="action" value="{{ modal_action }}">
-                {% if object_id %}<input type="hidden" name="object_id" value="{{ object_id }}">{% endif %}
+                {% if object_id %}
+                    <input type="hidden" name="object_id" value="{{ object_id }}">
+                {% endif %}
+
+                <!-- Modal Header -->
                 <div class="modal-header border-bottom-0 pb-0">
                     <div>
                         <div class="small text-uppercase text-danger fw-semibold">Organización</div>
-                        <h2 class="modal-title fs-5 fw-bold" id="organization-record-modal-title">{{ modal_title }}</h2>
+                        <h2 class="modal-title fs-5 fw-bold" id="organization-record-modal-title">
+                            {{ modal_title }}
+                        </h2>
                     </div>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
                 </div>
+
+                <!-- Modal Body -->
                 <div class="modal-body pt-4">
                     {% include "organization/_form_fields.html" %}
                 </div>
+
+                <!-- Modal Footer -->
                 <div class="modal-footer border-top-0 pt-0">
-                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-success"><i class="bi bi-check2 me-1"></i>Guardar</button>
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-check2 me-1"></i>Guardar
+                    </button>
                 </div>
             </form>
         </div>

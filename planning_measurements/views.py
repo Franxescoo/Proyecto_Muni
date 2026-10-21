@@ -78,11 +78,19 @@ def scoped_goals(user):
 
     profile = getattr(user, "profile", None)
 
-    if profile is None or profile.delegation_id is None:
+    if profile is None:
+        return goals.none()
+
+    delegation_ids = set(
+        profile.authorized_delegations.values_list("pk", flat=True)
+    )
+    if profile.delegation_id:
+        delegation_ids.add(profile.delegation_id)
+    if not delegation_ids:
         return goals.none()
 
     return goals.filter(
-        employee__delegation_id=profile.delegation_id
+        employee__delegation_id__in=delegation_ids
     )
 
 
