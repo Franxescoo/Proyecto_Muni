@@ -185,6 +185,63 @@
             .sgr-catalog .catalog-toolbar { gap:.75rem; }
             .sgr-catalog .catalog-toolbar-actions { width:100%;justify-content:flex-end; }
         }
+        
+        /* Chat institucional SGR */
+
+        .sgr-chat-modal {
+            border: none;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, .18);
+        }
+
+        .sgr-chat-header {
+            background: #65000b;
+            color: #ffffff;
+            border-bottom: none;
+            padding: 16px 20px;
+        }
+
+        .sgr-chat-body {
+            background: #ffffff;
+            padding: 22px;
+        }
+
+        .sgr-chat-messages {
+            list-style: none;
+            height: 340px;
+            overflow-y: auto;
+            margin: 0;
+            padding: 16px;
+            border: 1px solid #dee2e6;
+            border-radius: 10px;
+            background: #f8f9fa;
+        }
+
+        .sgr-chat-messages li {
+            background: #ffffff;
+            border: 1px solid #e9ecef;
+            padding: 9px 13px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            overflow-wrap: anywhere;
+        }
+
+        .sgr-chat-body .form-control:focus {
+            border-color: #65000b;
+            box-shadow: 0 0 0 .2rem rgba(101, 0, 11, .15);
+        }
+
+        .sgr-chat-body #send {
+            background: #198754;
+            border-color: #198754;
+        }
+
+        .sgr-chat-body #send:hover {
+            background: #146c43;
+            border-color: #146c43;
+        }
+
     </style>
     {% block estilos %}{% endblock %}
 </head>
@@ -202,8 +259,22 @@
             {% if user.is_authenticated %}
             <ul class="navbar-nav me-auto">
                 {% block top_links %}
-                <li class="nav-item"><a class="nav-link" href="{% url 'home' %}"></a></li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'home' %}"></a>
+                </li>
                 {% endblock %}
+
+                {% if sgr_active_delegation %}
+                <li class="nav-item">
+                    <button type="button"
+                            class="nav-link border-0 bg-transparent"
+                            data-bs-toggle="modal"
+                            data-bs-target="#chatInstitucionalModal">
+                        <i class="bi bi-chat-dots-fill me-1"></i>
+                        Chat institucional
+                    </button>
+                </li>
+                {% endif %}
             </ul>
             <span class="navbar-text me-2" title="Usuario y rol">
                 <i class="bi bi-person-circle"></i> {{ user.username }}
@@ -262,5 +333,181 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="{% static 'js/catalog_details.js' %}?v=20261021a" defer></script>
 {% block scripts %}{% endblock %}
+
+{% if user.is_authenticated %}
+<div class="modal fade"
+     id="chatInstitucionalModal"
+     tabindex="-1"
+     aria-labelledby="chatInstitucionalTitulo"
+     aria-hidden="true">
+
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content sgr-chat-modal">
+
+            <div class="modal-header sgr-chat-header">
+                <h5 class="modal-title" id="chatInstitucionalTitulo">
+                    <i class="bi bi-chat-dots-fill me-2"></i>
+                    Chat institucional
+                </h5>
+
+                <button type="button"
+                        class="btn-close btn-close-white"
+                        data-bs-dismiss="modal"
+                        aria-label="Cerrar"></button>
+            </div>
+
+            <div class="modal-body sgr-chat-body">
+
+                <div class="d-flex justify-content-end mb-3">
+                    <span id="chat-status" class="badge bg-secondary">
+                        Desconectado
+                    </span>
+                </div>
+
+                <ul id="messages"
+                    class="sgr-chat-messages"
+                    aria-live="polite">
+                </ul>
+
+                <form id="chat-form"
+                      action="{% url 'websocket:send' %}"
+                      class="mt-3">
+
+                    {% csrf_token %}
+
+                    <label for="message"
+                           class="form-label fw-semibold">
+                        Mensaje
+                    </label>
+
+                    <div class="input-group">
+                        <input type="text"
+                               id="message"
+                               name="message"
+                               class="form-control"
+                               maxlength="300"
+                               placeholder="Escribe un mensaje..."
+                               required>
+
+                        <button type="submit"
+                                id="send"
+                                class="btn btn-success"
+                                disabled>
+                            <i class="bi bi-send me-1"></i>
+                            Enviar
+                        </button>
+                    </div>
+
+                </form>
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endif %}
+<script>
+    
+document.addEventListener("DOMContentLoaded", function () {
+    const modal = document.getElementById("chatInstitucionalModal");
+    if (!modal) return;
+
+    const form = document.getElementById("chat-form");
+    const input = document.getElementById("message");
+    const button = document.getElementById("send");
+    const status = document.getElementById("chat-status");
+    const messages = document.getElementById("messages");
+
+    let chatSocket = null;
+
+    modal.addEventListener("shown.bs.modal", function () {
+        const scheme = location.protocol === "https:" ? "wss" : "ws";
+
+        chatSocket = new WebSocket(
+            scheme + "://" + location.host + "/ws/chat/"
+        );
+
+        status.textContent = "Conectando...";
+        status.className = "badge bg-secondary";
+        button.disabled = true;
+
+        chatSocket.onopen = function () {
+            status.textContent = "Conectado";
+            status.className = "badge bg-success";
+            button.disabled = false;
+        };
+
+        chatSocket.onmessage = function (event) {
+            const data = JSON.parse(event.data);
+
+            if (data.type !== "chat_message") return;
+
+            const item = document.createElement("li");
+            item.textContent = data.username + ": " + data.message;
+
+            messages.appendChild(item);
+            messages.scrollTop = messages.scrollHeight;
+        };
+
+        chatSocket.onclose = function () {
+            status.textContent = "Desconectado";
+            status.className = "badge bg-danger";
+            button.disabled = true;
+        };
+
+        chatSocket.onerror = function () {
+            status.textContent = "Error de conexión";
+            status.className = "badge bg-danger";
+        };
+    });
+
+    form.addEventListener("submit", async function (event) {
+        event.preventDefault();
+
+        const message = input.value.trim();
+
+        if (!message ||
+            !chatSocket ||
+            chatSocket.readyState !== WebSocket.OPEN) {
+            return;
+        }
+
+        button.disabled = true;
+
+        try {
+            const response = await fetch(form.action, {
+                method: "POST",
+                headers: {
+                    "X-CSRFToken": form.querySelector(
+                        "[name=csrfmiddlewaretoken]"
+                    ).value
+                },
+                body: new URLSearchParams({ message })
+            });
+
+            if (!response.ok || response.redirected) {
+                status.textContent = "No se pudo enviar el mensaje";
+                return;
+            }
+
+            input.value = "";
+        } catch (error) {
+            status.textContent = "Error al enviar el mensaje";
+        } finally {
+            if (chatSocket &&
+                chatSocket.readyState === WebSocket.OPEN) {
+                button.disabled = false;
+            }
+        }
+    });
+
+    modal.addEventListener("hidden.bs.modal", function () {
+        if (chatSocket) {
+            chatSocket.close();
+            chatSocket = null;
+        }
+    });
+});
+
+</script>
 </body>
 </html>

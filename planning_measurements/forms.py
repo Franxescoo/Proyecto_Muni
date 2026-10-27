@@ -222,6 +222,34 @@ class GoalScopeMixin(BootstrapMixin):
         field.required = not bool(self.instance.pk)
         field.empty_label = "Seleccione un ítem"
         field.widget.attrs["class"] = "form-select"
+
+        # Ítems permitidos según el cargo del funcionario.
+        cargos = PositionFunction.objects.filter(
+            pk__in=self.fields["employee"].queryset.values_list(
+                "position_id", flat=True
+            )
+        ).prefetch_related("catalog_items")
+
+        items_por_cargo = {
+            str(cargo.pk): [
+                str(item.pk)
+                for item in cargo.catalog_items.all()
+            ]
+            for cargo in cargos
+        }
+
+        field.widget.attrs["data-items-by-position"] = json.dumps(
+            items_por_cargo
+        )
+
+        # Conserva el ítem de una meta histórica.
+        field.widget.attrs["data-original-item"] = str(
+            self.instance.measurement_item_id or ""
+        )
+        field.widget.attrs["data-original-employee"] = str(
+            self.instance.employee_id or ""
+        )
+
         
         # Identifica visualmente los ítems históricos desactivados.
         field.label_from_instance = lambda item: (
@@ -292,6 +320,25 @@ class GoalScopeMixin(BootstrapMixin):
             bool(self.instance.pk)
             and self.instance.measurement_item_id == item.pk
         )
+
+        empleado = cleaned_data.get("employee")
+
+        misma_meta = (
+            es_historico
+            and empleado is not None
+            and self.instance.employee_id == empleado.pk
+        )
+
+        if empleado and not misma_meta:
+            if not empleado.position.catalog_items.filter(
+                pk=item.pk
+            ).exists():
+                self.add_error(
+                    "measurement_item",
+                    "Este ítem no corresponde al cargo del funcionario."
+                )
+                return cleaned_data
+
 
         if (
             item.deleted_at is not None or not item.is_active

@@ -418,7 +418,7 @@
                                 {% endif %}
 
 
-                                {% if user.is_superuser and item.is_active %}
+                                {% if perms.planning_measurements.delete_measurementitem and item.is_active %}
 
                                 <form method="post"
                                       action="{% url 'planning:item_delete' item.pk %}"
@@ -429,7 +429,7 @@
 
                                     <button type="submit"
                                             class="btn btn-outline-danger btn-sm">
-                                        <i class="bi bi-trash3 me-1" aria-hidden="true"></i>Desactivar
+                                        <i class="bi bi-trash3 me-1" aria-hidden="true"></i>Eliminar
                                     </button>
 
                                 </form>

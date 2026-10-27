@@ -16,6 +16,7 @@ from accounts.forms import (
     UsuarioOCorreoAuthenticationForm,
 )
 from accounts import views as account_views
+from django.urls import include, path
 
 
 urlpatterns = [
@@ -106,6 +107,7 @@ urlpatterns = [
         "",
         include("core.urls"),
     ),
+    path("chat/", include("websocket.urls")),
 ]
 
 

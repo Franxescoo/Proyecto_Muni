@@ -170,6 +170,10 @@ def run_bulk_delete(request, queryset):
         elif queryset.model is Goal:
             for goal in selected:
                 if goal.activities.exists() or goal.indicators.exists():
+                    if goal.period.status == Period.Status.CLOSED:
+                        raise PermissionDenied(
+                            "No puedes eliminar metas de períodos cerrados."
+                        )
                     raise PermissionDenied(
                         f"No se puede eliminar la meta '{goal.item}' "
                         "porque tiene actividades o indicadores asociados."
@@ -776,6 +780,57 @@ def period_edit(request, period_id):
 
     user = request.user
 
+    
+    # Reapertura autorizada del período
+    if request.method == "POST" and request.POST.get("_action") == "reopen":
+        from monitoring_traceability.models import Audit
+
+        if not user.has_perm("planning_measurements.change_period"):
+            raise PermissionDenied
+
+        motivo = request.POST.get("reason", "").strip()
+
+        if not motivo or len(motivo) > 500:
+            messages.error(request, "Indica un motivo válido.")
+            return redirect("planning:period_list")
+
+        empleado = getattr(
+            getattr(user, "profile", None), "employee", None
+        )
+        if empleado is None:
+            raise PermissionDenied("La cuenta necesita un funcionario asociado.")
+
+        with transaction.atomic():
+            periodo = get_object_or_404(
+                Period.objects.select_for_update(),
+                pk=period_id,
+                deleted_at__isnull=True,
+            )
+
+            if periodo.status != Period.Status.CLOSED:
+                messages.warning(request, "El período no está cerrado.")
+                return redirect("planning:period_list")
+
+            periodo.status = Period.Status.ACTIVE
+            periodo.save(update_fields=["status", "updated_at"])
+
+            Audit.objects.create(
+                user=empleado,
+                event="Reopened Period",
+                entity="Period",
+                object_identifier=str(periodo.pk),
+                previous_value={"status": "Closed"},
+                new_value={
+                    "status": "Active",
+                    "motivo": motivo,
+                    "editado_por": user.get_username(),
+                },
+            )
+
+        messages.success(request, "Período reabierto correctamente.")
+        return redirect("planning:period_list")
+
+
     can_change = (
         user.has_perm(
             "planning_measurements.change_period"
@@ -1285,8 +1340,33 @@ def goal_edit(request, goal_id):
             field.disabled = True
 
     if request.method == "POST" and form.is_valid():
-        form.save()
+        campos = (
+            "period_id",
+            "employee_id",
+            "position_id",
+            "measurement_item_id",
+            "item",
+            "objective_value",
+            "required_evidence_count",
+            "unit",
+            "weight",
+        )
+
+        # Obtener los valores guardados antes de modificar la meta.
+        anterior = Goal.objects.get(pk=goal.pk)
+
+        form.instance._audit_before = {
+            campo: str(getattr(anterior, campo))
+            for campo in campos
+        }
+
+        form.instance._audit_actor = request.user.get_username()
+
+        with transaction.atomic():
+            form.save()
+
         messages.success(request, "Meta modificada correctamente.")
+
         return after_save(
             request,
             "planning:goal_list",
@@ -1323,6 +1403,13 @@ def goal_delete(request, goal_id):
         scoped_goals(request.user, "planning_measurements.delete_goal"),
         pk=goal_id
     )
+
+    if goal.period.status == Period.Status.CLOSED:
+        raise PermissionDenied(
+            "No puedes eliminar metas de un período cerrado. "
+            "Primero debe realizarse una reapertura autorizada."
+        )
+
 
     # No bloqueamos por estado cerrado: ese es el cambio solicitado.
     # Protegemos las referencias de otros módulos.
@@ -1573,8 +1660,6 @@ def item_edit(request, item_id):
 @require_POST
 def item_delete(request, item_id):
     """Desactiva un ítem sin eliminarlo físicamente."""
-
-    only_superuser(request.user)
 
     item = get_object_or_404(
         MeasurementItem,

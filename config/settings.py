@@ -59,6 +59,9 @@ CSRF_TRUSTED_ORIGINS = [
 # Application definition
 
 INSTALLED_APPS = [
+    "daphne",
+    "channels",
+    "websocket",
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -82,6 +85,7 @@ MIDDLEWARE = [
     'accounts.delegation_context.ActiveDelegationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'monitoring_traceability.audit_context.AuditUserMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -103,6 +107,14 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'config.wsgi.application'
+ASGI_APPLICATION = "config.asgi.application"
+
+
+CHANNEL_LAYERS = {
+"default": {
+"BACKEND": "channels.layers.InMemoryChannelLayer",
+}
+}
 
 
 # Database

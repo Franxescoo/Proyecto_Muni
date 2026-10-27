@@ -366,11 +366,13 @@
 
                             {% if perms.planning_measurements.delete_goal %}
                             <td>
+                                {% if goal.period.status != "Closed" %}
                                 <input type="checkbox"
-                                       class="form-check-input sel"
-                                       name="_selected_action"
-                                       value="{{ goal.pk }}"
-                                       aria-label="Seleccionar meta {{ goal.pk }}">
+                                    class="form-check-input sel"
+                                    name="_selected_action"
+                                    value="{{ goal.pk }}"
+                                    aria-label="Seleccionar meta {{ goal.pk }}">
+                                {% endif %}
                             </td>
                             {% endif %}
 
@@ -436,7 +438,7 @@
                                     {% endif %}
 
                                     <!-- ELIMINAR -->
-                                    {% if perms.planning_measurements.delete_goal %}
+                                    {% if perms.planning_measurements.delete_goal and goal.period.status != "Closed" %}
                                     <a href="{% url 'planning:goal_delete' goal.goal_id %}"
                                        class="btn btn-sm btn-outline-danger goal-delete-btn"
                                        data-goal-name="{{ goal.item }}">

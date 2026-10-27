@@ -3,6 +3,7 @@ from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 
 from .models import Indicator
+from planning_measurements.working_days import calculate_computable_days
 
 
 _THRESHOLD_PATTERN = re.compile(
@@ -11,48 +12,69 @@ _THRESHOLD_PATTERN = re.compile(
 )
 
 
+
 def _thresholds(period):
     values = {}
+
     for match in _THRESHOLD_PATTERN.finditer(period.thresholds or ""):
         label = match.group("label").lower()
-        values[label] = Decimal(match.group("value").replace(",", "."))
+        values[label] = Decimal(
+            match.group("value").replace(",", ".")
+        )
 
-    if "green" in values or "verde" in values:
-        green = values.get("green", values.get("verde"))
-        yellow = values.get("yellow", values.get("amarillo", Decimal("60")))
-        return green, yellow
+    green = values.get(
+        "verde", values.get("green", Decimal("100"))
+    )
 
-    ordered = sorted(values.values(), reverse=True)
-    if not ordered:
-        return Decimal("90"), Decimal("60")
-    green = ordered[0]
-    yellow = ordered[1] if len(ordered) > 1 else Decimal("60")
+    yellow = values.get(
+        "amarillo", values.get("yellow", Decimal("60"))
+    )
+
     return green, yellow
+
+
 
 
 def _traffic_light(compliance, period):
     expected = _expected_progress(period)
-    if compliance >= expected:
+    green, yellow = _thresholds(period)
+
+    if compliance >= expected * green / Decimal("100"):
         return "Green"
-    if compliance >= expected * Decimal("0.60"):
+
+    if compliance >= expected * yellow / Decimal("100"):
         return "Yellow"
+
     return "Red"
+
+
 
 
 def _expected_progress(period, on_date=None):
     on_date = on_date or date.today()
-    total_days = period.computable_days or (
-        period.end_date - period.start_date
-    ).days + 1
-    if on_date <= period.start_date:
+
+    if on_date < period.start_date:
         return Decimal("0.00")
-    elapsed = min(
-        max((on_date - period.start_date).days + 1, 0),
-        total_days,
+
+    total_days = calculate_computable_days(
+        period.start_date,
+        period.end_date
     )
+
+    if total_days <= 0:
+        return Decimal("0.00")
+
+    elapsed_days = calculate_computable_days(
+        period.start_date,
+        min(on_date, period.end_date)
+    )
+
     return (
-        Decimal(elapsed) / Decimal(total_days) * Decimal("100")
+        Decimal(elapsed_days)
+        / Decimal(total_days)
+        * Decimal("100")
     ).quantize(Decimal("0.01"), ROUND_HALF_UP)
+
 
 
 def _compliance_cap(period):
@@ -80,7 +102,7 @@ def _evidence_is_approved(evidence):
             latest.decision.casefold() == "approved"
             or latest.result.casefold() == "approved"
         )
-    return evidence.review_status.casefold() == "approved"
+    return False
 
 
 def _activity_is_approved(activity):
@@ -109,24 +131,36 @@ def recalculate_indicator_for_goal(goal, create_if_missing=True):
         for evidence in activity.evidences.all()
         if _evidence_is_approved(evidence)
     )
-    expected = Decimal(goal.required_evidence_count)
-    actual = Decimal(raw_approved_evidences)
+    
+    expected = Decimal(goal.objective_value)
+    actual = Decimal(approved_activities)
+
+    if expected <= 0:
+        raise ValueError(
+            "El valor objetivo de la meta debe ser mayor que cero."
+        )
+
     cap = _compliance_cap(goal.period)
+
     compliance = (
-        Decimal(raw_approved_evidences)
-        / Decimal(goal.required_evidence_count)
-        * Decimal("100")
+        actual / expected * Decimal("100")
     )
+
     compliance = min(compliance, cap).quantize(
         Decimal("0.01"), ROUND_HALF_UP
     )
+
     expected_progress = _expected_progress(goal.period)
+
     weighted_result = (
         goal.weight * compliance / Decimal("100")
     ).quantize(Decimal("0.01"), ROUND_HALF_UP)
+
     difference = (actual - expected).quantize(
         Decimal("0.01"), ROUND_HALF_UP
     )
+
+
 
     indicator = (
         Indicator.objects.filter(

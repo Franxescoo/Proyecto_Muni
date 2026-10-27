@@ -57,7 +57,103 @@
         </form>
         <div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr><th>Evento</th><th>Usuario</th><th>Entidad</th><th>Identificador</th><th>Fecha</th><th class="text-end">Detalle</th></tr></thead><tbody>
             {% for audit in audits %}
-            <tr><td><span class="event-icon me-2"><i class="bi bi-clock-history" aria-hidden="true"></i></span><span class="fw-semibold">{{ audit.event|default:"Evento" }}</span></td><td>{{ audit.user|default:"—" }}</td><td>{{ audit.entity|default:"—" }}</td><td><code>{{ audit.object_identifier|default:"—" }}</code></td><td class="text-muted small">{% language 'es' %}{{ audit.event_date|date:"d \d\e F \d\e Y H:i"|default:"—" }}{% endlanguage %}</td><td class="text-end"><button type="button" class="btn btn-sm btn-light border" title="Ver cambios"><i class="bi bi-eye"></i><span class="visually-hidden">Ver cambios</span></button></td></tr>
+            <tr><td><span class="event-icon me-2"><i class="bi bi-clock-history" aria-hidden="true"></i></span><span class="fw-semibold">{{ audit.event|default:"Evento" }}</span></td>
+                <td>
+                    {% if audit.entity == "Goal" and audit.new_value.editado_por %}
+                        {{ audit.new_value.editado_por }}
+                    {% else %}
+                        {{ audit.user|default:"—" }}
+                    {% endif %}
+                </td>
+
+                <td>
+                    {{ audit.entity|default:"—" }}
+                </td>
+                <td><code>{{ audit.object_identifier|default:"—" }}</code></td><td class="text-muted small">{% language 'es' %}{{ audit.event_date|date:"d \d\e F \d\e Y H:i"|default:"—" }}{% endlanguage %}</td>
+                <td class="text-end">
+                    {% if audit.previous_value or audit.new_value %}
+                    <details class="text-start">
+                        <summary class="btn btn-sm btn-light border">
+                            <i class="bi bi-eye"></i>
+                            Ver cambios
+                        </summary>
+
+                        <div class="border rounded p-3 mt-2 bg-light">
+                            {% if audit.entity == "Goal" and audit.new_value.datos %}
+                            <table class="table table-bordered table-sm mt-2">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Campo</th>
+                                        <th>Antes</th>
+                                        <th>Después</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>Valor objetivo</td>
+                                        <td>{{ audit.previous_value.objective_value }}</td>
+                                        <td>{{ audit.new_value.datos.objective_value }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Ítem</td>
+                                        <td>{{ audit.previous_value.item }}</td>
+                                        <td>{{ audit.new_value.datos.item }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Ponderador</td>
+                                        <td>{{ audit.previous_value.weight }}</td>
+                                        <td>{{ audit.new_value.datos.weight }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>Evidencias requeridas</td>
+                                        <td>{{ audit.previous_value.required_evidence_count }}</td>
+                                        <td>{{ audit.new_value.datos.required_evidence_count }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                            <p class="small text-muted mb-0">
+                                Modificado por: {{ audit.new_value.editado_por }}
+                            </p>
+                            {% elif audit.entity == "Period" and audit.event == "Reopened Period" %}
+
+                            <table class="table table-bordered table-sm mt-2">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Campo</th>
+                                        <th>Antes</th>
+                                        <th>Después</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>Estado del período</td>
+                                        <td>Cerrado</td>
+                                        <td>Activo</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+
+                            <p class="mb-1">
+                                <strong>Motivo:</strong>
+                                {{ audit.new_value.motivo }}
+                            </p>
+
+                            <p class="mb-0">
+                                <strong>Reabierto por:</strong>
+                                {{ audit.new_value.editado_por }}
+                            </p>
+                            {% else %}
+                                <pre>{{ audit.previous_value|pprint }}</pre>
+                                <pre>{{ audit.new_value|pprint }}</pre>
+                            {% endif %}
+
+                        </div>
+                    </details>
+                    {% else %}
+                        <span class="text-muted">—</span>
+                    {% endif %}
+                </td>
+            </tr>
             {% empty %}<tr><td colspan="6" class="text-center py-5"><i class="bi bi-journal-check fs-2 text-muted d-block mb-2"></i><span class="text-muted">No hay eventos de auditoría para mostrar.</span></td></tr>
             {% endfor %}
         </tbody></table></div>

@@ -1,3 +1,4 @@
+
 <script>
 (function () {
     function updatePosition(employee) {
@@ -8,10 +9,44 @@
         if (!position) return;
 
         const positions = JSON.parse(
-            employee.dataset.goalPositions
+            employee.dataset.goalPositions || "{}"
         );
 
         position.value = positions[employee.value] || '';
+
+        const itemSelect = document.getElementById(
+            employee.id.replace(/employee$/, 'measurement_item')
+        );
+
+        if (!itemSelect || itemSelect.disabled) return;
+
+        const itemsPorCargo = JSON.parse(
+            itemSelect.dataset.itemsByPosition || "{}"
+        );
+
+        const permitidos = itemsPorCargo[position.value] || [];
+
+        Array.from(itemSelect.options).forEach(function (option) {
+            if (!option.value) return;
+
+            const historico = (
+                employee.value === itemSelect.dataset.originalEmployee &&
+                option.value === itemSelect.dataset.originalItem
+            );
+
+            const mostrar = permitidos.includes(option.value) || historico;
+
+            option.hidden = !mostrar;
+            option.disabled = !mostrar;
+        });
+
+        if (itemSelect.selectedOptions.length &&
+            itemSelect.selectedOptions[0].disabled) {
+            itemSelect.value = "";
+            itemSelect.dispatchEvent(new Event("change", {
+                bubbles: true
+            }));
+        }
     }
 
     document.querySelectorAll('[data-goal-positions]')

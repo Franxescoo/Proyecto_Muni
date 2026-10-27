@@ -421,6 +421,17 @@
                                         Ver
                                     </a>
 
+                                    {% if perms.planning_measurements.change_period and period.status == "Closed" %}
+                                    <button type="button"
+                                            class="btn btn-sm btn-outline-success"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#reopenPeriodModal"
+                                            data-action-url="{% url 'planning:period_edit' period.pk %}">
+                                        <i class="bi bi-arrow-counterclockwise me-1"></i>
+                                        Reabrir
+                                    </button>
+                                    {% endif %}
+
                                     <!-- MODIFICAR -->
                                     {% if perms.planning_measurements.change_period and period.status != "Closed" %}
                                     <a href="{% url 'planning:period_edit' period.period_id %}"
@@ -467,6 +478,101 @@
     </section>
 
 </div>
+
+
+{% if perms.planning_measurements.change_period %}
+    {% for period in page %}
+        {% if period.status == "Closed" %}
+        <form id="reopen-{{ period.pk }}"
+              method="post"
+              action="{% url 'planning:period_edit' period.pk %}"
+              onsubmit="let m = prompt('Motivo de reapertura:'); if (!m || !m.trim()) return false; this.querySelector('[name=reason]').value = m.trim(); return confirm('¿Confirmas la reapertura?');">
+            {% csrf_token %}
+            <input type="hidden" name="_action" value="reopen">
+            <input type="hidden" name="reason">
+        </form>
+        {% endif %}
+    {% endfor %}
+{% endif %}
+
+
+{% if perms.planning_measurements.change_period %}
+<div class="modal fade"
+     id="reopenPeriodModal"
+     tabindex="-1"
+     aria-labelledby="reopenPeriodTitle"
+     aria-hidden="true">
+
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 rounded-3 overflow-hidden">
+
+            <form id="reopenPeriodForm" method="post">
+                {% csrf_token %}
+
+                <input type="hidden"
+                       name="_action"
+                       value="reopen">
+
+                <!-- ENCABEZADO -->
+                <div class="modal-header text-white"
+                     style="background: linear-gradient(135deg, #a60a17, #760710);">
+
+                    <h5 class="modal-title" id="reopenPeriodTitle">
+                        <i class="bi bi-arrow-counterclockwise me-2"></i>
+                        Reabrir período
+                    </h5>
+
+                    <button type="button"
+                            class="btn-close btn-close-white"
+                            data-bs-dismiss="modal"
+                            aria-label="Cerrar">
+                    </button>
+                </div>
+
+                <!-- CONTENIDO -->
+                <div class="modal-body p-4">
+                    <p class="text-muted">
+                        Indica el motivo por el cual deseas
+                        reabrir este período.
+                    </p>
+
+                    <label for="reopenReason"
+                           class="form-label fw-semibold">
+                        Motivo de reapertura
+                    </label>
+
+                    <textarea id="reopenReason"
+                              name="reason"
+                              class="form-control"
+                              rows="3"
+                              maxlength="500"
+                              placeholder="Escribe el motivo..."
+                              required></textarea>
+
+                    <div class="form-text">
+                        El cambio quedará registrado en Auditoría.
+                    </div>
+                </div>
+
+                <!-- BOTONES -->
+                <div class="modal-footer">
+                    <button type="button"
+                            class="btn btn-outline-secondary"
+                            data-bs-dismiss="modal">
+                        Cancelar
+                    </button>
+
+                    <button type="submit"
+                            class="btn btn-success">
+                        Confirmar reapertura
+                    </button>
+                </div>
+            </form>
+
+        </div>
+    </div>
+</div>
+{% endif %}
 
 
 <!-- MODAL DE PERÍODOS -->
@@ -715,6 +821,24 @@ document.addEventListener("DOMContentLoaded", function () {
 </script>
 
 {% endif %}
+
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const modal = document.getElementById("reopenPeriodModal");
+
+    if (!modal) return;
+
+    modal.addEventListener("show.bs.modal", function (event) {
+        const boton = event.relatedTarget;
+        const formulario = document.getElementById("reopenPeriodForm");
+
+        formulario.action = boton.dataset.actionUrl;
+        formulario.reset();
+    });
+});
+</script>
+
 
 {% endblock %}
 

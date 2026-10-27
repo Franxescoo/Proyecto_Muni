@@ -88,6 +88,8 @@ class PlanningTests(TestCase):
             is_active=True,
         )
 
+        self.position.catalog_items.add(self.measurement_item)
+
         self.data = {
             "period": self.period.pk,
             "employee": self.employee.pk,
@@ -229,6 +231,8 @@ class PlanningTests(TestCase):
             validity_end=date(2026, 12, 31),
         )
 
+        self.position.catalog_items.add(self.measurement_item)
+
         employee = Employee.objects.create(
             name="New",
             delegation=self.delegation,
@@ -236,6 +240,8 @@ class PlanningTests(TestCase):
             roles="Staff",
             status="Active",
         )
+
+        employee.position.catalog_items.add(self.measurement_item)
 
         form = GoalForm(
             {
