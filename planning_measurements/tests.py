@@ -144,7 +144,7 @@ class PlanningTests(TestCase):
             "end_date": "2026-12-31",
             "computable_days": 200,
             "status": "Active",
-            "thresholds": "Thresholds",
+            "thresholds": "Verde: 100, Amarillo: 80, Rojo: 60",
             "parameters_version": "1",
         }
 
@@ -862,3 +862,34 @@ class ComputableDaysTests(SimpleTestCase):
                 date(2026, 1, 10),
                 date(2026, 1, 1),
             )
+
+
+class MeasurementItemFormulaTests(TestCase):
+
+    def test_porcentual_sin_formula(self):
+        item = MeasurementItem(
+            code="TEST-PCT-01",
+            name="Solicitudes resueltas",
+            item_type=MeasurementItem.ItemType.PERCENTAGE,
+            unit="%",
+            formula="",
+        )
+
+        with self.assertRaises(ValidationError):
+            item.full_clean()
+
+    def test_porcentual_con_formula(self):
+        item = MeasurementItem(
+            code="TEST-PCT-02",
+            name="Solicitudes resueltas",
+            item_type=MeasurementItem.ItemType.PERCENTAGE,
+            unit="%",
+            formula="(Resueltas / Recibidas) * 100",
+        )
+
+        item.full_clean()
+
+        self.assertEqual(
+            item.item_type,
+            MeasurementItem.ItemType.PERCENTAGE,
+        )

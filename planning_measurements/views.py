@@ -167,17 +167,29 @@ def run_bulk_delete(request, queryset):
                         "No se puede archivar este período: conserva metas o historial asociado."
                     )
 
+        
         elif queryset.model is Goal:
             for goal in selected:
-                if goal.activities.exists() or goal.indicators.exists():
-                    if goal.period.status == Period.Status.CLOSED:
-                        raise PermissionDenied(
-                            "No puedes eliminar metas de períodos cerrados."
-                        )
-                    raise PermissionDenied(
-                        f"No se puede eliminar la meta '{goal.item}' "
-                        "porque tiene actividades o indicadores asociados."
+
+                # Bloquear metas de períodos cerrados.
+                if goal.period.status == Period.Status.CLOSED:
+                    messages.error(
+                        request,
+                        "No se puede eliminar la selección porque "
+                        "contiene metas de períodos cerrados."
                     )
+                    return
+
+                # Bloquear metas con actividades o indicadores.
+                if goal.activities.exists():
+                    messages.error(
+                        request,
+                        f"No se puede eliminar la meta '{goal.item}' "
+                        "porque tiene actividades asociadas. "
+                        "No se eliminó ninguna meta."
+                    )
+                    return
+
 
         now = timezone.now()
 
@@ -336,13 +348,22 @@ def goal_formset(can_add, existing_count):
     )
 
 
+
 def disable_formset(formset, only_existing=False):
     forms = formset.forms
+
     if only_existing:
-        forms = forms[: formset.initial_form_count()]
+        forms = forms[:formset.initial_form_count()]
+
     for form in forms:
-        for field in form.fields.values():
+        for nombre, field in form.fields.items():
+
+            # No bloquear el identificador de la meta.
+            if nombre == "goal_id":
+                continue
+
             field.disabled = True
+
 
 def available_goal_sources(user, period=None):
     """Metas existentes que el usuario puede reutilizar."""
@@ -894,7 +915,7 @@ def period_edit(request, period_id):
 
         disable_formset(formset)
 
-    elif not can_change_goal:
+    else:
         disable_formset(
             formset,
             only_existing=True,
@@ -1313,9 +1334,15 @@ def goal_create(request):
 
 
 @access("planning_measurements.view_goal")
+@transaction.atomic
 def goal_edit(request, goal_id):
     # Una meta de otra delegación no está en el queryset: responde 404
-    goal = get_object_or_404(scoped_goals(request.user), pk=goal_id)
+    queryset = scoped_goals(request.user)
+
+    if request.method == "POST":
+        queryset = queryset.select_for_update(of=("self",))
+
+    goal = get_object_or_404(queryset, pk=goal_id)
     editable_scope = scoped_goals(request.user, "planning_measurements.change_goal").filter(pk=goal_id).exists()
     can_change = (
         request.user.has_perm(
@@ -1339,7 +1366,20 @@ def goal_edit(request, goal_id):
         for field in form.fields.values():
             field.disabled = True
 
-    if request.method == "POST" and form.is_valid():
+    
+    if (
+        request.method == "POST"
+        and request.POST.get("version", "") != goal.updated_at.isoformat()
+    ):
+        form.add_error(
+            None,
+            "Esta meta fue modificada por otro usuario. "
+            "Actualiza la página para revisar los cambios "
+            "antes de guardar."
+        )
+
+    elif request.method == "POST" and form.is_valid():
+
         campos = (
             "period_id",
             "employee_id",
@@ -1405,19 +1445,23 @@ def goal_delete(request, goal_id):
     )
 
     if goal.period.status == Period.Status.CLOSED:
-        raise PermissionDenied(
-            "No puedes eliminar metas de un período cerrado. "
-            "Primero debe realizarse una reapertura autorizada."
+        messages.error(
+            request,
+            "No se puede eliminar esta meta porque pertenece "
+            "a un período cerrado."
         )
+        return redirect("planning:goal_list")
 
 
     # No bloqueamos por estado cerrado: ese es el cambio solicitado.
     # Protegemos las referencias de otros módulos.
-    if goal.activities.exists() or goal.indicators.exists():
-        raise PermissionDenied(
+    if goal.activities.exists():
+        messages.error(
+            request,
             "No se puede eliminar esta meta porque tiene "
-            "actividades o indicadores asociados."
+            "actividades asociadas."
         )
+        return redirect("planning:goal_list")
 
     if request.method == "POST":
         goal.deleted_at = timezone.now()
@@ -1550,8 +1594,18 @@ def item_create(request):
 
     form = MeasurementItemForm(request.POST or None)
 
+    
     if request.method == "POST" and form.is_valid():
-        form.save()
+
+        item = form.save()
+
+        # Buscar el funcionario vinculado al usuario.
+        perfil = getattr(request.user, "profile", None)
+        funcionario = getattr(perfil, "employee", None)
+
+        # Asignar automáticamente el ítem a su cargo.
+        if funcionario and funcionario.position_id:
+            funcionario.position.catalog_items.add(item)
 
         messages.success(
             request,
@@ -1559,6 +1613,7 @@ def item_create(request):
         )
 
         return redirect("planning:item_list")
+
 
     context = get_item_list_context(request)
 

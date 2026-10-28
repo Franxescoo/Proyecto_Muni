@@ -1,0 +1,33 @@
+
+{% if cambios %}
+<div class="table-responsive mt-3">
+    <table class="table table-sm table-bordered align-middle">
+        <thead class="table-light">
+            <tr>
+                <th>Campo modificado</th>
+                <th>Valor anterior</th>
+                <th>Valor nuevo</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for cambio in cambios %}
+            <tr>
+                <td class="fw-semibold">
+                    {{ cambio.campo }}
+                </td>
+                <td class="text-muted">
+                    {{ cambio.antes }}
+                </td>
+                <td class="fw-semibold text-success">
+                    {{ cambio.despues }}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<p class="text-muted small mt-2">
+    No hay diferencias de campos para mostrar.
+</p>
+{% endif %}

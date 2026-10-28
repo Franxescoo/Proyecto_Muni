@@ -8,6 +8,8 @@ from organization.models import Employee, PositionFunction
 from .models import Goal, Period, MeasurementItem
 
 from .working_days import calculate_computable_days
+import re
+from decimal import Decimal
 
 
 class BootstrapMixin:
@@ -77,6 +79,44 @@ class PeriodForm(BootstrapMixin, forms.ModelForm):
             "excluyendo feriados de Chile."
         )
 
+    
+    def clean_thresholds(self):
+        valor = self.cleaned_data["thresholds"].strip()
+
+        # Conservar configuraciones históricas sin modificar.
+        if self.instance.pk and valor == self.instance.thresholds:
+            return valor
+
+        patron = (
+            r"Verde\s*:\s*(\d+(?:\.\d+)?)\s*,\s*"
+            r"Amarillo\s*:\s*(\d+(?:\.\d+)?)\s*,\s*"
+            r"Rojo\s*:\s*(\d+(?:\.\d+)?)"
+        )
+
+        resultado = re.fullmatch(
+            patron, valor, flags=re.IGNORECASE
+        )
+
+        if not resultado:
+            raise forms.ValidationError(
+                "Utiliza el formato: "
+                "Verde: 100, Amarillo: 80, Rojo: 60."
+            )
+
+        verde, amarillo, rojo = (
+            Decimal(numero)
+            for numero in resultado.groups()
+        )
+
+        if not (0 <= rojo < amarillo < verde <= 100):
+            raise forms.ValidationError(
+                "Los umbrales deben estar entre 0 y 100, "
+                "cumpliendo: Verde > Amarillo > Rojo."
+            )
+
+        return valor
+
+    
     def clean(self):
         cleaned_data = super().clean()
 
@@ -378,6 +418,10 @@ class GoalScopeMixin(BootstrapMixin):
 
 
 class GoalForm(GoalScopeMixin, forms.ModelForm):
+    version = forms.CharField(
+        widget=forms.HiddenInput(),
+        required=False,
+    )
     class Meta:
         model = Goal
         fields = [
@@ -394,7 +438,10 @@ class GoalForm(GoalScopeMixin, forms.ModelForm):
 
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
-
+        if self.instance.pk and not self.is_bound:
+            self.fields["version"].initial = (
+                self.instance.updated_at.isoformat()
+            )
         periods = Period.objects.filter(
             deleted_at__isnull=True
         )

@@ -197,6 +197,28 @@ class Goal(BaseModel):
                 "el cargo actual del funcionario."
             )
 
+        
+        # Evitar metas duplicadas en el mismo período.
+        if (
+            self.period_id
+            and self.employee_id
+            and self.position_id
+            and self.measurement_item_id
+        ):
+            duplicada = Goal.objects.filter(
+                period_id=self.period_id,
+                employee_id=self.employee_id,
+                position_id=self.position_id,
+                measurement_item_id=self.measurement_item_id,
+                deleted_at__isnull=True,
+            ).exclude(pk=self.pk).exists()
+
+            if duplicada:
+                errors.setdefault("__all__", []).append(
+                    "Ya existe una meta con este período, "
+                    "funcionario, cargo e ítem de medición."
+                )
+
         if errors:
             raise ValidationError(errors)
 

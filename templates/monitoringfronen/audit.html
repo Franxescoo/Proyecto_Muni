@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load audit_extras %}
 {% load i18n %}
 
 {% block titulo %}Auditoría · Monitoreo y trazabilidad{% endblock %}
@@ -80,40 +81,15 @@
 
                         <div class="border rounded p-3 mt-2 bg-light">
                             {% if audit.entity == "Goal" and audit.new_value.datos %}
-                            <table class="table table-bordered table-sm mt-2">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th>Campo</th>
-                                        <th>Antes</th>
-                                        <th>Después</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td>Valor objetivo</td>
-                                        <td>{{ audit.previous_value.objective_value }}</td>
-                                        <td>{{ audit.new_value.datos.objective_value }}</td>
-                                    </tr>
-                                    <tr>
-                                        <td>Ítem</td>
-                                        <td>{{ audit.previous_value.item }}</td>
-                                        <td>{{ audit.new_value.datos.item }}</td>
-                                    </tr>
-                                    <tr>
-                                        <td>Ponderador</td>
-                                        <td>{{ audit.previous_value.weight }}</td>
-                                        <td>{{ audit.new_value.datos.weight }}</td>
-                                    </tr>
-                                    <tr>
-                                        <td>Evidencias requeridas</td>
-                                        <td>{{ audit.previous_value.required_evidence_count }}</td>
-                                        <td>{{ audit.new_value.datos.required_evidence_count }}</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                            <p class="small text-muted mb-0">
-                                Modificado por: {{ audit.new_value.editado_por }}
-                            </p>
+
+                            {% mostrar_cambios audit.previous_value audit.new_value.datos %}
+
+                            {% if audit.new_value.editado_por %}
+                                <p class="small text-muted mb-0">
+                                    Modificado por: {{ audit.new_value.editado_por }}
+                                </p>
+                            {% endif %}
+                            
                             {% elif audit.entity == "Period" and audit.event == "Reopened Period" %}
 
                             <table class="table table-bordered table-sm mt-2">
@@ -143,10 +119,8 @@
                                 {{ audit.new_value.editado_por }}
                             </p>
                             {% else %}
-                                <pre>{{ audit.previous_value|pprint }}</pre>
-                                <pre>{{ audit.new_value|pprint }}</pre>
+                                {% mostrar_cambios audit.previous_value audit.new_value %}
                             {% endif %}
-
                         </div>
                     </details>
                     {% else %}

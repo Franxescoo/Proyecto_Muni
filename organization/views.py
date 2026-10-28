@@ -20,7 +20,13 @@ from .forms import (
     PositionForm,
     mark_invalid_fields,
 )
-from .models import Delegation, Employee, PositionFunction, DelegationResponsibilityLog
+from .models import (
+    Delegation,
+    Employee,
+    PositionFunction,
+    DelegationResponsibilityLog,
+    OrganizationRole,
+)
 from .exports import role_delegations, workbook_response
 
 from django.db import IntegrityError

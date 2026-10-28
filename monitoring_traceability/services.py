@@ -135,6 +135,31 @@ def recalculate_indicator_for_goal(goal, create_if_missing=True):
     expected = Decimal(goal.objective_value)
     actual = Decimal(approved_activities)
 
+    
+    # Fórmula porcentual: actividades aprobadas / registradas.
+    item = goal.measurement_item
+
+    if item and item.item_type == "percentage":
+        formula = " ".join(
+            (item.formula or "").casefold().replace("×", "*").split()
+        )
+
+        if formula == "(actividades aprobadas / actividades registradas) * 100":
+            total_actividades = len(activities)
+
+            if total_actividades > 0:
+                actual = (
+                    Decimal(approved_activities)
+                    / Decimal(total_actividades)
+                    * Decimal("100")
+                ).quantize(
+                    Decimal("0.01"),
+                    ROUND_HALF_UP,
+                )
+            else:
+                actual = Decimal("0.00")
+
+
     if expected <= 0:
         raise ValueError(
             "El valor objetivo de la meta debe ser mayor que cero."

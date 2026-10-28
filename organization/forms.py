@@ -176,11 +176,66 @@ class OrganizationRoleForm(BootstrapMixin, forms.Form):
     def clean(self):
         cleaned_data = super().clean()
         delegations = cleaned_data.get("delegations")
+
         if not delegations:
             self.add_error(
                 "delegations",
                 "Selecciona al menos una delegación de aplicación.",
             )
+
+        # Evitar que un usuario se quite los accesos
+        # de un rol que tiene asignado.
+        if (
+            self.group is not None
+            and self.actor is not None
+            and self.actor.groups.filter(pk=self.group.pk).exists()
+        ):
+            role = OrganizationRole.objects.filter(
+                group=self.group
+            ).first()
+
+            # Proteger las delegaciones actuales.
+            if role is not None and delegations is not None:
+                anteriores = set(
+                    role.application_delegations.values_list(
+                        "pk", flat=True
+                    )
+                ) or {role.delegation_id}
+
+                nuevas = {
+                    delegation.pk for delegation in delegations
+                }
+
+                if not anteriores.issubset(nuevas):
+                    self.add_error(
+                        "delegations",
+                        "No puedes quitar delegaciones de un rol "
+                        "que tienes asignado. Solicita el cambio "
+                        "a otro administrador autorizado.",
+                    )
+
+            # Proteger también los permisos actuales.
+            permissions = cleaned_data.get("permissions")
+
+            if permissions is not None:
+                anteriores = set(
+                    self.group.permissions.values_list(
+                        "pk", flat=True
+                    )
+                )
+
+                nuevas = {
+                    permission.pk for permission in permissions
+                } | self._preserved_permission_ids
+
+                if not anteriores.issubset(nuevas):
+                    self.add_error(
+                        "permissions",
+                        "No puedes quitar permisos de un rol "
+                        "que tienes asignado. Solicita el cambio "
+                        "a otro administrador autorizado.",
+                    )
+
         return cleaned_data
 
     def save(self):

@@ -74,6 +74,7 @@ INSTALLED_APPS = [
     'registration_validation',
     'core',
     'accounts',
+    'citizen_requests',
 ]
 
 MIDDLEWARE = [
