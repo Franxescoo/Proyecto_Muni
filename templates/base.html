@@ -275,6 +275,15 @@
                     </button>
                 </li>
                 {% endif %}
+                <li class="nav-item">
+                    <button type="button"
+                            class="nav-link border-0 bg-transparent"
+                            data-bs-toggle="modal"
+                            data-bs-target="#solicitudesModal">
+                        <i class="bi bi-inbox-fill me-1"></i>
+                        Solicitudes
+                    </button>
+                </li>
             </ul>
             <span class="navbar-text me-2" title="Usuario y rol">
                 <i class="bi bi-person-circle"></i> {{ user.username }}
@@ -405,6 +414,352 @@
     </div>
 </div>
 {% endif %}
+{% if user.is_authenticated %}
+<div class="modal fade"
+     id="solicitudesModal"
+     tabindex="-1"
+     aria-labelledby="solicitudesTitulo"
+     aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="solicitudesTitulo">
+                    <i class="bi bi-inbox-fill me-2"></i>Solicitudes
+                </h5>
+                <button type="button" class="btn-close btn-close-white"
+                        data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-2 mb-3">
+                    <div class="col-md-7">
+                        <label class="form-label" for="solicitudes-search">Buscar</label>
+                        <input id="solicitudes-search" class="form-control"
+                               placeholder="Código de seguimiento o asunto">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label" for="solicitudes-status">Estado</label>
+                        <select id="solicitudes-status" class="form-select">
+                            <option value="">Todos</option>
+                            <option value="NEW">Nueva</option>
+                            <option value="IN_PROGRESS">En proceso</option>
+                            <option value="CLOSED">Cerrada</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button id="solicitudes-filter" type="button"
+                                class="btn btn-primary w-100">Filtrar</button>
+                    </div>
+                </div>
+                <div id="solicitudes-feedback" class="alert d-none" role="alert"></div>
+                <section class="mb-4">
+                    <h6 class="border-bottom pb-2">Pendientes de derivación</h6>
+                    <div id="solicitudes-pending"></div>
+                </section>
+                <section>
+                    <h6 class="border-bottom pb-2">
+                        Solicitudes de la delegación activa
+                        <span id="solicitudes-active-delegation"
+                              class="text-muted fw-normal"></span>
+                    </h6>
+                    <div id="solicitudes-delegated"></div>
+                </section>
+                <div id="solicitud-detail" class="mt-4"></div>
+                <div id="solicitud-action" class="mt-4"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const modal = document.getElementById("solicitudesModal");
+    if (!modal) return;
+
+    const inboxUrl = "{% url 'citizen_requests:request_inbox' %}";
+    const detailBaseUrl = "{% url 'citizen_requests:request_detail' 0 %}";
+    const feedback = document.getElementById("solicitudes-feedback");
+    const detail = document.getElementById("solicitud-detail");
+    const action = document.getElementById("solicitud-action");
+    const search = document.getElementById("solicitudes-search");
+    const status = document.getElementById("solicitudes-status");
+    let loaded = false;
+    let activeDetailId = null;
+
+    function showFeedback(message, kind) {
+        feedback.textContent = message;
+        feedback.className = "alert alert-" + kind;
+    }
+
+    function hideFeedback() {
+        feedback.textContent = "";
+        feedback.className = "alert d-none";
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? "").replace(/[&<>"']/g, character => ({
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#039;"
+        }[character]));
+    }
+
+    function pagination(section, data, params) {
+        if (data.pages <= 1) return "";
+        const pageParam = section === "pending" ? "pending_page" : "delegated_page";
+        const previous = data.has_previous
+            ? `<button class="btn btn-sm btn-outline-secondary" data-page-param="${pageParam}" data-page="${data.page - 1}">Anterior</button>`
+            : "";
+        const next = data.has_next
+            ? `<button class="btn btn-sm btn-outline-secondary" data-page-param="${pageParam}" data-page="${data.page + 1}">Siguiente</button>`
+            : "";
+        return `<div class="d-flex justify-content-between align-items-center mt-2">
+            <small class="text-muted">Página ${data.page} de ${data.pages}</small>
+            <div class="btn-group">${previous}${next}</div>
+        </div>`;
+    }
+
+    function renderSection(targetId, section, data, params, canAssign) {
+        const target = document.getElementById(targetId);
+        if (!data.items.length) {
+            target.innerHTML = '<p class="text-muted mb-0">No hay solicitudes para mostrar.</p>';
+            return;
+        }
+        const rows = data.items.map(item => {
+            const actionLabel = section === "pending" && canAssign
+                ? `<button type="button" class="btn btn-sm btn-outline-success"
+                    data-assign-id="${item.id}">Derivar</button>`
+                : section === "delegated"
+                ? `<button type="button" class="btn btn-sm btn-outline-warning"
+                    data-change-id="${item.id}" ${item.has_attention ? "disabled title=\"Tiene una atención vinculada\"" : ""}>
+                    Cambiar derivación</button>`
+                : "";
+            return `
+            <tr>
+                <td class="text-nowrap">${escapeHtml(item.tracking_code)}</td>
+                <td>${escapeHtml(item.subject)}</td>
+                <td class="text-nowrap">${escapeHtml(new Date(item.created_at).toLocaleString())}</td>
+                <td>${escapeHtml(item.status)}</td>
+                <td>${escapeHtml(item.address)}</td>
+                <td>${escapeHtml(item.delegation)}</td>
+                <td><div class="d-flex gap-1">
+                    <button type="button" class="btn btn-sm btn-outline-primary"
+                        data-detail-id="${item.id}">Ver</button>
+                    ${actionLabel}
+                </div></td>
+            </tr>`;
+        }).join("");
+        target.innerHTML = `<div class="table-responsive"><table class="table table-sm align-middle">
+            <thead><tr><th>Código</th><th>Asunto</th><th>Ingreso</th><th>Estado</th>
+            <th>Dirección</th><th>Delegación</th><th></th></tr></thead>
+            <tbody>${rows}</tbody></table></div>${pagination(section, data, params)}`;
+        target.querySelectorAll("[data-page-param]").forEach(button => {
+            button.addEventListener("click", () => {
+                params[button.dataset.pageParam] = button.dataset.page;
+                loadRequests(params);
+            });
+        });
+    }
+
+    function loadRequests(params = {}) {
+        hideFeedback();
+        const query = new URLSearchParams(params);
+        const q = search.value.trim();
+        if (q) query.set("q", q); else query.delete("q");
+        if (status.value) query.set("status", status.value);
+        fetch(inboxUrl + "?" + query.toString(), {
+            headers: {"X-Requested-With": "XMLHttpRequest"},
+        })
+            .then(response => {
+                if (!response.ok) throw new Error("No se pudo cargar la bandeja.");
+                return response.json();
+            })
+            .then(data => {
+                lastInboxData = data;
+                renderSection(
+                    "solicitudes-pending",
+                    "pending",
+                    data.pending,
+                    params,
+                    data.temporary_pending_visibility
+                );
+                renderSection(
+                    "solicitudes-delegated",
+                    "delegated",
+                    data.delegated,
+                    params,
+                    false
+                );
+                document.getElementById("solicitudes-active-delegation").textContent =
+                    data.active_delegation ? "· " + data.active_delegation : "· Sin delegación activa";
+                loaded = true;
+            })
+            .catch(error => showFeedback(error.message, "danger"));
+    }
+
+    function csrfToken() {
+        const token = document.cookie.split("; ").find(row => row.startsWith("csrftoken="));
+        return token ? decodeURIComponent(token.split("=")[1]) : "";
+    }
+
+    function showDelegationForm(item, changing, delegations) {
+        const requestId = item.id;
+        const options = delegations.map(item =>
+            `<option value="${item.id}">${escapeHtml(item.name)}</option>`
+        ).join("");
+        const actionUrl = changing
+            ? `{% url 'citizen_requests:change_request_delegation' 0 %}`.replace("/0/", "/" + requestId + "/")
+            : `{% url 'citizen_requests:assign_request' 0 %}`.replace("/0/", "/" + requestId + "/");
+        action.innerHTML = `<div class="card border-primary">
+            <div class="card-header fw-semibold">${changing ? "Cambiar derivación" : "Derivar solicitud"}</div>
+            <div class="card-body">
+                <p class="mb-3"><strong>Asunto:</strong> ${escapeHtml(item.subject)}
+                    <br><strong>Dirección:</strong> ${escapeHtml(item.address)}</p>
+                <label class="form-label" for="delegation-action-select">Delegación de destino</label>
+                ${changing ? `<p class="small text-muted">Delegación actual: ${escapeHtml(item.delegation)}</p>` : ""}
+                <select id="delegation-action-select" class="form-select mb-2" required>
+                    <option value="">Selecciona una delegación</option>${options}
+                </select>
+                <label class="form-label" for="delegation-action-reason">Motivo</label>
+                <textarea id="delegation-action-reason" class="form-control mb-3"
+                    rows="3" maxlength="500" required></textarea>
+                <div class="d-flex gap-2">
+                    <button type="button" id="delegation-action-cancel"
+                        class="btn btn-outline-secondary">Cancelar</button>
+                    <button type="button" id="delegation-action-confirm"
+                        class="btn btn-primary">Confirmar ${changing ? "cambio" : "derivación"}</button>
+                </div>
+            </div>
+        </div>`;
+        action.scrollIntoView({behavior: "smooth", block: "nearest"});
+        document.getElementById("delegation-action-cancel").addEventListener(
+            "click", () => { action.innerHTML = ""; }
+        );
+        document.getElementById("delegation-action-confirm").addEventListener(
+            "click", () => {
+                const delegation = document.getElementById("delegation-action-select").value;
+                const reason = document.getElementById("delegation-action-reason").value.trim();
+                if (!delegation || !reason) {
+                    showFeedback("Selecciona una delegación e ingresa un motivo.", "warning");
+                    return;
+                }
+                fetch(actionUrl, {
+                    method: "POST",
+                    headers: {
+                        "X-CSRFToken": csrfToken(),
+                        "X-Requested-With": "XMLHttpRequest",
+                    },
+                    body: new URLSearchParams({delegation: delegation, reason: reason}),
+                })
+                    .then(response => response.json().then(data => ({ok: response.ok, data})))
+                    .then(result => {
+                        if (!result.ok) throw new Error(result.data.message || "No se pudo actualizar.");
+                        action.innerHTML = "";
+                        detail.innerHTML = "";
+                        activeDetailId = null;
+                        loadRequests();
+                    })
+                    .catch(error => showFeedback(error.message, "danger"));
+            }
+        );
+    }
+
+    function loadDetail(requestId) {
+        if (activeDetailId === String(requestId)) {
+            detail.innerHTML = "";
+            activeDetailId = null;
+            return;
+        }
+        activeDetailId = String(requestId);
+        fetch(detailBaseUrl.replace("/0/", "/" + requestId + "/"), {
+            headers: {"X-Requested-With": "XMLHttpRequest"},
+        })
+            .then(response => {
+                if (!response.ok) throw new Error("No se pudo cargar el detalle.");
+                return response.json();
+            })
+            .then(data => {
+                if (activeDetailId !== String(requestId)) return;
+                const item = data.request;
+                const history = item.events.length
+                    ? `<ol class="list-group list-group-numbered">
+                        ${item.events.map(event => `
+                            <li class="list-group-item">
+                                <div class="fw-semibold">${escapeHtml(event.type)}</div>
+                                <div class="small text-muted">${escapeHtml(new Date(event.created_at).toLocaleString())}</div>
+                                <div>${escapeHtml(event.actor)}</div>
+                                ${event.previous_delegation && event.new_delegation
+                                    ? `<div>${escapeHtml(event.previous_delegation)} &rarr; ${escapeHtml(event.new_delegation)}</div>`
+                                    : ""}
+                                ${event.previous_status !== event.new_status
+                                    ? `<div>Estado: ${escapeHtml(event.previous_status)} &rarr; ${escapeHtml(event.new_status)}</div>`
+                                    : ""}
+                                <div>Motivo: ${escapeHtml(event.reason || event.observation)}</div>
+                            </li>`).join("")}
+                    </ol>`
+                    : '<p class="text-muted mb-0">No hay movimientos registrados</p>';
+                detail.innerHTML = `<div class="card">
+                    <div class="card-header fw-semibold">Detalle de solicitud</div>
+                    <div class="card-body">
+                        <dl class="row mb-0">
+                            <dt class="col-sm-3">Código</dt><dd class="col-sm-9">${escapeHtml(item.tracking_code)}</dd>
+                            <dt class="col-sm-3">Solicitante</dt><dd class="col-sm-9">${escapeHtml(item.requester_name)}</dd>
+                            <dt class="col-sm-3">Correo</dt><dd class="col-sm-9">${escapeHtml(item.requester_email)}</dd>
+                            <dt class="col-sm-3">Teléfono</dt><dd class="col-sm-9">${escapeHtml(item.requester_phone || "—")}</dd>
+                            <dt class="col-sm-3">Descripción</dt><dd class="col-sm-9">${escapeHtml(item.description)}</dd>
+                            <dt class="col-sm-3">Atención vinculada</dt><dd class="col-sm-9">${item.has_attention ? "Sí" : "No"}</dd>
+                        </dl>
+                        <h6 class="border-top pt-3 mt-3">Historial de movimientos</h6>
+                        ${history}
+                    </div>
+                </div>`;
+            })
+            .catch(error => showFeedback(error.message, "danger"));
+    }
+
+    modal.addEventListener("click", function (event) {
+        const detailButton = event.target.closest("[data-detail-id]");
+        if (detailButton) {
+            loadDetail(detailButton.dataset.detailId);
+            return;
+        }
+        const assignButton = event.target.closest("[data-assign-id]");
+        if (assignButton) {
+            const item = lastInboxData.pending.items.find(
+                candidate => String(candidate.id) === assignButton.dataset.assignId
+            );
+            if (item) showDelegationForm(item, false, lastInboxData.active_delegations);
+            return;
+        }
+        const changeButton = event.target.closest("[data-change-id]");
+        if (changeButton) {
+            const item = lastInboxData.delegated.items.find(
+                candidate => String(candidate.id) === changeButton.dataset.changeId
+            );
+            if (item) showDelegationForm(item, true, lastInboxData.active_delegations);
+        }
+    });
+
+    let lastInboxData = {
+        pending: {items: []},
+        delegated: {items: []},
+        active_delegations: [],
+    };
+
+    modal.addEventListener("shown.bs.modal", function () {
+        if (!loaded) loadRequests();
+    });
+    modal.addEventListener("hidden.bs.modal", function () {
+        detail.innerHTML = "";
+        action.innerHTML = "";
+        activeDetailId = null;
+        hideFeedback();
+        loaded = false;
+    });
+    document.getElementById("solicitudes-filter").addEventListener("click", () => loadRequests());
+});
+</script>
 <script>
     
 document.addEventListener("DOMContentLoaded", function () {

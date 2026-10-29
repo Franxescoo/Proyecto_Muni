@@ -3,6 +3,7 @@ from datetime import date
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.urls import reverse
 
@@ -55,6 +56,86 @@ class Entrega2SecurityTests(TestCase):
 
     def setUp(self):
         self.client.force_login(self.user)
+
+    def _build_entry(self, **kwargs):
+        values = {
+            "requester": "Solicitante",
+            "attention_type": self.type,
+            "sub_attention": self.sub,
+            "description": "Consulta",
+            "delegation": self.north,
+            "responsible_employee": self.employee_north,
+        }
+        values.update(kwargs)
+        return AttentionEntry(**values)
+
+    def test_citizen_without_email_is_invalid(self):
+        entry = self._build_entry(origin="CITIZEN")
+
+        with self.assertRaises(ValidationError) as context:
+            entry.full_clean()
+
+        self.assertIn("requester_email", context.exception.message_dict)
+
+    def test_citizen_with_invalid_email_is_invalid(self):
+        entry = self._build_entry(
+            origin="CITIZEN",
+            requester_email="correo-invalido",
+        )
+
+        with self.assertRaises(ValidationError) as context:
+            entry.full_clean()
+
+        self.assertIn("requester_email", context.exception.message_dict)
+
+    def test_citizen_with_valid_email_is_allowed_and_trimmed(self):
+        entry = self._build_entry(
+            origin="CITIZEN",
+            requester_email="  vecino@example.com  ",
+        )
+
+        entry.full_clean()
+        entry.save()
+
+        self.assertEqual(entry.requester_email, "vecino@example.com")
+
+    def test_internal_without_email_is_allowed(self):
+        entry = self._build_entry(origin="INTERNAL")
+
+        entry.full_clean()
+
+    def test_legacy_without_email_is_allowed(self):
+        entry = self._build_entry(origin="LEGACY")
+
+        entry.full_clean()
+
+    def test_direct_save_rejects_invalid_citizen_email(self):
+        entry = self._build_entry(
+            origin="CITIZEN",
+            requester_email="correo-invalido",
+        )
+
+        with self.assertRaises(ValidationError) as context:
+            entry.save()
+
+        self.assertIn("requester_email", context.exception.message_dict)
+        self.assertFalse(
+            AttentionEntry.objects.filter(requester="Solicitante").exists()
+        )
+
+    def test_partial_save_normalizes_citizen_email(self):
+        entry = self._build_entry(
+            origin="CITIZEN",
+            requester_email="vecino@example.com",
+        )
+        entry.save()
+        entry.requester_email = "  vecino@example.com  "
+        entry.status = "PENDING"
+        entry.save(update_fields=("status",))
+
+        entry.refresh_from_db()
+        self.assertEqual(entry.requester_email, "vecino@example.com")
+        self.assertEqual(entry.status, "PENDING")
 
     def test_authorized_context_is_displayed_and_other_delegation_denied(self):
         resp = self.client.get(reverse("registration:attention_entry_list"))

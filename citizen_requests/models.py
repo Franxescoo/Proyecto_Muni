@@ -1,9 +1,8 @@
-from django.db import models
-
-# Create your models here.
 import uuid
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 from django.db import models
 
 
@@ -26,9 +25,19 @@ class CitizenRequest(models.Model):
         editable=False,
     )
 
+    attention_entry = models.OneToOneField(
+        "registration_validation.AttentionEntry",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="citizen_request",
+    )
+
     delegation = models.ForeignKey(
         "organization.Delegation",
         on_delete=models.PROTECT,
+        null=True,
+        blank=True,
         related_name="citizen_requests",
     )
 
@@ -71,6 +80,55 @@ class CitizenRequest(models.Model):
 
     updated_at = models.DateTimeField(auto_now=True)
 
+    def full_clean(self, *args, **kwargs):
+        if self.origin == "CITIZEN":
+            self.requester_email = (self.requester_email or "").strip()
+        super().full_clean(*args, **kwargs)
+
+    def _validate_citizen_email(self):
+        if self.origin != "CITIZEN":
+            return
+
+        email = (self.requester_email or "").strip()
+        if not email:
+            raise ValidationError(
+                {
+                    "requester_email": (
+                        "El correo electrónico es obligatorio "
+                        "para las solicitudes vecinales."
+                    )
+                }
+            )
+
+        try:
+            validate_email(email)
+        except ValidationError as exc:
+            raise ValidationError(
+                {
+                    "requester_email": (
+                        "Ingresa un correo electrónico válido."
+                    )
+                }
+            ) from exc
+
+        self.requester_email = email
+
+    def clean(self):
+        super().clean()
+        self._validate_citizen_email()
+
+    def save(self, *args, **kwargs):
+        email_before_validation = self.requester_email
+        self._validate_citizen_email()
+        if (
+            kwargs.get("update_fields") is not None
+            and self.requester_email != email_before_validation
+        ):
+            kwargs["update_fields"] = set(kwargs["update_fields"])
+            kwargs["update_fields"].add("requester_email")
+
+        super().save(*args, **kwargs)
+
     class Meta:
         ordering = ["-created_at"]
         verbose_name = "Solicitud ciudadana"
@@ -91,6 +149,8 @@ class RequestEvent(models.Model):
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
+        null=True,
+        blank=True,
     )
 
     observation = models.TextField()

@@ -1,6 +1,8 @@
+import uuid
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.validators import FileExtensionValidator
+from django.core.validators import FileExtensionValidator, validate_email
 from django.db import models
 
 from core.models import BaseModel
@@ -446,14 +448,74 @@ class SubAttention(BaseModel):
 
 
 class AttentionEntry(BaseModel):
+    ORIGIN_CHOICES = [
+        ("LEGACY", "Sin clasificar"),
+        ("CITIZEN", "Vecinal"),
+        ("INTERNAL", "Interna"),
+    ]
+
+    STATUS_CHOICES = [
+        ("NEW", "Nueva"),
+        ("PENDING", "Pendiente"),
+        ("IN_PROGRESS", "En proceso"),
+        ("RESOLVED", "Resuelta"),
+        ("CLOSED", "Cerrada"),
+        ("REJECTED", "No procede"),
+    ]
+
     attention_entry_id = models.BigAutoField(
         primary_key=True,
         verbose_name="Attention Entry ID",
     )
 
+    origin = models.CharField(
+        max_length=12,
+        choices=ORIGIN_CHOICES,
+        default="LEGACY",
+        verbose_name="Origin",
+    )
+
+    status = models.CharField(
+        max_length=15,
+        choices=STATUS_CHOICES,
+        default="NEW",
+        verbose_name="Status",
+    )
+
+    tracking_code = models.UUIDField(
+        unique=True,
+        null=True,
+        blank=True,
+        editable=False,
+        verbose_name="Tracking code",
+    )
+
     requester = models.CharField(
         max_length=150,
         verbose_name="Requester",
+    )
+
+    requester_email = models.EmailField(
+        blank=True,
+        verbose_name="Requester email",
+    )
+
+    requester_phone = models.CharField(
+        max_length=25,
+        blank=True,
+        verbose_name="Requester phone",
+    )
+
+    subject = models.CharField(
+        max_length=160,
+        blank=True,
+        verbose_name="Subject",
+    )
+
+    address = models.CharField(
+        max_length=250,
+        blank=True,
+        verbose_name="Address",
     )
 
     attention_type = models.ForeignKey(
@@ -484,6 +546,8 @@ class AttentionEntry(BaseModel):
     responsible_employee = models.ForeignKey(
         "organization.Employee",
         on_delete=models.PROTECT,
+        null=True,
+        blank=True,
         related_name="attention_entries_responsible",
         verbose_name="Responsible employee",
     )
@@ -501,6 +565,12 @@ class AttentionEntry(BaseModel):
         verbose_name="Registration date",
     )
 
+    closed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Closed at",
+    )
+
     class Meta:
         verbose_name = "Attention Entry"
         verbose_name_plural = "Attention Entries"
@@ -509,8 +579,43 @@ class AttentionEntry(BaseModel):
             "attention_entry_id",
         )
 
+    def full_clean(self, *args, **kwargs):
+        if self.origin == "CITIZEN":
+            self.requester_email = (self.requester_email or "").strip()
+        super().full_clean(*args, **kwargs)
+
+    def _validate_citizen_email(self):
+        if self.origin != "CITIZEN":
+            return
+
+        email = (self.requester_email or "").strip()
+        if not email:
+            raise ValidationError(
+                {
+                    "requester_email": (
+                        "El correo electrónico es obligatorio "
+                        "para las atenciones vecinales."
+                    )
+                }
+            )
+
+        try:
+            validate_email(email)
+        except ValidationError as exc:
+            raise ValidationError(
+                {
+                    "requester_email": (
+                        "Ingresa un correo electrónico válido."
+                    )
+                }
+            ) from exc
+
+        self.requester_email = email
+
     def clean(self):
         super().clean()
+
+        self._validate_citizen_email()
 
         if (
             self.attention_type_id
@@ -526,6 +631,31 @@ class AttentionEntry(BaseModel):
                     )
                 }
             )
+
+    def save(self, *args, **kwargs):
+        email_before_validation = self.requester_email
+        self._validate_citizen_email()
+        if (
+            kwargs.get("update_fields") is not None
+            and self.requester_email != email_before_validation
+        ):
+            kwargs["update_fields"] = set(kwargs["update_fields"])
+            kwargs["update_fields"].add("requester_email")
+
+        if self._state.adding:
+            if self.tracking_code is None:
+                self.tracking_code = uuid.uuid4()
+        elif self.pk:
+            stored_tracking_code = (
+                type(self)
+                .objects
+                .only("tracking_code")
+                .get(pk=self.pk)
+                .tracking_code
+            )
+            self.tracking_code = stored_tracking_code
+
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return (
