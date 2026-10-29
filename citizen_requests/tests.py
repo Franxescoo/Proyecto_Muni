@@ -1,12 +1,20 @@
+from datetime import date
+
 from django.core.exceptions import ValidationError
 from django.core import mail
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group, Permission
 from django.db import IntegrityError
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
 from accounts.models import UserProfile
-from organization.models import Delegation
+from organization.models import (
+    Delegation,
+    Employee,
+    OrganizationRole,
+    PositionFunction,
+)
 from registration_validation.models import AttentionEntry, AttentionType, SubAttention
 
 from .models import CitizenRequest, RequestEvent
@@ -385,6 +393,48 @@ class RequestInboxTests(TestCase):
             delegation=cls.north,
         )
         cls.profile.authorized_delegations.add(cls.north, cls.south)
+        cls.position = PositionFunction.objects.create(
+            position_name="Operador",
+            measurable_items="Atenciones",
+            services="Ventanilla",
+            weightings="100",
+            validity_start=date(2026, 1, 1),
+            validity_end=date(2027, 12, 31),
+        )
+        cls.employee = Employee.objects.create(
+            name="Funcionario Norte",
+            delegation=cls.north,
+            position=cls.position,
+            roles="Atención",
+            status="Active",
+        )
+        cls.profile.employee = cls.employee
+        cls.profile.save(update_fields=("employee",))
+        cls.attention_type = AttentionType.objects.create(
+            code="PASO6-AT",
+            name="Orientación",
+        )
+        cls.sub_attention = SubAttention.objects.create(
+            code="PASO6-SUB",
+            name="Consulta",
+            attention_type=cls.attention_type,
+        )
+        cls.group = Group.objects.create(name="Ingreso de atenciones")
+        cls.role = OrganizationRole.objects.create(
+            group=cls.group,
+            delegation=cls.north,
+        )
+        cls.role.application_delegations.add(cls.north)
+        cls.group.permissions.set(
+            Permission.objects.filter(
+                content_type__app_label="registration_validation",
+                codename__in=(
+                    "add_attentionentry",
+                    "view_attentionentry",
+                ),
+            )
+        )
+        cls.user.groups.add(cls.group)
 
     def setUp(self):
         self.client.force_login(self.user)
@@ -403,6 +453,244 @@ class RequestInboxTests(TestCase):
             description=f"Descripción {suffix}",
             delegation=delegation,
             status=status,
+        )
+
+    def attention_url(self, request):
+        return (
+            f"{reverse('registration:attention_entry_create')}"
+            f"?citizen_request={request.pk}"
+        )
+
+    def test_create_attention_from_derived_request_copies_citizen_data(self):
+        citizen_request = self.make_request("crear", self.north)
+
+        response = self.client.post(
+            self.attention_url(citizen_request),
+            {
+                "requester": citizen_request.requester_name,
+                "attention_type": self.attention_type.pk,
+                "sub_attention": self.sub_attention.pk,
+                "description": citizen_request.description,
+                "delegation": self.north.pk,
+                "responsible_employee": self.employee.pk,
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        citizen_request.refresh_from_db()
+        attention = citizen_request.attention_entry
+        self.assertIsNotNone(attention)
+        self.assertEqual(attention.requester_email, citizen_request.requester_email)
+        self.assertEqual(attention.requester_phone, citizen_request.requester_phone)
+        self.assertEqual(attention.subject, citizen_request.subject)
+        self.assertEqual(attention.address, citizen_request.address)
+        self.assertEqual(attention.origin, "CITIZEN")
+        self.assertEqual(attention.delegation_id, self.north.pk)
+        self.assertEqual(attention.registered_by_id, self.user.pk)
+        self.assertEqual(citizen_request.events.count(), 1)
+        self.assertEqual(
+            self.client.get(
+                self.detail_url.replace("/0/", f"/{citizen_request.pk}/")
+            ).json()["request"]["events"][0]["type"],
+            "Atención creada",
+        )
+
+    def test_create_attention_accepts_linked_employee_from_original_modal(self):
+        citizen_request = self.make_request("funcionario-vinculado", self.north)
+
+        response = self.client.post(
+            self.attention_url(citizen_request),
+            {
+                "requester": citizen_request.requester_name,
+                "attention_type": self.attention_type.pk,
+                "sub_attention": self.sub_attention.pk,
+                "description": citizen_request.description,
+                "delegation": self.north.pk,
+                "responsible_employee": self.employee.pk,
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        citizen_request.refresh_from_db()
+        self.assertEqual(
+            citizen_request.attention_entry.responsible_employee_id,
+            self.employee.pk,
+        )
+
+    def test_create_attention_opens_original_registration_modal_with_prefill(self):
+        citizen_request = self.make_request("modal", self.north)
+
+        response = self.client.get(self.attention_url(citizen_request))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="attentionEntryModal"')
+        self.assertContains(response, citizen_request.requester_name)
+        self.assertContains(response, citizen_request.description)
+        self.assertContains(response, citizen_request.requester_email)
+        self.assertContains(response, citizen_request.subject)
+        self.assertContains(
+            response,
+            f'name="citizen_request" value="{citizen_request.pk}"',
+        )
+
+    def test_create_attention_requires_permission_and_active_delegation(self):
+        citizen_request = self.make_request("sin-permiso", self.north)
+        self.group.permissions.remove(
+            Permission.objects.get(
+                content_type__app_label="registration_validation",
+                codename="add_attentionentry",
+            )
+        )
+        response = self.client.get(self.attention_url(citizen_request))
+        self.assertEqual(response.status_code, 403)
+
+        self.group.permissions.add(
+            Permission.objects.get(
+                content_type__app_label="registration_validation",
+                codename="add_attentionentry",
+            )
+        )
+        south_request = self.make_request("otra-delegacion", self.south)
+        response = self.client.get(self.attention_url(south_request))
+        self.assertEqual(response.status_code, 403)
+
+    def test_pending_request_cannot_create_attention(self):
+        citizen_request = self.make_request("pendiente")
+
+        response = self.client.get(self.attention_url(citizen_request))
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(AttentionEntry.objects.count(), 0)
+
+    def test_linked_attention_cannot_be_created_twice_and_can_be_viewed(self):
+        citizen_request = self.make_request("duplicada", self.north)
+        data = {
+            "requester": citizen_request.requester_name,
+            "attention_type": self.attention_type.pk,
+            "sub_attention": self.sub_attention.pk,
+            "description": citizen_request.description,
+            "delegation": self.north.pk,
+            "responsible_employee": self.employee.pk,
+        }
+        self.assertEqual(
+            self.client.post(self.attention_url(citizen_request), data).status_code,
+            302,
+        )
+        self.assertEqual(
+            self.client.post(self.attention_url(citizen_request), data).status_code,
+            403,
+        )
+        citizen_request.refresh_from_db()
+        self.assertEqual(AttentionEntry.objects.count(), 1)
+        self.assertEqual(citizen_request.events.count(), 1)
+        view_url = reverse(
+            "citizen_requests:view_attention_from_request",
+            args=[citizen_request.pk],
+        )
+        response = self.client.get(view_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, citizen_request.subject)
+
+    def test_view_attention_json_contains_read_only_details_and_codes(self):
+        citizen_request = self.make_request("detalle", self.north)
+        attention = AttentionEntry.objects.create(
+            requester=citizen_request.requester_name,
+            requester_email=citizen_request.requester_email,
+            requester_phone=citizen_request.requester_phone,
+            address=citizen_request.address,
+            subject=citizen_request.subject,
+            attention_type=self.attention_type,
+            sub_attention=self.sub_attention,
+            description=citizen_request.description,
+            delegation=self.north,
+            responsible_employee=self.employee,
+        )
+        citizen_request.attention_entry = attention
+        citizen_request.save(update_fields=("attention_entry",))
+
+        response = self.client.get(
+            reverse(
+                "citizen_requests:view_attention_from_request",
+                args=[citizen_request.pk],
+            )
+            + "?format=json",
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()["attention"]
+        self.assertEqual(data["tracking_code"], str(attention.tracking_code))
+        self.assertEqual(
+            data["request_tracking_code"],
+            str(citizen_request.tracking_code),
+        )
+        self.assertEqual(data["requester_email"], citizen_request.requester_email)
+        self.assertEqual(data["status"], attention.get_status_display())
+
+    def test_creating_attention_does_not_change_citizen_request_data(self):
+        citizen_request = self.make_request("inmutable", self.north)
+        original = {
+            "email": citizen_request.requester_email,
+            "phone": citizen_request.requester_phone,
+            "address": citizen_request.address,
+            "subject": citizen_request.subject,
+            "description": citizen_request.description,
+        }
+
+        response = self.client.post(
+            self.attention_url(citizen_request),
+            {
+                "requester": "Otro nombre enviado",
+                "requester_email": "otro@example.com",
+                "requester_phone": "000",
+                "address": "Otra dirección",
+                "subject": "Otro asunto",
+                "attention_type": self.attention_type.pk,
+                "sub_attention": self.sub_attention.pk,
+                "description": "Otra descripción",
+                "delegation": self.north.pk,
+                "responsible_employee": self.employee.pk,
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        citizen_request.refresh_from_db()
+        self.assertEqual(citizen_request.requester_email, original["email"])
+        self.assertEqual(citizen_request.requester_phone, original["phone"])
+        self.assertEqual(citizen_request.address, original["address"])
+        self.assertEqual(citizen_request.subject, original["subject"])
+        self.assertEqual(citizen_request.description, original["description"])
+
+    def test_inbox_exposes_create_and_view_attention_actions(self):
+        available = self.make_request("disponible", self.north)
+        linked = self.make_request("vinculada", self.north)
+        linked.attention_entry = AttentionEntry.objects.create(
+            requester=linked.requester_name,
+            attention_type=self.attention_type,
+            sub_attention=self.sub_attention,
+            description=linked.description,
+            delegation=self.north,
+        )
+        linked.save(update_fields=("attention_entry",))
+
+        items = self.client.get(self.url).json()["delegated"]["items"]
+        by_id = {item["id"]: item for item in items}
+        self.assertTrue(by_id[available.pk]["can_create_attention"])
+        self.assertTrue(by_id[linked.pk]["can_view_attention"])
+        self.assertEqual(
+            by_id[linked.pk]["attention_entry_id"],
+            linked.attention_entry_id,
+        )
+        self.assertNotEqual(linked.pk, linked.attention_entry_id)
+        self.assertEqual(
+            reverse(
+                "registration:attention_entry_detail",
+                args=[by_id[linked.pk]["attention_entry_id"]],
+            ),
+            reverse(
+                "registration:attention_entry_detail",
+                args=[linked.attention_entry_id],
+            ),
         )
 
     def test_anonymous_user_is_denied(self):

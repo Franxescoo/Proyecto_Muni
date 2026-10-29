@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block titulo %}Ver atención | Solicitudes{% endblock %}
+
+{% block contenido %}
+<div class="container py-4">
+    <div class="card shadow-sm">
+        <div class="card-header">
+            <h1 class="h5 mb-0">Atención vinculada a solicitud</h1>
+        </div>
+        <div class="card-body">
+            <dl class="row mb-0">
+                <dt class="col-sm-3">Código de seguimiento</dt>
+                <dd class="col-sm-9">{{ attention_entry.tracking_code|default:"No registrado" }}</dd>
+                {% if citizen_request.tracking_code != attention_entry.tracking_code %}
+                <dt class="col-sm-3">Código de solicitud</dt>
+                <dd class="col-sm-9">{{ citizen_request.tracking_code|default:"No registrado" }}</dd>
+                {% endif %}
+                <dt class="col-sm-3">Solicitante</dt>
+                <dd class="col-sm-9">{{ attention_entry.requester|default:"No registrado" }}</dd>
+                <dt class="col-sm-3">Correo</dt>
+                <dd class="col-sm-9">{{ attention_entry.requester_email|default:"No registrado" }}</dd>
+                <dt class="col-sm-3">Teléfono</dt>
+                <dd class="col-sm-9">{{ attention_entry.requester_phone|default:"No registrado" }}</dd>
+                <dt class="col-sm-3">Asunto</dt>
+                <dd class="col-sm-9">{{ attention_entry.subject|default:"No registrado" }}</dd>
+                <dt class="col-sm-3">Dirección</dt>
+                <dd class="col-sm-9">{{ attention_entry.address|default:"No registrado" }}</dd>
+                <dt class="col-sm-3">Tipo</dt>
+                <dd class="col-sm-9">{{ attention_entry.attention_type.name|default:"No registrado" }}</dd>
+                <dt class="col-sm-3">Subatención</dt>
+                <dd class="col-sm-9">{{ attention_entry.sub_attention.name|default:"No registrado" }}</dd>
+                <dt class="col-sm-3">Descripción</dt>
+                <dd class="col-sm-9">{{ attention_entry.description|default:"No registrado" }}</dd>
+                <dt class="col-sm-3">Delegación</dt>
+                <dd class="col-sm-9">{{ attention_entry.delegation.name|default:"No registrado" }}</dd>
+                <dt class="col-sm-3">Funcionario</dt>
+                <dd class="col-sm-9">{{ attention_entry.responsible_employee.name|default:"No registrado" }}</dd>
+                <dt class="col-sm-3">Estado</dt>
+                <dd class="col-sm-9">{{ attention_entry.get_status_display|default:"No registrado" }}</dd>
+                <dt class="col-sm-3">Fecha de registro</dt>
+                <dd class="col-sm-9">{{ attention_entry.registration_date|date:"d/m/Y H:i"|default:"No registrado" }}</dd>
+                <dt class="col-sm-3">Usuario que registró</dt>
+                <dd class="col-sm-9">{{ attention_entry.registered_by.username|default:"No registrado" }}</dd>
+            </dl>
+            <a class="btn btn-outline-secondary mt-4" href="{% url 'home' %}">Volver</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

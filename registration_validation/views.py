@@ -8,8 +8,8 @@ from django.contrib.auth.views import redirect_to_login
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.db.models import Q
-from django.http import HttpResponseRedirect
-from django.shortcuts import redirect
+from django.http import HttpResponseRedirect, JsonResponse
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -20,6 +20,7 @@ from django.views.generic import (
     ListView,
     UpdateView,
 )
+from citizen_requests.models import CitizenRequest, RequestEvent
 from organization.exports import workbook_response
 from accounts.permissions import allowed_delegation_ids
 from organization.models import Delegation
@@ -2418,6 +2419,7 @@ def scoped_attention_entries(user, permission="registration_validation.view_atte
             "responsible_employee",
             "responsible_employee__delegation",
             "registered_by",
+            "citizen_request",
         )
     )
 
@@ -2505,6 +2507,61 @@ def attention_entry_filter_context(request):
     }
 
 
+@login_required
+def attention_entry_detail(request, attention_entry_id):
+    """Returns one scoped attention entry for the shared read-only modal."""
+    attention_entry = get_object_or_404(
+        scoped_attention_entries(
+            request.user,
+            "registration_validation.view_attentionentry",
+        ),
+        attention_entry_id=attention_entry_id,
+    )
+    citizen_request = getattr(attention_entry, "citizen_request", None)
+    return JsonResponse(
+        {
+            "attention": {
+                "id": attention_entry.pk,
+                "tracking_code": (
+                    str(attention_entry.tracking_code)
+                    if attention_entry.tracking_code
+                    else ""
+                ),
+                "request_tracking_code": (
+                    str(citizen_request.tracking_code)
+                    if citizen_request is not None
+                    else ""
+                ),
+                "requester": attention_entry.requester,
+                "requester_email": attention_entry.requester_email,
+                "requester_phone": attention_entry.requester_phone,
+                "address": attention_entry.address,
+                "subject": attention_entry.subject,
+                "attention_type": attention_entry.attention_type.name,
+                "sub_attention": attention_entry.sub_attention.name,
+                "description": attention_entry.description,
+                "delegation": attention_entry.delegation.name,
+                "responsible_employee": (
+                    attention_entry.responsible_employee.name
+                    if attention_entry.responsible_employee_id
+                    else ""
+                ),
+                "status": attention_entry.get_status_display(),
+                "registration_date": (
+                    attention_entry.registration_date.isoformat()
+                    if attention_entry.registration_date
+                    else ""
+                ),
+                "registered_by": (
+                    attention_entry.registered_by.username
+                    if attention_entry.registered_by_id
+                    else ""
+                ),
+            }
+        }
+    )
+
+
 class AttentionEntryPermissionMixin(
     LoginRequiredMixin,
     PermissionRequiredMixin,
@@ -2589,14 +2646,134 @@ class AttentionEntryCreateView(
     template_name = "registration_validation/attention_entry_list.html"
     success_url = reverse_lazy("registration:attention_entry_list")
 
+    def get_citizen_request(self):
+        request_id = (
+            self.request.GET.get("citizen_request")
+            or self.request.POST.get("citizen_request")
+        )
+        if not request_id:
+            return None
+        citizen_request = get_object_or_404(
+            CitizenRequest.objects.select_related("delegation"),
+            pk=request_id,
+            delegation__isnull=False,
+        )
+        allowed_ids = allowed_delegation_ids(
+            self.request.user,
+            self.permission_required,
+        )
+        active_id = getattr(
+            self.request.user,
+            "sgr_active_delegation_id",
+            None,
+        )
+        if (
+            allowed_ids is not None
+            and citizen_request.delegation_id not in allowed_ids
+        ) or (
+            not self.request.user.is_superuser
+            and active_id != citizen_request.delegation_id
+        ):
+            raise PermissionDenied(
+                "La solicitud no pertenece a tu delegación activa autorizada."
+            )
+        if citizen_request.attention_entry_id:
+            raise PermissionDenied(
+                "La solicitud ya tiene una atención vinculada."
+            )
+        return citizen_request
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        citizen_request = self.get_citizen_request()
+        if citizen_request is not None:
+            kwargs["instance"] = AttentionEntry(
+                requester=citizen_request.requester_name,
+                requester_email=citizen_request.requester_email,
+                requester_phone=citizen_request.requester_phone,
+                address=citizen_request.address,
+                subject=citizen_request.subject,
+                description=citizen_request.description,
+                delegation=citizen_request.delegation,
+            )
+        return kwargs
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["citizen_request"] = self.get_citizen_request()
+        return context
+
     def form_valid(self, form):
-        form.instance.registered_by = self.request.user
-        response = super().form_valid(form)
+        citizen_request = self.get_citizen_request()
+        if citizen_request is None:
+            form.instance.registered_by = self.request.user
+            response = super().form_valid(form)
+            messages.success(
+                self.request,
+                "Ingreso de atención registrado correctamente.",
+            )
+            return response
+
+        with transaction.atomic():
+            citizen_request = get_object_or_404(
+                CitizenRequest.objects.select_for_update().select_related(
+                    "delegation",
+                ),
+                pk=citizen_request.pk,
+                delegation__isnull=False,
+            )
+            if citizen_request.attention_entry_id:
+                raise PermissionDenied(
+                    "La solicitud ya tiene una atención vinculada."
+                )
+            active_id = getattr(
+                self.request.user,
+                "sgr_active_delegation_id",
+                None,
+            )
+            allowed_ids = allowed_delegation_ids(
+                self.request.user,
+                self.permission_required,
+            )
+            if (
+                allowed_ids is not None
+                and citizen_request.delegation_id not in allowed_ids
+            ) or (
+                not self.request.user.is_superuser
+                and active_id != citizen_request.delegation_id
+            ):
+                raise PermissionDenied(
+                    "La solicitud ya no pertenece a tu delegación activa."
+                )
+            form.instance.requester = citizen_request.requester_name
+            form.instance.description = citizen_request.description
+            form.instance.requester_email = citizen_request.requester_email
+            form.instance.requester_phone = citizen_request.requester_phone
+            form.instance.subject = citizen_request.subject
+            form.instance.address = citizen_request.address
+            form.instance.origin = "CITIZEN"
+            form.instance.delegation = citizen_request.delegation
+            form.instance.registered_by = self.request.user
+            self.object = form.save()
+            citizen_request.attention_entry = self.object
+            citizen_request.save(
+                update_fields=("attention_entry", "updated_at"),
+            )
+            RequestEvent.objects.create(
+                request=citizen_request,
+                actor=self.request.user,
+                observation=(
+                    "Atención creada desde solicitud. "
+                    f"Identificador de atención: {self.object.pk}."
+                ),
+                previous_status=citizen_request.status,
+                new_status=citizen_request.status,
+            )
         messages.success(
             self.request,
             "Ingreso de atención registrado correctamente.",
         )
-        return response
+        return HttpResponseRedirect(self.get_success_url())
 
 
 class AttentionEntryUpdateView(

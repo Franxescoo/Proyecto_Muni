@@ -1,19 +1,23 @@
 import logging
 import re
 import smtplib
+from urllib.parse import urlencode
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 from django.core.mail import send_mail
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import CharField, Q
 from django.db.models.functions import Cast
 from django.http import JsonResponse
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
+from accounts.permissions import allowed_delegation_ids
 from organization.models import Delegation
+from registration_validation.models import AttentionEntry
 
 from .forms import CitizenRequestForm
 from .models import CitizenRequest, RequestEvent
@@ -50,7 +54,36 @@ def _request_queryset_for_user(request):
     )
 
 
-def _serialize_request(citizen_request):
+def _attention_delegation_access(request, delegation_id, permission):
+    if not request.user.has_perm(permission):
+        return False
+    active_id = _active_delegation_id(request)
+    if not request.user.is_superuser and active_id != delegation_id:
+        return False
+    allowed_ids = allowed_delegation_ids(request.user, permission)
+    return allowed_ids is None or delegation_id in allowed_ids
+
+
+def _serialize_request(citizen_request, request=None):
+    can_create_attention = bool(
+        request
+        and citizen_request.delegation_id
+        and citizen_request.attention_entry_id is None
+        and _attention_delegation_access(
+            request,
+            citizen_request.delegation_id,
+            "registration_validation.add_attentionentry",
+        )
+    )
+    can_view_attention = bool(
+        request
+        and citizen_request.attention_entry_id
+        and _attention_delegation_access(
+            request,
+            citizen_request.delegation_id,
+            "registration_validation.view_attentionentry",
+        )
+    )
     return {
         "id": citizen_request.pk,
         "tracking_code": str(citizen_request.tracking_code),
@@ -65,6 +98,9 @@ def _serialize_request(citizen_request):
             else "Sin derivar"
         ),
         "has_attention": citizen_request.attention_entry_id is not None,
+        "attention_entry_id": citizen_request.attention_entry_id,
+        "can_create_attention": can_create_attention,
+        "can_view_attention": can_view_attention,
     }
 
 
@@ -81,7 +117,10 @@ def _serialize_event(event):
         observation,
         flags=re.IGNORECASE,
     )
-    if derivation_match:
+    if observation.startswith("Atención creada desde solicitud."):
+        event_type = "Atención creada"
+        reason = observation
+    elif derivation_match:
         event_type = derivation_match.group(1)
         previous_delegation = derivation_match.group(2).strip()
         new_delegation = derivation_match.group(3).strip()
@@ -133,16 +172,16 @@ def _filtered_requests(queryset, request):
     return queryset.order_by("-created_at", "-pk")
 
 
-def _page_data(queryset, page_number):
+def _page_data(queryset, page_number, request=None):
     page = Paginator(queryset, REQUESTS_PAGE_SIZE).get_page(page_number)
     return {
-        "items": [_serialize_request(item) for item in page.object_list],
+        "items": [_serialize_request(item, request) for item in page.object_list],
         "page": page.number,
         "pages": page.paginator.num_pages,
         "total": page.paginator.count,
         "has_next": page.has_next(),
         "has_previous": page.has_previous(),
-    }
+        }
 
 
 @require_POST
@@ -232,10 +271,12 @@ def request_inbox(request):
             "pending": _page_data(
                 pending,
                 request.GET.get("pending_page", 1),
+                request,
             ),
             "delegated": _page_data(
                 delegated,
                 request.GET.get("delegated_page", 1),
+                request,
             ),
             "active_delegation": getattr(
                 getattr(request, "sgr_active_delegation", None),
@@ -390,4 +431,126 @@ def request_detail(request, request_id):
     )
     return JsonResponse({"request": data})
 
-# Create your views here.
+
+def _get_attention_request(request, request_id, permission):
+    if not request.user.has_perm(permission):
+        raise PermissionDenied(
+            "No tienes el permiso requerido para esta atención."
+        )
+    queryset = CitizenRequest.objects.select_related(
+        "delegation",
+        "attention_entry",
+    )
+    citizen_request = get_object_or_404(
+        queryset,
+        pk=request_id,
+        delegation__isnull=False,
+    )
+    if not _attention_delegation_access(
+        request,
+        citizen_request.delegation_id,
+        permission,
+    ):
+        raise PermissionDenied(
+            "La solicitud no pertenece a tu delegación activa autorizada."
+        )
+    return citizen_request
+
+
+@login_required
+def create_attention_from_request(request, request_id):
+    if request.method != "GET":
+        return JsonResponse(
+            {"result": "error", "message": "Método no permitido."},
+            status=405,
+        )
+
+    if not request.user.has_perm(
+        "registration_validation.add_attentionentry"
+    ):
+        raise PermissionDenied(
+            "No tienes permiso para ingresar atenciones."
+        )
+
+    if request.method == "GET":
+        citizen_request = _get_attention_request(
+            request,
+            request_id,
+            "registration_validation.add_attentionentry",
+        )
+        if citizen_request.attention_entry_id:
+            return redirect(
+                "citizen_requests:view_attention_from_request",
+                request_id=citizen_request.pk,
+            )
+        target = reverse("registration:attention_entry_create")
+        return redirect(
+            f"{target}?{urlencode({'citizen_request': citizen_request.pk})}",
+        )
+
+
+@login_required
+def view_attention_from_request(request, request_id):
+    citizen_request = _get_attention_request(
+        request,
+        request_id,
+        "registration_validation.view_attentionentry",
+    )
+    if citizen_request.attention_entry_id is None:
+        return JsonResponse(
+            {"result": "error", "message": "La solicitud no tiene atención."},
+            status=404,
+        )
+    attention_entry = citizen_request.attention_entry
+    if (
+        request.headers.get("X-Requested-With") == "XMLHttpRequest"
+        or request.GET.get("format") == "json"
+    ):
+        return JsonResponse(
+            {
+                "attention": {
+                    "id": attention_entry.pk,
+                    "tracking_code": (
+                        str(attention_entry.tracking_code)
+                        if attention_entry.tracking_code
+                        else ""
+                    ),
+                    "request_tracking_code": str(
+                        citizen_request.tracking_code
+                    ),
+                    "requester": attention_entry.requester,
+                    "requester_email": attention_entry.requester_email,
+                    "requester_phone": attention_entry.requester_phone,
+                    "address": attention_entry.address,
+                    "subject": attention_entry.subject,
+                    "attention_type": attention_entry.attention_type.name,
+                    "sub_attention": attention_entry.sub_attention.name,
+                    "description": attention_entry.description,
+                    "delegation": attention_entry.delegation.name,
+                    "responsible_employee": (
+                        attention_entry.responsible_employee.name
+                        if attention_entry.responsible_employee_id
+                        else ""
+                    ),
+                    "status": attention_entry.get_status_display(),
+                    "registration_date": (
+                        attention_entry.registration_date.isoformat()
+                        if attention_entry.registration_date
+                        else ""
+                    ),
+                    "registered_by": (
+                        attention_entry.registered_by.username
+                        if attention_entry.registered_by_id
+                        else ""
+                    ),
+                }
+            }
+        )
+    return render(
+        request,
+        "citizen_requests/attention_detail.html",
+        {
+            "citizen_request": citizen_request,
+            "attention_entry": citizen_request.attention_entry,
+        },
+    )

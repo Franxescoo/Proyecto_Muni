@@ -272,6 +272,18 @@
 
                         <td>
                             <div class="d-flex flex-wrap justify-content-end gap-2">
+                                {% if perms.registration_validation.view_attentionentry %}
+                                <button
+                                    type="button"
+                                    class="btn btn-sm btn-outline-secondary"
+                                    data-view-attention-id="{{ entry.attention_entry_id }}"
+                                    title="Ver ingreso"
+                                >
+                                    <i class="bi bi-eye"></i>
+                                    <span class="ms-1">Ver</span>
+                                </button>
+                                {% endif %}
+
                                 {% if perms.registration_validation.change_attentionentry %}
                                 <a
                                     href="{% url 'registration:attention_entry_update' entry.attention_entry_id %}"
@@ -352,6 +364,9 @@
         <div class="modal-content">
             <form method="post" novalidate>
                 {% csrf_token %}
+                {% if citizen_request %}
+                <input type="hidden" name="citizen_request" value="{{ citizen_request.pk }}">
+                {% endif %}
 
                 <div class="modal-header">
                     <div class="sgr-modal-title-block">
@@ -385,6 +400,18 @@
                         Los campos marcados con * son obligatorios.
                     </p>
 
+                    {% if citizen_request %}
+                    <div class="alert alert-light border mb-4">
+                        <div class="fw-semibold mb-2">Datos de referencia de la solicitud ciudadana</div>
+                        <div class="row g-2 small">
+                            <div class="col-md-6"><strong>Correo:</strong> {{ citizen_request.requester_email|default:"—" }}</div>
+                            <div class="col-md-6"><strong>Teléfono:</strong> {{ citizen_request.requester_phone|default:"—" }}</div>
+                            <div class="col-md-6"><strong>Asunto:</strong> {{ citizen_request.subject }}</div>
+                            <div class="col-md-6"><strong>Dirección:</strong> {{ citizen_request.address }}</div>
+                        </div>
+                    </div>
+                    {% endif %}
+
                     {% if form.non_field_errors %}
                     <div class="alert alert-danger" role="alert">
                         {% for error in form.non_field_errors %}
@@ -410,6 +437,47 @@
                             <div class="text-danger small mt-1">
                                 {{ error }}
                             </div>
+                            {% endfor %}
+                        </div>
+
+                        <!-- DATOS DE CONTACTO -->
+                        <div class="col-12 col-md-6">
+                            <label for="{{ form.requester_email.id_for_label }}" class="form-label fw-semibold">
+                                Correo electrónico
+                            </label>
+                            {{ form.requester_email }}
+                            {% for error in form.requester_email.errors %}
+                            <div class="text-danger small mt-1">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                            <label for="{{ form.requester_phone.id_for_label }}" class="form-label fw-semibold">
+                                Teléfono
+                            </label>
+                            {{ form.requester_phone }}
+                            {% for error in form.requester_phone.errors %}
+                            <div class="text-danger small mt-1">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                            <label for="{{ form.address.id_for_label }}" class="form-label fw-semibold">
+                                Dirección
+                            </label>
+                            {{ form.address }}
+                            {% for error in form.address.errors %}
+                            <div class="text-danger small mt-1">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                            <label for="{{ form.subject.id_for_label }}" class="form-label fw-semibold">
+                                Asunto
+                            </label>
+                            {{ form.subject }}
+                            {% for error in form.subject.errors %}
+                            <div class="text-danger small mt-1">{{ error }}</div>
                             {% endfor %}
                         </div>
 
@@ -520,6 +588,14 @@
                             {% endfor %}
                         </div>
                     </div>
+
+                    {% if form.instance.pk %}
+                    <div class="alert alert-secondary border mt-4 mb-0">
+                        <strong>Código de seguimiento de la atención:</strong>
+                        {{ form.instance.tracking_code|default:"No registrado" }}
+                        <span class="small text-muted ms-2">(solo lectura)</span>
+                    </div>
+                    {% endif %}
 
                     <!-- DATOS AUTOMÁTICOS -->
                     <div class="alert alert-light border mt-4 mb-0">

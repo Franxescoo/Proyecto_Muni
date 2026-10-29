@@ -9,6 +9,7 @@ from django.urls import reverse
 
 from accounts.models import UserProfile
 from organization.models import Delegation, Employee, OrganizationRole, PositionFunction
+from citizen_requests.models import CitizenRequest
 from .models import AttentionEntry, AttentionType, SubAttention
 
 
@@ -142,6 +143,8 @@ class Entrega2SecurityTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertNotContains(resp, "Solicitante Sur")
         self.assertContains(resp, "Norte")
+        self.assertContains(resp, "Código de seguimiento de la atención")
+        self.assertContains(resp, "Código de seguimiento de la solicitud")
         response = self.client.get(reverse("registration:attention_entry_update", args=[self.south_entry.pk]))
         self.assertEqual(response.status_code, 404)
 
@@ -166,12 +169,147 @@ class Entrega2SecurityTests(TestCase):
             "sub_attention": self.sub.pk, "description": "Solicita orientación",
             "delegation": self.south.pk,  # forged value is ignored
             "responsible_employee": self.employee_south.pk,  # forged value is ignored
+            "requester_email": "vecino@example.com",
+            "requester_phone": "+56 9 1111 2222",
+            "address": "Dirección Norte",
+            "subject": "Consulta directa",
         })
         self.assertEqual(response.status_code, 302)
         attention = AttentionEntry.objects.get(requester="Sol Norte")
         self.assertEqual(attention.registered_by_id, self.user.pk)
         self.assertEqual(attention.responsible_employee_id, self.employee_north.pk)
         self.assertEqual(attention.delegation_id, self.north.pk)
+        self.assertEqual(attention.requester_email, "vecino@example.com")
+        self.assertEqual(attention.requester_phone, "+56 9 1111 2222")
+        self.assertEqual(attention.address, "Dirección Norte")
+        self.assertEqual(attention.subject, "Consulta directa")
+        tracking_code = attention.tracking_code
+
+        update_response = self.client.post(
+            reverse(
+                "registration:attention_entry_update",
+                args=[attention.pk],
+            ),
+            {
+                "requester": "Sol Norte actualizado",
+                "requester_email": "actualizado@example.com",
+                "requester_phone": "+56 9 3333 4444",
+                "address": "Nueva dirección",
+                "subject": "Nuevo asunto",
+                "attention_type": self.type.pk,
+                "sub_attention": self.sub.pk,
+                "description": "Descripción actualizada",
+                "delegation": self.north.pk,
+                "responsible_employee": self.employee_north.pk,
+            },
+        )
+        self.assertEqual(update_response.status_code, 302)
+        attention.refresh_from_db()
+        self.assertEqual(attention.tracking_code, tracking_code)
+        self.assertEqual(attention.requester_email, "actualizado@example.com")
+        self.assertEqual(attention.address, "Nueva dirección")
+
+    def test_attention_edit_modal_shows_contact_fields_and_read_only_code(self):
+        attention = AttentionEntry.objects.create(
+            requester="Consulta",
+            requester_email="consulta@example.com",
+            requester_phone="123",
+            address="Dirección",
+            subject="Asunto",
+            attention_type=self.type,
+            sub_attention=self.sub,
+            description="Descripción",
+            delegation=self.north,
+            responsible_employee=self.employee_north,
+        )
+
+        response = self.client.get(
+            reverse(
+                "registration:attention_entry_update",
+                args=[attention.pk],
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'name="requester_email"')
+        self.assertContains(response, 'name="requester_phone"')
+        self.assertContains(response, 'name="address"')
+        self.assertContains(response, 'name="subject"')
+        self.assertContains(response, str(attention.tracking_code))
+        self.assertNotContains(response, 'name="tracking_code"')
+
+    def test_read_only_attention_endpoint_returns_scoped_details(self):
+        attention = AttentionEntry.objects.create(
+            requester="Consulta",
+            requester_email="consulta@example.com",
+            requester_phone="123",
+            address="Dirección",
+            subject="Asunto",
+            attention_type=self.type,
+            sub_attention=self.sub,
+            description="Descripción",
+            delegation=self.north,
+            responsible_employee=self.employee_north,
+        )
+
+        response = self.client.get(
+            reverse(
+                "registration:attention_entry_detail",
+                args=[attention.pk],
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()["attention"]
+        self.assertEqual(data["requester"], attention.requester)
+        self.assertEqual(data["requester_email"], attention.requester_email)
+        self.assertEqual(data["tracking_code"], str(attention.tracking_code))
+
+        citizen_request = CitizenRequest.objects.create(
+            requester_name="Vecino vinculado",
+            requester_email="vinculado@example.com",
+            requester_phone="555",
+            address="Dirección vinculada",
+            subject="Solicitud vinculada",
+            description="Descripción vinculada",
+            delegation=self.north,
+        )
+        linked_attention = AttentionEntry.objects.create(
+            requester=citizen_request.requester_name,
+            requester_email=citizen_request.requester_email,
+            attention_type=self.type,
+            sub_attention=self.sub,
+            description=citizen_request.description,
+            delegation=self.north,
+            responsible_employee=self.employee_north,
+        )
+        citizen_request.attention_entry = linked_attention
+        citizen_request.save(update_fields=("attention_entry",))
+
+        response = self.client.get(
+            reverse(
+                "registration:attention_entry_detail",
+                args=[linked_attention.pk],
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        linked_data = response.json()["attention"]
+        self.assertEqual(
+            linked_data["tracking_code"],
+            str(linked_attention.tracking_code),
+        )
+        self.assertEqual(
+            linked_data["request_tracking_code"],
+            str(citizen_request.tracking_code),
+        )
+
+        response = self.client.get(
+            reverse(
+                "registration:attention_entry_detail",
+                args=[self.south_entry.pk],
+            )
+        )
+        self.assertEqual(response.status_code, 404)
 
     def test_no_change_permission_rejects_direct_edit(self):
         self.group.permissions.remove(Permission.objects.get(

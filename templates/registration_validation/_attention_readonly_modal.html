@@ -1,0 +1,203 @@
+<div
+    class="modal fade sgr-upgraded-modal"
+    id="attentionReadonlyModal"
+    tabindex="-1"
+    aria-labelledby="attentionReadonlyModalLabel"
+    aria-hidden="true"
+>
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="sgr-modal-title-block">
+                    <div class="sgr-modal-eyebrow">
+                        <i class="bi bi-shield-check me-2" aria-hidden="true"></i>
+                        REGISTRO Y VALIDACIÓN
+                    </div>
+                    <h2 class="modal-title fs-5 fw-bold" id="attentionReadonlyModalLabel">
+                        <i class="bi bi-eye me-2"></i>Ver atención
+                    </h2>
+                    <p class="sgr-modal-subtitle mb-0">Consulta de solo lectura.</p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div id="attentionReadonlyLoading" class="text-muted">Cargando atención...</div>
+                <div id="attentionReadonlyContent" class="d-none">
+                    <div class="row g-3">
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold">Solicitante</label>
+                            <input id="attentionReadonlyRequester" class="form-control" readonly>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold">Correo electrónico</label>
+                            <input id="attentionReadonlyEmail" class="form-control" readonly>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold">Teléfono</label>
+                            <input id="attentionReadonlyPhone" class="form-control" readonly>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold">Dirección</label>
+                            <input id="attentionReadonlyAddress" class="form-control" readonly>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold">Asunto</label>
+                            <input id="attentionReadonlySubject" class="form-control" readonly>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold">Código de seguimiento de la atención</label>
+                            <input id="attentionReadonlyTracking" class="form-control" readonly>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold">Tipo de atención</label>
+                            <select id="attentionReadonlyType" class="form-select" disabled></select>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold">Subatención</label>
+                            <select id="attentionReadonlySubattention" class="form-select" disabled></select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Descripción</label>
+                            <textarea id="attentionReadonlyDescription" class="form-control" rows="4" readonly></textarea>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold">Delegación</label>
+                            <select id="attentionReadonlyDelegation" class="form-select" disabled></select>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold">Funcionario responsable</label>
+                            <select id="attentionReadonlyEmployee" class="form-select" disabled></select>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold">Estado</label>
+                            <input id="attentionReadonlyStatus" class="form-control" readonly>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold">Fecha de registro</label>
+                            <input id="attentionReadonlyDate" class="form-control" readonly>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold">Usuario que registró</label>
+                            <input id="attentionReadonlyRegisteredBy" class="form-control" readonly>
+                        </div>
+                        <div id="attentionReadonlyRequestCodeRow" class="col-12 d-none">
+                            <label class="form-label fw-semibold">Código de seguimiento de la solicitud</label>
+                            <input id="attentionReadonlyRequestCode" class="form-control" readonly>
+                        </div>
+                    </div>
+                </div>
+                <div id="attentionReadonlyError" class="alert alert-danger d-none mt-3"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const attentionModalElement = document.getElementById("attentionReadonlyModal");
+    if (!attentionModalElement || !window.bootstrap) return;
+
+    const attentionModal = bootstrap.Modal.getOrCreateInstance(attentionModalElement);
+    const endpoint = "{% url 'registration:attention_entry_detail' 0 %}";
+    const requestsModalElement = document.getElementById("solicitudesModal");
+    let pendingAttentionId = null;
+
+    function text(value) {
+        return value || "No registrado";
+    }
+
+    function setSelect(id, value) {
+        const select = document.getElementById(id);
+        select.replaceChildren(new Option(text(value), value || ""));
+        select.value = value || "";
+    }
+
+    function renderAttention(attention) {
+        document.getElementById("attentionReadonlyRequester").value = text(attention.requester);
+        document.getElementById("attentionReadonlyEmail").value = text(attention.requester_email);
+        document.getElementById("attentionReadonlyPhone").value = text(attention.requester_phone);
+        document.getElementById("attentionReadonlyAddress").value = text(attention.address);
+        document.getElementById("attentionReadonlySubject").value = text(attention.subject);
+        document.getElementById("attentionReadonlyTracking").value = text(attention.tracking_code);
+        setSelect("attentionReadonlyType", attention.attention_type);
+        setSelect("attentionReadonlySubattention", attention.sub_attention);
+        document.getElementById("attentionReadonlyDescription").value = text(attention.description);
+        setSelect("attentionReadonlyDelegation", attention.delegation);
+        setSelect("attentionReadonlyEmployee", attention.responsible_employee);
+        document.getElementById("attentionReadonlyStatus").value = text(attention.status);
+        document.getElementById("attentionReadonlyDate").value = attention.registration_date
+            ? new Date(attention.registration_date).toLocaleString()
+            : "No registrado";
+        document.getElementById("attentionReadonlyRegisteredBy").value = text(attention.registered_by);
+        const requestCodeRow = document.getElementById("attentionReadonlyRequestCodeRow");
+        const requestCode = document.getElementById("attentionReadonlyRequestCode");
+        if (attention.request_tracking_code &&
+            attention.request_tracking_code !== attention.tracking_code) {
+            requestCode.value = attention.request_tracking_code;
+            requestCodeRow.classList.remove("d-none");
+        } else {
+            requestCode.value = "";
+            requestCodeRow.classList.add("d-none");
+        }
+        document.getElementById("attentionReadonlyLoading").classList.add("d-none");
+        document.getElementById("attentionReadonlyError").classList.add("d-none");
+        document.getElementById("attentionReadonlyContent").classList.remove("d-none");
+    }
+
+    function showAttentionModal() {
+        if (!pendingAttentionId) return;
+        const id = pendingAttentionId;
+        pendingAttentionId = null;
+        document.getElementById("attentionReadonlyContent").classList.add("d-none");
+        document.getElementById("attentionReadonlyLoading").classList.remove("d-none");
+        fetch(endpoint.replace("/0/", "/" + id + "/"), {
+            headers: {"X-Requested-With": "XMLHttpRequest"},
+        })
+            .then(response => {
+                if (!response.ok) throw new Error("No se pudo cargar la atención.");
+                return response.json();
+            })
+            .then(data => {
+                renderAttention(data.attention);
+                attentionModal.show();
+            })
+            .catch(error => {
+                document.getElementById("attentionReadonlyLoading").classList.add("d-none");
+                const errorBox = document.getElementById("attentionReadonlyError");
+                errorBox.textContent = error.message;
+                errorBox.classList.remove("d-none");
+                attentionModal.show();
+            });
+    }
+
+    window.openAttentionReadonlyModal = function (attentionId, sourceModal) {
+        pendingAttentionId = attentionId;
+        if (sourceModal && window.bootstrap) {
+            const source = bootstrap.Modal.getOrCreateInstance(sourceModal);
+            sourceModal.addEventListener("hidden.bs.modal", showAttentionModal, {once: true});
+            source.hide();
+        } else {
+            showAttentionModal();
+        }
+    };
+
+    attentionModalElement.addEventListener("hidden.bs.modal", function () {
+        document.getElementById("attentionReadonlyContent").classList.add("d-none");
+        document.getElementById("attentionReadonlyError").classList.add("d-none");
+    });
+
+    document.addEventListener("click", function (event) {
+        const button = event.target.closest("[data-view-attention-id]");
+        if (!button) return;
+        const sourceModal = button.closest(".modal");
+        window.openAttentionReadonlyModal(
+            button.dataset.viewAttentionId,
+            sourceModal && sourceModal.id === "solicitudesModal"
+                ? sourceModal
+                : null,
+        );
+    });
+});
+</script>

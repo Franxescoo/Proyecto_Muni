@@ -963,6 +963,10 @@ class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
         model = AttentionEntry
         fields = [
             "requester",
+            "requester_email",
+            "requester_phone",
+            "address",
+            "subject",
             "attention_type",
             "sub_attention",
             "description",
@@ -971,6 +975,10 @@ class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
         ]
         labels = {
             "requester": "Solicitante",
+            "requester_email": "Correo electrónico",
+            "requester_phone": "Teléfono",
+            "address": "Dirección",
+            "subject": "Asunto",
             "attention_type": "Tipo de atención",
             "sub_attention": "Subatención",
             "description": "Descripción de la solicitud",
@@ -981,6 +989,21 @@ class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
             "requester": forms.TextInput(attrs={
                 "placeholder": "Nombre de quien realiza la solicitud",
                 "maxlength": 150,
+            }),
+            "requester_email": forms.EmailInput(attrs={
+                "placeholder": "correo@ejemplo.cl",
+            }),
+            "requester_phone": forms.TextInput(attrs={
+                "placeholder": "Teléfono de contacto",
+                "maxlength": 25,
+            }),
+            "address": forms.TextInput(attrs={
+                "placeholder": "Dirección",
+                "maxlength": 250,
+            }),
+            "subject": forms.TextInput(attrs={
+                "placeholder": "Asunto de la solicitud",
+                "maxlength": 160,
             }),
             "description": forms.Textarea(attrs={
                 "rows": 4,
@@ -1066,6 +1089,7 @@ class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
                 linked_employee is not None and not existing
                 and (selected_id is None or linked_employee.delegation_id == selected_id)
             ):
+                self.initial["responsible_employee"] = linked_employee.pk
                 self.fields["responsible_employee"].initial = linked_employee.pk
                 self.fields["responsible_employee"].disabled = True
                 self.fields["responsible_employee"].help_text = (

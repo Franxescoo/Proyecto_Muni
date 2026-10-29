@@ -470,6 +470,7 @@
     </div>
 </div>
 {% endif %}
+{% include "registration_validation/_attention_readonly_modal.html" %}
 <script>
 document.addEventListener("DOMContentLoaded", function () {
     const modal = document.getElementById("solicitudesModal");
@@ -477,6 +478,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const inboxUrl = "{% url 'citizen_requests:request_inbox' %}";
     const detailBaseUrl = "{% url 'citizen_requests:request_detail' 0 %}";
+    const createAttentionBaseUrl = "{% url 'registration:attention_entry_create' %}";
+    const viewAttentionBaseUrl = "{% url 'registration:attention_entry_detail' 0 %}";
     const feedback = document.getElementById("solicitudes-feedback");
     const detail = document.getElementById("solicitud-detail");
     const action = document.getElementById("solicitud-action");
@@ -527,13 +530,19 @@ document.addEventListener("DOMContentLoaded", function () {
             return;
         }
         const rows = data.items.map(item => {
+            const attentionAction = section === "delegated" && item.has_attention && item.can_view_attention
+                ? `<button type="button" class="btn btn-sm btn-outline-primary"
+                    data-view-attention-id="${item.attention_entry_id}">Ver atención</button>`
+                : section === "delegated" && !item.has_attention && item.can_create_attention
+                ? `<a class="btn btn-sm btn-outline-success"
+                    href="${createAttentionBaseUrl}?citizen_request=${encodeURIComponent(item.id)}">Crear atención</a>`
+                : "";
             const actionLabel = section === "pending" && canAssign
                 ? `<button type="button" class="btn btn-sm btn-outline-success"
                     data-assign-id="${item.id}">Derivar</button>`
                 : section === "delegated"
-                ? `<button type="button" class="btn btn-sm btn-outline-warning"
-                    data-change-id="${item.id}" ${item.has_attention ? "disabled title=\"Tiene una atención vinculada\"" : ""}>
-                    Cambiar derivación</button>`
+                ? `${item.has_attention ? "" : `<button type="button" class="btn btn-sm btn-outline-warning"
+                    data-change-id="${item.id}">Cambiar derivación</button>`}${attentionAction}`
                 : "";
             return `
             <tr>
@@ -545,7 +554,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 <td>${escapeHtml(item.delegation)}</td>
                 <td><div class="d-flex gap-1">
                     <button type="button" class="btn btn-sm btn-outline-primary"
-                        data-detail-id="${item.id}">Ver</button>
+                        data-detail-id="${item.id}">${item.has_attention ? "Ver solicitud" : "Ver"}</button>
                     ${actionLabel}
                 </div></td>
             </tr>`;

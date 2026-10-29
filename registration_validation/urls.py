@@ -24,6 +24,7 @@ from .views import (
     SubAttentionUpdateView,
     AttentionEntryCreateView,
     AttentionEntryDeleteView,
+    attention_entry_detail,
     AttentionEntryListView,
     AttentionEntryUpdateView,
     ActivityTypeCreateView,
@@ -241,6 +242,11 @@ urlpatterns = [
         "attention-entries/new/",
         AttentionEntryCreateView.as_view(),
         name="attention_entry_create",
+    ),
+    path(
+        "attention-entries/<int:attention_entry_id>/",
+        attention_entry_detail,
+        name="attention_entry_detail",
     ),
     path(
         "attention-entries/<int:attention_entry_id>/edit/",

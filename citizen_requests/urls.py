@@ -27,6 +27,16 @@ urlpatterns = [
         name="request_detail",
     ),
     path(
+        "solicitudes/bandeja/<int:request_id>/crear-atencion/",
+        views.create_attention_from_request,
+        name="create_attention_from_request",
+    ),
+    path(
+        "solicitudes/bandeja/<int:request_id>/atencion/",
+        views.view_attention_from_request,
+        name="view_attention_from_request",
+    ),
+    path(
         "solicitudes/registrar/",
         views.register_public_request,
         name="register_public_request",
