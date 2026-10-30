@@ -1,0 +1,13 @@
+<div class="mec-modal-title"><i class="bi bi-gift me-2"></i> Detalle de campaña</div>
+<dl class="mec-detail-grid">
+ <div class="mec-detail"><dt>Campaña</dt><dd>{{ campaign.title }} · {{ campaign.year }}</dd></div>
+ <div class="mec-detail"><dt>Estado</dt><dd>{{ campaign.get_status_display }}</dd></div>
+ <div class="mec-detail"><dt>Tipo de atención</dt><dd>{{ campaign.attention_type.name }}</dd></div>
+ <div class="mec-detail"><dt>Delegación organizadora</dt><dd>{{ campaign.organizing_delegation.name }}</dd></div>
+ <div class="mec-detail"><dt>Inicio de inscripción</dt><dd>{{ campaign.opens_on|date:'d/m/Y' }}</dd></div>
+ <div class="mec-detail"><dt>Fin de inscripción</dt><dd>{{ campaign.closes_on|date:'d/m/Y' }}</dd></div>
+ <div class="mec-detail"><dt>Evento relacionado</dt><dd>{{ campaign.edition|default:'Sin evento asociado' }}</dd></div>
+</dl>
+{% if campaign.description %}<p class="mt-3">{{ campaign.description|linebreaksbr }}</p>{% endif %}
+<p class="small text-muted mt-3">Para registrar un beneficiario, utiliza «Inscribir en campaña» desde Ingreso de Atención. Las inscripciones se consultan en su sección, según los permisos.</p>
+<div class="modal-footer px-0 pb-0"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button></div>

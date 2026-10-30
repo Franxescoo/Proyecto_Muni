@@ -1,0 +1,20 @@
+<div class="mec-modal-title"><i class="bi bi-pencil-square me-2"></i>{{ title }}</div>
+{% if note %}<p class="text-muted small mb-3">{{ note }}</p>{% endif %}
+<form method="post" action="{{ request.path }}" data-mec-ajax-form>
+  {% csrf_token %}
+  {% if form.non_field_errors %}<div class="alert alert-danger" role="alert">{{ form.non_field_errors }}</div>{% endif %}
+  <div class="row g-3">
+    {% for field in form %}
+    <div class="{% if field.field.widget.input_type == 'textarea' %}col-12{% else %}col-md-6{% endif %}">
+      <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="text-danger">*</span>{% endif %}</label>
+      {{ field }}
+      {% if field.help_text %}<div class="small text-muted mt-1">{{ field.help_text }}</div>{% endif %}
+      {% for error in field.errors %}<div class="small text-danger" role="alert">{{ error }}</div>{% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+  <div class="modal-footer px-0 pb-0 mt-3">
+    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+    <button type="submit" class="btn btn-success"><i class="bi bi-check2-circle me-1"></i> Guardar</button>
+  </div>
+</form>

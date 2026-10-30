@@ -1,0 +1,59 @@
+{% extends "municipal_events/base.html" %}
+{% block events_content %}
+<div class="mec-stats mec-stats-3">
+ <div class="mec-stat"><div class="mec-stat-value">{{ event_total }}</div><div class="mec-stat-label">Eventos municipales</div></div>
+ <div class="mec-stat"><div class="mec-stat-value">{{ edition_total }}</div><div class="mec-stat-label">Ediciones registradas</div></div>
+ <div class="mec-stat"><div class="mec-stat-value">{{ year }}</div><div class="mec-stat-label">Año actual</div></div>
+</div>
+<section class="mec-panel">
+  <div class="mec-panel-heading">
+    <div><h2>Registro de eventos municipales</h2><p class="mec-subtitle">Consulta y administra los eventos y las ediciones asociadas.</p></div>
+    {% if perms.municipal_events.add_municipalevent %}
+    <a data-mec-modal-url href="{% url 'municipal_events:event_create' %}" class="btn btn-success"><i class="bi bi-plus-lg me-1"></i> Agregar evento</a>
+    {% endif %}
+  </div>
+  <form method="get" role="search" class="row g-3 align-items-end mb-3">
+    <div class="col-md-8"><label for="mec-event-search" class="form-label">Buscar evento</label>
+      <input id="mec-event-search" class="form-control" name="q" type="search" value="{{ q }}" placeholder="Nombre o descripción del evento"></div>
+    <div class="col-md-2"><button type="submit" class="btn btn-dark w-100"><i class="bi bi-funnel me-1"></i> Filtrar</button></div>
+    <div class="col-md-2"><a href="{% url 'municipal_events:event_list' %}" class="btn btn-outline-secondary w-100">Limpiar</a></div>
+  </form>
+  <div class="table-responsive"><table class="mec-table">
+    <thead><tr><th>Evento municipal</th><th>Descripción</th><th>Ediciones</th><th>Acciones</th></tr></thead>
+    <tbody>
+    {% for event in events %}
+    <tr>
+      <td><strong>{{ event.name }}</strong></td>
+      <td>{{ event.description|default:'Sin descripción'|truncatechars:90 }}</td>
+      <td>{{ event.editions.count }}</td>
+      <td><div class="mec-actions">
+        <button type="button" class="btn btn-sm btn-outline-info" data-bs-toggle="collapse" data-bs-target="#event-editions-{{ event.pk }}" aria-expanded="false" aria-controls="event-editions-{{ event.pk }}"><i class="bi bi-calendar3 me-1"></i> Ver ediciones</button>
+        <a href="{% url 'municipal_events:event_detail' event.pk %}" data-mec-modal-url class="btn btn-sm btn-outline-info"><i class="bi bi-eye me-1"></i>Ver</a>
+        {% if perms.municipal_events.change_municipalevent %}<a href="{% url 'municipal_events:event_edit' event.pk %}" data-mec-modal-url class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil-square me-1"></i>Modificar</a>{% endif %}
+        {% if perms.municipal_events.delete_municipalevent %}<a href="{% url 'municipal_events:event_delete' event.pk %}" data-mec-modal-url class="btn btn-sm btn-outline-danger"><i class="bi bi-trash3 me-1"></i>Eliminar</a>{% endif %}
+        {% if perms.municipal_events.add_eventedition %}<a href="{% url 'municipal_events:edition_create' event.pk %}" data-mec-modal-url class="btn btn-sm btn-success"><i class="bi bi-plus-lg me-1"></i>Nueva edición</a>{% endif %}
+      </div></td>
+    </tr>
+    <tr><td colspan="4" class="p-0 border-0"><div class="collapse" id="event-editions-{{ event.pk }}"><div class="mec-event-editions my-2">
+      <div class="small fw-semibold mb-2 ms-2">Ediciones de {{ event.name }}</div>
+      <div class="table-responsive"><table class="mec-table"><thead><tr><th>Año</th><th>Fecha</th><th>Lugar</th><th>Delegación</th><th>Estado</th><th>Acciones</th></tr></thead>
+      <tbody>{% for edition in event.editions.all %}<tr>
+        <td><strong>{{ edition.year }}</strong></td><td>{{ edition.date|date:'d/m/Y' }}</td><td>{{ edition.place }}</td><td>{{ edition.delegation.name }}</td>
+        <td><span class="mec-pill {% if edition.status == 'FINISHED' or edition.status == 'ACTIVE' %}success{% else %}warning{% endif %}">{{ edition.get_status_display }}</span></td>
+        <td><div class="mec-actions">
+          <a href="{% url 'municipal_events:edition_detail' edition.pk %}" data-mec-modal-url class="btn btn-sm btn-outline-info">Ver</a>
+          {% if perms.municipal_events.change_eventedition %}<a href="{% url 'municipal_events:edition_edit' edition.pk %}" data-mec-modal-url class="btn btn-sm btn-outline-secondary">Modificar</a>{% endif %}
+          {% if perms.municipal_events.delete_eventedition %}<a href="{% url 'municipal_events:edition_delete' edition.pk %}" data-mec-modal-url class="btn btn-sm btn-outline-danger">Eliminar</a>{% endif %}
+        </div></td>
+      </tr>{% empty %}<tr><td colspan="6" class="text-muted text-center py-3">No hay ediciones para este evento.</td></tr>{% endfor %}</tbody></table></div>
+    </div></div></td></tr>
+    {% empty %}<tr><td colspan="4" class="text-muted text-center py-4">No hay eventos para mostrar.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+  {% if page_obj.has_other_pages %}<nav class="mec-pagination" aria-label="Paginación de eventos">
+  {% if page_obj.has_previous %}<a class="btn btn-outline-secondary btn-sm" href="?q={{ q|urlencode }}&page={{ page_obj.previous_page_number }}">Anterior</a>{% endif %}
+  Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+  {% if page_obj.has_next %}<a class="btn btn-outline-secondary btn-sm" href="?q={{ q|urlencode }}&page={{ page_obj.next_page_number }}">Siguiente</a>{% endif %}
+  </nav>{% endif %}
+</section>
+{% endblock %}

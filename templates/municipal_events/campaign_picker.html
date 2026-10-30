@@ -1,0 +1,7 @@
+{% extends "municipal_events/base.html" %}
+{% block events_content %}
+<div class="mec-crumb">Eventos y Campañas / Inscripciones / Selección de campaña</div>
+<div class="mec-heading"><div><h1>Seleccionar campaña</h1><p class="mec-subtitle">Atención #{{ attention.pk }} · {{ attention.attention_type.name }} · {{ attention.delegation.name }}</p></div></div>
+<div class="mec-note info">El registro se vinculará a la atención original. Una atención puede tener varios niños inscritos, pero cada niño solo puede inscribirse una vez por campaña.</div>
+<section class="mec-panel"><h2>Campañas abiertas para esta atención</h2>{% for campaign in campaigns %}<div class="mec-detail mb-2 d-flex justify-content-between align-items-center gap-3 flex-wrap"><div><strong>{{ campaign.title }}</strong><p class="mec-subtitle">{{ campaign.year }} · Abierta hasta {{ campaign.closes_on|date:"d/m/Y" }}</p></div><a class="btn btn-success" href="{% url 'municipal_events:enrollment_create' campaign.pk %}?attention={{ attention.pk }}">Inscribir <i class="bi bi-arrow-right"></i></a></div>{% empty %}<div class="mec-empty">No hay campañas abiertas y autorizadas para este Tipo de atención.</div>{% endfor %}</section>
+{% endblock %}

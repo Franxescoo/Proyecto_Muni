@@ -75,6 +75,7 @@ INSTALLED_APPS = [
     'core',
     'accounts',
     'citizen_requests',
+    'municipal_events',
 ]
 
 MIDDLEWARE = [

@@ -1,0 +1,10 @@
+<div class="mec-modal-title"><i class="bi bi-calendar-event me-2"></i> Detalle del evento</div>
+<dl class="mec-detail-grid">
+ <div class="mec-detail"><dt>Nombre</dt><dd>{{ event.name }}</dd></div>
+ <div class="mec-detail"><dt>Ediciones registradas</dt><dd>{{ event.editions.count }}</dd></div>
+ <div class="mec-detail"><dt>Creación</dt><dd>{{ event.created_at|date:'d/m/Y H:i' }}</dd></div>
+ <div class="mec-detail"><dt>Responsable de creación</dt><dd>{{ event.created_by.username }}</dd></div>
+</dl>
+{% if event.description %}<div class="mt-3"><strong>Descripción</strong><p>{{ event.description|linebreaksbr }}</p></div>{% endif %}
+<div class="mt-3"><strong>Ediciones</strong><ul>{% for e in event.editions.all %}<li>{{ e.year }} · {{ e.date|date:'d/m/Y' }} · {{ e.place }}</li>{% empty %}<li>Sin ediciones.</li>{% endfor %}</ul></div>
+<div class="modal-footer px-0 pb-0"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button></div>

@@ -1,5 +1,6 @@
 
 {% extends "registration_validation/base.html" %}
+{% load municipal_campaigns %}
 {% block titulo %}Ingreso de Atención | Registro y validación{% endblock %}
 
 {% block contenido %}
@@ -282,6 +283,13 @@
                                     <i class="bi bi-eye"></i>
                                     <span class="ms-1">Ver</span>
                                 </button>
+                                {% endif %}
+
+                                {% campaign_link entry as campaign_url %}
+                                {% if campaign_url %}
+                                <a href="{{ campaign_url }}" class="btn btn-sm btn-outline-success" title="Inscribir beneficiarios en una campaña abierta del tipo de atención">
+                                    <i class="bi bi-gift"></i><span class="ms-1">Inscribir en campaña</span>
+                                </a>
                                 {% endif %}
 
                                 {% if perms.registration_validation.change_attentionentry %}

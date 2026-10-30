@@ -1,0 +1,7 @@
+{% extends "municipal_events/base.html" %}
+{% block events_content %}<section class="mec-panel" style="max-width:700px">
+<h1>{{ title }}</h1><p>¿Confirmas eliminar <strong>{{ object_label }}</strong>?</p>
+{% if blocked %}<div class="alert alert-warning">{{ blocked }}</div>{% else %}
+<form method="post">{% csrf_token %}<button type="submit" class="btn btn-danger">Eliminar</button></form>{% endif %}
+<a class="btn btn-outline-secondary mt-2" href="{{ cancel_url }}">Volver</a>
+</section>{% endblock %}

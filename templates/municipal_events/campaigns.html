@@ -1,0 +1,19 @@
+{% extends "municipal_events/base.html" %}
+{% block events_content %}
+<div class="mec-stats mec-stats-3">
+ <div class="mec-stat"><div class="mec-stat-value">{{ campaign_total }}</div><div class="mec-stat-label">Campañas registradas</div></div>
+ <div class="mec-stat"><div class="mec-stat-value">{{ campaign_open }}</div><div class="mec-stat-label">Campañas con inscripciones abiertas</div></div>
+ <div class="mec-stat"><div class="mec-stat-value">{{ campaign_year }}</div><div class="mec-stat-label">Campañas del año actual</div></div>
+</div>
+<section class="mec-panel">
+<div class="mec-panel-heading"><div><h2>Registro de campañas</h2><p class="mec-subtitle">Administra campañas asociadas a Tipos de atención existentes.</p></div>
+{% if perms.municipal_events.add_campaign %}<a class="btn btn-success" href="{% url 'municipal_events:campaign_create' %}" data-mec-modal-url><i class="bi bi-plus-lg"></i> Agregar campaña</a>{% endif %}</div>
+<form method="get" class="row g-2 align-items-end mb-3" role="search"><div class="col-lg-8"><label for="mec-campaign-search" class="form-label">Buscar campaña o Tipo de atención</label><input id="mec-campaign-search" class="form-control" type="search" name="q" value="{{ q }}" placeholder="Nombre de campaña"></div><div class="col-lg-4 mec-actions"><button class="btn btn-primary" type="submit"><i class="bi bi-funnel"></i> Filtrar</button><a href="{% url 'municipal_events:campaign_list' %}" class="btn btn-outline-secondary">Limpiar</a></div></form>
+<div class="mec-table-wrap"><table class="mec-table"><thead><tr><th>Campaña</th><th>Año</th><th>Tipo de atención</th><th>Inscritos</th><th>Inscripciones</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>
+{% for campaign in campaigns %}<tr><td><strong>{{ campaign.title }}</strong><span class="mec-sub">{{ campaign.organizing_delegation.name }}</span></td><td>{{ campaign.year }}</td><td>{{ campaign.attention_type.name }}</td><td>{% if can_view_enrollments %}{{ campaign.n_enrollments }}{% else %}—{% endif %}</td><td>{{ campaign.opens_on|date:'d/m/Y' }}<span class="mec-sub">al {{ campaign.closes_on|date:'d/m/Y' }}</span></td><td>{% if campaign.accepts_enrollments %}<span class="mec-pill success">Abierta</span>{% else %}<span class="mec-pill neutral">{{ campaign.get_status_display }}</span>{% endif %}</td><td><div class="mec-actions"><a class="btn btn-outline-secondary btn-sm" href="{% url 'municipal_events:campaign_detail' campaign.pk %}" data-mec-modal-url>Ver</a>
+{% if perms.municipal_events.change_campaign %}<a class="btn btn-outline-primary btn-sm" href="{% url 'municipal_events:campaign_edit' campaign.pk %}" data-mec-modal-url>Modificar</a>{% endif %}
+{% if perms.municipal_events.delete_campaign %}<a class="btn btn-outline-danger btn-sm" href="{% url 'municipal_events:campaign_delete' campaign.pk %}" data-mec-modal-url>Eliminar</a>{% endif %}</div></td></tr>{% empty %}<tr><td colspan="7" class="text-center text-muted py-3">No hay campañas para mostrar.</td></tr>{% endfor %}
+</tbody></table></div>
+{% if page_obj.has_other_pages %}<nav class="mec-pagination">{% if page_obj.has_previous %}<a class="btn btn-outline-secondary btn-sm" href="?q={{ q|urlencode }}&page={{ page_obj.previous_page_number }}">Anterior</a>{% endif %}Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}{% if page_obj.has_next %}<a class="btn btn-outline-secondary btn-sm" href="?q={{ q|urlencode }}&page={{ page_obj.next_page_number }}">Siguiente</a>{% endif %}</nav>{% endif %}
+</section>
+{% endblock %}

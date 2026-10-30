@@ -1253,13 +1253,8 @@ GOAL_COLUMNS = [
 ]
 
 
-@access("planning_measurements.view_goal")
-def goal_list(request):
+def get_goal_list_context(request):
     goals = scoped_goals(request.user)
-
-    if request.method == "POST":
-        run_bulk_delete(request, goals)
-        return redirect(request.get_full_path())
 
     base_goals = goals  # para armar las opciones de los filtros
     total_goals = base_goals.count()
@@ -1305,6 +1300,36 @@ def goal_list(request):
         "active_goals": active_goals,
         "closed_goals": closed_goals,
     }
+    return context
+
+
+@access("planning_measurements.view_goal")
+def goal_list(request):
+    if request.method == "POST":
+        run_bulk_delete(request, scoped_goals(request.user))
+        return redirect(request.get_full_path())
+    return render(request, "planning/goal_list.html", get_goal_list_context(request))
+
+
+def render_goal_overlay(request, form, title, goal=None, readonly=False):
+    """Mantener el listado visible debajo del modal, como en Períodos.
+
+    Si un usuario solo tiene permiso de crear, no se expone el listado
+    protegido por view_goal; conserva la pantalla independiente de respaldo.
+    """
+    if not request.user.has_perm("planning_measurements.view_goal"):
+        return render(request, "planning/goal_form.html", {
+            "form": form, "title": title, "goal": goal, "readonly": readonly,
+        })
+    context = get_goal_list_context(request)
+    context.update({
+        "form": form,
+        "title": title,
+        "goal": goal,
+        "readonly": readonly,
+        "open_modal": True,
+        "modal_action": request.get_full_path(),
+    })
     return render(request, "planning/goal_list.html", context)
 
 
@@ -1320,11 +1345,7 @@ def goal_create(request):
             "planning:goal_create",
             ("planning:goal_edit", goal.pk),
         )
-    return render(
-        request,
-        "planning/goal_form.html",
-        {"form": form, "title": "Nueva meta", "goal": None, "readonly": False},
-    )
+    return render_goal_overlay(request, form, "Nueva meta")
 
 
 @access("planning_measurements.view_goal")
@@ -1407,15 +1428,10 @@ def goal_edit(request, goal_id):
             "planning:goal_create",
             ("planning:goal_edit", goal.pk),
         )
-    return render(
-        request,
-        "planning/goal_form.html",
-        {
-            "form": form,
-            "title": "Detalle de la meta" if readonly else "Modificar meta",
-            "goal": goal,
-            "readonly": readonly,
-        },
+    return render_goal_overlay(
+        request, form,
+        "Detalle de la meta" if readonly else "Modificar meta",
+        goal=goal, readonly=readonly,
     )
 
 

@@ -3,6 +3,7 @@ from django import forms
 
 APP_NAMES = {
     "accounts": "Cuentas",
+    "municipal_events": "Eventos y campañas",
     "citizen_requests": "Solicitudes ciudadanas",
     "organization": "Organización",
     "planning_measurements": "Planificación y medición",
@@ -10,6 +11,13 @@ APP_NAMES = {
     "monitoring_traceability": "Monitoreo y trazabilidad",
 }
 MODEL_NAMES = {
+    "municipalevent": "Eventos municipales",
+    "eventedition": "Ediciones anuales",
+    "campaign": "Campañas municipales",
+    "beneficiary": "Beneficiarios",
+    "enrollment": "Inscripciones a campañas",
+    "giftdelivery": "Entregas de regalos",
+    "campaignaudit": "Historial de campañas",
     "delegation": "Delegaciones",
     "delegationresponsibilitylog": "Historial de responsables de delegación",
     "employee": "Empleados",
@@ -49,6 +57,9 @@ SPECIAL = {
 }
 
 CATALOG_MODELS = {
+    "municipal_events": {
+        "municipalevent", "eventedition", "campaign", "enrollment", "giftdelivery",
+    },
     "accounts": {
         "userprofile",
     },
@@ -88,6 +99,11 @@ CATALOG_MODELS = {
 }
 
 CATALOG_ACTIONS = {
+    ("municipal_events", "municipalevent"): {"delete_municipalevent", "add_municipalevent", "change_municipalevent", "view_municipalevent"},
+    ("municipal_events", "eventedition"): {"delete_eventedition", "add_eventedition", "change_eventedition"},
+    ("municipal_events", "campaign"): {"delete_campaign", "add_campaign", "change_campaign", "view_campaign"},
+    ("municipal_events", "enrollment"): {"add_enrollment", "change_enrollment", "view_enrollment"},
+    ("municipal_events", "giftdelivery"): {"add_giftdelivery", "view_giftdelivery"},
     ("citizen_requests", "citizenrequest"): {"derivar_solicitud"},
     ("monitoring_traceability", "activity"): {
         "add_activity",

@@ -153,6 +153,37 @@ class PlanningTests(TestCase):
             "parameters_version": "1",
         }
 
+    def test_goal_create_renders_list_beneath_modal(self):
+        self.account("add_goal", "view_goal")
+        response = self.client.get(reverse("planning:goal_create"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "planning/goal_list.html")
+        self.assertContains(response, 'id="goalModal"')
+        self.assertContains(response, "Registro de metas")
+        self.assertContains(response, "Nueva meta")
+
+    def test_goal_invalid_post_keeps_validation_inside_list_modal(self):
+        self.account("add_goal", "view_goal")
+        response = self.client.post(reverse("planning:goal_create"), data={})
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "planning/goal_list.html")
+        self.assertContains(response, 'id="goalModal"')
+        self.assertContains(response, "Registro de metas")
+
+    def test_goal_view_and_edit_keep_list_behind_modal(self):
+        self.account("view_goal", "change_goal")
+        goal = self.create_goal()
+        for query in ("", "?view=1"):
+            response = self.client.get(reverse("planning:goal_edit", args=[goal.pk]) + query)
+            self.assertEqual(response.status_code, 200)
+            self.assertTemplateUsed(response, "planning/goal_list.html")
+            self.assertContains(response, 'id="goalModal"')
+            self.assertContains(response, "Registro de metas")
+            if query:
+                self.assertContains(response, "Detalle de la meta")
+            else:
+                self.assertContains(response, 'name="version"')
+
     def test_text_limits_are_enforced_in_planning_forms(self):
         item_form = MeasurementItemForm(data={
             "code": "X" * 21,

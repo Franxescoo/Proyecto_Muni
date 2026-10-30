@@ -22,6 +22,10 @@ def build_sections(user):
                 continue
             if permission and not is_monitoring and not user.has_perm(permission):
                 continue
+            # Algunos accesos, como Entregas, exigen más de un permiso.
+            # La visibilidad de la tarjeta coincide con los permisos de su vista.
+            if any(not user.has_perm(perm) for perm in card.get("perms", ())):
+                continue
             try:
                 href = reverse(card["url"])
             except NoReverseMatch:

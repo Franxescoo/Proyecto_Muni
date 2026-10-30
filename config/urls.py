@@ -101,6 +101,11 @@ urlpatterns = [
     ),
 
     # -----------------------------------------------------
+    # Eventos, campañas e inscripciones municipales
+    # -----------------------------------------------------
+    path("eventos-campanas/", include("municipal_events.urls")),
+
+    # -----------------------------------------------------
     # Cuentas de usuario
     # -----------------------------------------------------
     path(

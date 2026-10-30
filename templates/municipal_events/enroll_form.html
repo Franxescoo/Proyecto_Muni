@@ -1,0 +1,9 @@
+{% extends "municipal_events/base.html" %}
+{% block events_content %}
+<div class="mec-crumb">Eventos y Campañas / Inscripciones / Nueva</div>
+<div class="mec-heading"><div><h1>Inscribir beneficiario</h1><p class="mec-subtitle">{{ campaign.title }} · {{ campaign.year }}</p></div></div>
+<div class="mec-note warning">La inscripción quedará <strong>pendiente de evaluación</strong> y no implica una entrega automática. El sistema comprueba duplicados en toda la campaña, incluso entre delegaciones.</div>
+<div class="mec-panel" style="max-width:900px"><h2>Atención de origen #{{ attention.pk }}</h2><dl class="mec-detail-grid"><div class="mec-detail"><dt>Solicitante</dt><dd>{{ attention.requester }}</dd></div><div class="mec-detail"><dt>Delegación</dt><dd>{{ attention.delegation.name }}</dd></div><div class="mec-detail"><dt>Tipo de atención</dt><dd>{{ attention.attention_type.name }}</dd></div><div class="mec-detail"><dt>Campaña</dt><dd>{{ campaign.title }}</dd></div></dl>
+<hr class="my-4"><h2>Datos del niño o niña</h2>
+<form method="post">{% csrf_token %}<input type="hidden" name="attention" value="{{ attention.pk }}">{% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}<div class="row g-3">{% for field in form %}<div class="{% if field.name == 'observation' %}col-12{% else %}col-md-6{% endif %}"><label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}{% if field.field.required %} <span class="text-danger">*</span>{% endif %}</label>{{ field }}{% for error in field.errors %}<div class="small text-danger" role="alert">{{ error }}</div>{% endfor %}</div>{% endfor %}</div><div class="mec-actions border-top pt-3 mt-4"><button class="btn btn-success" type="submit">Comprobar e inscribir</button><a class="btn btn-outline-secondary" href="{% url 'municipal_events:campaigns_for_attention' attention.pk %}">Cancelar</a></div></form></div>
+{% endblock %}

@@ -8,6 +8,7 @@ Cada compañero puede ajustar o agregar tarjetas de su módulo aquí:
          Si la ruta todavía no existe, la tarjeta aparece como "Próximamente"
          y se activa sola cuando se defina una ruta con ese nombre.
 - perm:  permiso necesario para ver la tarjeta (app.view_modelo).
+- perms: permisos adicionales que deben cumplirse simultáneamente.
          Los superusuarios ven todas las tarjetas.
 """
 
@@ -103,6 +104,27 @@ MODULES = [
                 "url": "registration:attention_entry_list",
                 "perm": "registration_validation.view_attentionentry",
             },
+        ],
+    },
+    {
+        "title": "Eventos y Campañas",
+        "cards": [
+            {"title": "Eventos", "icon": "bi-calendar-event",
+             "url": "municipal_events:event_list",
+             "perm": "municipal_events.view_municipalevent"},
+            {"title": "Campañas", "icon": "bi-gift",
+             "url": "municipal_events:campaign_list",
+             "perm": "municipal_events.view_campaign"},
+            {"title": "Inscripciones", "icon": "bi-person-vcard",
+             "url": "municipal_events:enrollment_list",
+             "perm": "municipal_events.view_enrollment"},
+            {"title": "Entregas", "icon": "bi-box-seam",
+             "url": "municipal_events:delivery_list",
+             "perm": "municipal_events.view_enrollment",
+             "perms": ["municipal_events.view_giftdelivery"]},
+            {"title": "Historial", "icon": "bi-clock-history",
+             "url": "municipal_events:history_list",
+             "perm": "municipal_events.view_enrollment"},
         ],
     },
     {

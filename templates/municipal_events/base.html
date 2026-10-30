@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% load static %}
+{% block titulo %}Eventos y Campañas · SGR{% endblock %}
+{% block estilos %}
+{{ block.super }}
+<link rel="stylesheet" href="{% static 'css/municipal_events.css' %}?v=5.1">
+{% endblock %}
+{% block sidebar %}
+<aside class="mec-aside" aria-label="Navegación de Eventos y Campañas">
+  <button class="mec-side-header" type="button" data-bs-toggle="collapse" data-bs-target="#mecMenu" aria-expanded="true" aria-controls="mecMenu">
+    <span><i class="bi bi-list me-2"></i> Eventos y Campañas</span>
+    <i class="bi bi-chevron-down" aria-hidden="true"></i>
+  </button>
+  <div class="collapse show" id="mecMenu">
+      <nav class="mec-nav" aria-label="Secciones del módulo">
+        <a href="{% url 'home' %}"><i class="bi bi-house-door"></i> Inicio</a>
+        {% if perms.municipal_events.view_municipalevent %}<a href="{% url 'municipal_events:event_list' %}" {% if section == 'events' %}class="active" aria-current="page"{% endif %}><i class="bi bi-calendar-event"></i> Eventos</a>{% endif %}
+        {% if perms.municipal_events.view_campaign %}<a href="{% url 'municipal_events:campaign_list' %}" {% if section == 'campaigns' %}class="active" aria-current="page"{% endif %}><i class="bi bi-gift"></i> Campañas</a>{% endif %}
+        {% if perms.municipal_events.view_enrollment %}<a href="{% url 'municipal_events:enrollment_list' %}" {% if section == 'enrollments' %}class="active" aria-current="page"{% endif %}><i class="bi bi-person-vcard"></i> Inscripciones</a>{% endif %}
+        {% if perms.municipal_events.view_enrollment and perms.municipal_events.view_giftdelivery %}<a href="{% url 'municipal_events:delivery_list' %}" {% if section == 'deliveries' %}class="active" aria-current="page"{% endif %}><i class="bi bi-box-seam"></i> Entregas</a>{% endif %}
+        {% if perms.municipal_events.view_enrollment %}<a href="{% url 'municipal_events:history_list' %}" {% if section == 'history' %}class="active" aria-current="page"{% endif %}><i class="bi bi-clock-history"></i> Historial</a>{% endif %}
+
+      </nav>
+  </div>
+</aside>
+{% endblock %}
+{% block contenido %}
+<div class="mec" id="municipal-events">
+  <div class="mec-body">
+    <header class="mec-hero">
+      <div class="mec-hero-text">
+        <small>EVENTOS Y CAMPAÑAS</small>
+        <h1>{% if section == 'events' %}Gestión de eventos{% elif section == 'campaigns' %}Gestión de campañas{% elif section == 'enrollments' %}Gestión de inscripciones{% elif section == 'deliveries' %}Gestión de entregas{% elif section == 'history' %}Historial de campañas{% else %}Eventos y Campañas{% endif %}</h1>
+        <p>{% if section == 'events' %}Administra los eventos municipales y sus ediciones anuales.{% elif section == 'campaigns' %}Administra las campañas municipales y sus períodos de inscripción.{% elif section == 'enrollments' %}Consulta y evalúa las inscripciones de beneficiarios autorizados.{% elif section == 'deliveries' %}Controla los regalos pendientes y entregas realizadas.{% elif section == 'history' %}Consulta la trazabilidad de inscripciones, evaluaciones y entregas.{% endif %}</p>
+      </div>
+      <i class="bi {% if section == 'campaigns' %}bi-gift{% elif section == 'enrollments' %}bi-people{% elif section == 'deliveries' %}bi-box-seam{% elif section == 'history' %}bi-clock-history{% else %}bi-calendar2-event{% endif %} mec-hero-icon" aria-hidden="true"></i>
+    </header>
+    {% block events_content %}{% endblock %}
+  </div>
+</div>
+<div class="modal fade mec-ajax-modal" id="mecAjaxModal" tabindex="-1" aria-label="Operación de Eventos y Campañas" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">Eventos y Campañas</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+      <div class="modal-body" id="mecAjaxModalContent" aria-live="polite"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+{{ block.super }}
+<script src="{% static 'js/municipal_events_modals.js' %}?v=3" defer></script>
+{% endblock %}
