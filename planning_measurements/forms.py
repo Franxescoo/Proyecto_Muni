@@ -1,6 +1,7 @@
 import json
 
 from django import forms
+from django.core.validators import MaxLengthValidator
 from accounts.permissions import allowed_delegation_ids
 
 from organization.models import Employee, PositionFunction
@@ -26,6 +27,22 @@ class BootstrapMixin:
                 css = "form-control"
 
             field.widget.attrs["class"] = css
+
+
+def _set_text_limit(field, limit, label):
+    """Aplica el mismo límite en la validación del servidor y el HTML."""
+    field.widget.attrs["maxlength"] = limit
+    field.validators = [
+        validator
+        for validator in field.validators
+        if not isinstance(validator, MaxLengthValidator)
+    ]
+    field.validators.append(
+        MaxLengthValidator(
+            limit,
+            message=f"{label} no puede superar los {limit} caracteres.",
+        )
+    )
 
 
 
@@ -65,6 +82,12 @@ class PeriodForm(BootstrapMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
 
         self._apply_bootstrap()
+        _set_text_limit(self.fields["thresholds"], 255, "Los umbrales")
+        _set_text_limit(
+            self.fields["parameters_version"],
+            50,
+            "La versión de parámetros",
+        )
 
         # El administrador no ingresa manualmente los días.
         self.fields["computable_days"].required = False
@@ -459,6 +482,8 @@ class GoalForm(GoalScopeMixin, forms.ModelForm):
         self._apply_scope(user)
         self._configure_evidence_count()
         self._configure_items()
+        _set_text_limit(self.fields["item"], 150, "El ítem")
+        _set_text_limit(self.fields["unit"], 50, "La unidad")
 
 
 class GoalInlineForm(GoalScopeMixin, forms.ModelForm):
@@ -482,6 +507,8 @@ class GoalInlineForm(GoalScopeMixin, forms.ModelForm):
         self._apply_scope(user)
         self._configure_evidence_count()
         self._configure_items()
+        _set_text_limit(self.fields["item"], 150, "El ítem")
+        _set_text_limit(self.fields["unit"], 50, "La unidad")
 
 
 class MeasurementItemForm(BootstrapMixin, forms.ModelForm):
@@ -510,6 +537,15 @@ class MeasurementItemForm(BootstrapMixin, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._apply_bootstrap()
+        _set_text_limit(self.fields["code"], 20, "El código")
+        _set_text_limit(self.fields["name"], 150, "El nombre")
+        _set_text_limit(
+            self.fields["description"],
+            300,
+            "La descripción",
+        )
+        _set_text_limit(self.fields["unit"], 50, "La unidad")
+        _set_text_limit(self.fields["formula"], 500, "La fórmula")
 
         self.fields["formula"].help_text = (
             "Obligatoria para ítems porcentuales."

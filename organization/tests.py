@@ -4,15 +4,18 @@ from io import BytesIO
 from tempfile import TemporaryDirectory
 
 from django.contrib.auth import authenticate, get_user_model
-from django.contrib.auth.models import Group, Permission
+from django.contrib.auth.models import ContentType, Group, Permission
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from PIL import Image
 
 from accounts.models import UserProfile
+from accounts.forms import GroupForm
 from core.views import build_sections
 
+from .forms import OrganizationRoleForm
+from .permission_labels import permission_label
 from .models import (
     Delegation,
     Employee,
@@ -24,6 +27,25 @@ from .models import (
 class OrganizationListTests(TestCase):
 
     def setUp(self):
+        monitoring_activity_type, _ = ContentType.objects.get_or_create(
+            app_label="monitoring_traceability",
+            model="activity",
+        )
+        monitoring_evidence_type, _ = ContentType.objects.get_or_create(
+            app_label="monitoring_traceability",
+            model="evidence",
+        )
+        for content_type, model_name in (
+            (monitoring_activity_type, "activity"),
+            (monitoring_evidence_type, "evidence"),
+        ):
+            for action in ("add", "change", "delete", "view"):
+                Permission.objects.get_or_create(
+                    content_type=content_type,
+                    codename=f"{action}_{model_name}",
+                    defaults={"name": f"Can {action} {model_name}"},
+                )
+
         self.delegation = Delegation.objects.create(
             name="Centro",
             status="Active",
@@ -77,6 +99,243 @@ class OrganizationListTests(TestCase):
                 self.assertContains(response, "Consulta la información sin realizar cambios")
                 self.assertTrue(all(field.disabled for field in response.context["form"].fields.values()))
                 self.assertNotContains(response, 'type="submit" class="btn btn-success"')
+
+    def test_role_catalog_contains_real_maintainers_and_derivation_permission(self):
+        permissions = {
+            permission.content_type.app_label + "." + permission.codename
+            for permission in GroupForm().fields["permissions"].queryset
+        }
+
+        expected = {
+            "registration_validation.add_activitytype",
+            "registration_validation.view_attentiontype",
+            "registration_validation.delete_subattention",
+            "registration_validation.add_service",
+            "planning_measurements.add_period",
+            "citizen_requests.derivar_solicitud",
+            "monitoring_traceability.add_activity",
+            "monitoring_traceability.change_activity",
+            "monitoring_traceability.delete_activity",
+            "monitoring_traceability.view_activity",
+            "monitoring_traceability.add_evidence",
+            "monitoring_traceability.change_evidence",
+            "monitoring_traceability.delete_evidence",
+            "monitoring_traceability.view_evidence",
+        }
+        self.assertTrue(expected.issubset(permissions))
+
+    def test_role_catalog_limits_read_only_monitoring_models(self):
+        catalog = GroupForm().fields["permissions"].queryset
+        permissions = {
+            model: {
+                permission.codename
+                for permission in catalog
+                if permission.content_type.model == model
+            }
+            for model in ("indicator", "commitment", "audit", "commitmentcomment")
+        }
+
+        self.assertEqual(permissions["indicator"], {"view_indicator"})
+        self.assertEqual(permissions["commitment"], {"view_commitment"})
+        self.assertEqual(permissions["audit"], {"view_audit"})
+        self.assertEqual(
+            permissions["commitmentcomment"],
+            {"add_commitmentcomment", "delete_commitmentcomment"},
+        )
+
+    def test_permission_labels_are_in_spanish_for_catalog_entries(self):
+        permissions = GroupForm().fields["permissions"].queryset
+        labels = {
+            permission.codename: permission_label(permission)
+            for permission in permissions
+            if permission.codename in {
+                "add_activitytype",
+                "view_attentiontype",
+                "derivar_solicitud",
+                "add_commitmentcomment",
+                "add_activity",
+                "view_evidence",
+            }
+        }
+
+        self.assertEqual(
+            labels["derivar_solicitud"],
+            "Solicitudes ciudadanas | Solicitudes ciudadanas | "
+            "Puede derivar solicitudes ciudadanas",
+        )
+        self.assertIn("crear tipos de actividad", labels["add_activitytype"].lower())
+        self.assertIn("consultar tipos de atención", labels["view_attentiontype"].lower())
+        self.assertIn("crear comentarios de compromisos", labels["add_commitmentcomment"].lower())
+        self.assertIn("crear actividades", labels["add_activity"].lower())
+        self.assertIn("consultar evidencias", labels["view_evidence"].lower())
+
+    def test_normal_authorized_role_manager_sees_and_can_submit_monitoring_permissions(self):
+        manager = get_user_model().objects.create_user(
+            username="functional_role_manager",
+            password="test-pass-123",
+        )
+        permissions = Permission.objects.filter(
+            content_type__app_label__in=[
+                "organization",
+                "monitoring_traceability",
+                "citizen_requests",
+            ],
+            codename__in=[
+                "add_organizationrole",
+                "change_organizationrole",
+                "view_organizationrole",
+                "add_activity",
+                "change_activity",
+                "delete_activity",
+                "view_activity",
+                "add_evidence",
+                "change_evidence",
+                "delete_evidence",
+                "view_evidence",
+                "derivar_solicitud",
+            ],
+        )
+        manager.user_permissions.add(*permissions)
+        profile = UserProfile.objects.create(
+            user=manager,
+            delegation=self.delegation,
+            employee_code="ROLE-MANAGER",
+        )
+        profile.authorized_delegations.add(self.delegation)
+
+        form = OrganizationRoleForm(actor=manager)
+        visible = {
+            f"{permission.content_type.app_label}.{permission.codename}"
+            for permission in form.fields["permissions"].queryset
+        }
+        self.assertIn("citizen_requests.derivar_solicitud", visible)
+        self.assertIn("monitoring_traceability.add_activity", visible)
+        self.assertIn("monitoring_traceability.view_evidence", visible)
+
+        self.client.force_login(manager)
+        response = self.client.get(
+            reverse("organization:role_list"),
+            {"modal": "create"},
+        )
+        self.assertEqual(response.status_code, 200)
+        real_form = response.context["form"]
+        real_visible = {
+            f"{permission.content_type.app_label}.{permission.codename}"
+            for permission in real_form.fields["permissions"].queryset
+        }
+        self.assertIn("citizen_requests.derivar_solicitud", real_visible)
+        self.assertIn("monitoring_traceability.add_activity", real_visible)
+        self.assertIn("monitoring_traceability.view_evidence", real_visible)
+
+        selected_permissions = Permission.objects.filter(
+            content_type__app_label__in=[
+                "citizen_requests",
+                "monitoring_traceability",
+            ],
+            codename__in=[
+                "derivar_solicitud",
+                "add_activity",
+                "view_evidence",
+            ],
+        )
+        response = self.client.post(
+            reverse("organization:role_list"),
+            {
+                "action": "create",
+                "name": "Rol con catálogo completo",
+                "description": "Rol de prueba",
+                "delegations": [self.delegation.pk],
+                "permissions": [permission.pk for permission in selected_permissions],
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        role = Group.objects.get(name="Rol con catálogo completo")
+        self.assertEqual(
+            set(role.permissions.values_list("pk", flat=True)),
+            set(selected_permissions.values_list("pk", flat=True)),
+        )
+
+        role = Group.objects.create(name="Rol operativo")
+        role.permissions.add(
+            Permission.objects.get(
+                content_type__app_label="monitoring_traceability",
+                codename="delete_evidence",
+            )
+        )
+        edit_form = OrganizationRoleForm(group=role, actor=manager)
+        self.assertIn(
+            "monitoring_traceability.delete_evidence",
+            {
+                f"{permission.content_type.app_label}.{permission.codename}"
+                for permission in edit_form.fields["permissions"].queryset
+            },
+        )
+
+    def test_role_catalog_is_not_limited_by_personal_permissions(self):
+        manager = get_user_model().objects.create_user(
+            username="role_manager_without_catalog_access",
+            password="test-pass-123",
+        )
+        form = OrganizationRoleForm(actor=manager)
+        self.assertTrue(form.fields["permissions"].queryset.exists())
+
+    def test_editing_other_role_can_replace_permissions(self):
+        manager = get_user_model().objects.create_user(
+            username="scoped_role_manager",
+            password="test-pass-123",
+        )
+        manager.user_permissions.add(
+            Permission.objects.get(
+                content_type__app_label="organization",
+                codename="change_organizationrole",
+            )
+        )
+        group = Group.objects.create(name="Rol protegido")
+        protected = Permission.objects.get(
+            content_type__app_label="monitoring_traceability",
+            codename="delete_evidence",
+        )
+        group.permissions.add(protected)
+
+        form = OrganizationRoleForm(
+            data={
+                "name": group.name,
+                "description": "Intento de cambio",
+                "delegations": [self.delegation.pk],
+                "permissions": [],
+            },
+            group=group,
+            actor=manager,
+        )
+        self.assertTrue(
+            form.fields["permissions"].queryset.filter(pk=protected.pk).exists()
+        )
+
+    def test_assigned_role_cannot_be_modified_by_owner(self):
+        manager = get_user_model().objects.create_user(
+            username="assigned_role_manager",
+            password="test-pass-123",
+        )
+        manager.user_permissions.add(
+            Permission.objects.get(
+                content_type__app_label="organization",
+                codename="change_organizationrole",
+            )
+        )
+        group = Group.objects.create(name="Rol propio")
+        manager.groups.add(group)
+        form = OrganizationRoleForm(
+            data={
+                "name": group.name,
+                "description": "Intento de cambio",
+                "delegations": [],
+                "permissions": [],
+            },
+            group=group,
+            actor=manager,
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("No puedes modificar un rol", str(form.errors))
 
     def test_view_modal_for_roles_and_users_without_mutation(self):
         group = Group.objects.create(name="Lector")

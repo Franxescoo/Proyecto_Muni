@@ -133,6 +133,12 @@ class CitizenRequest(models.Model):
         ordering = ["-created_at"]
         verbose_name = "Solicitud ciudadana"
         verbose_name_plural = "Solicitudes ciudadanas"
+        permissions = [
+            (
+                "derivar_solicitud",
+                "Puede derivar solicitudes ciudadanas",
+            ),
+        ]
 
     def __str__(self):
         return f"Solicitud {self.pk}: {self.subject}"

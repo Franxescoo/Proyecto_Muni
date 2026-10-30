@@ -246,6 +246,7 @@
     {% block estilos %}{% endblock %}
 </head>
 <body>
+{% block public_navigation %}
 <nav class="navbar navbar-expand-lg topbar mb-4 shadow-sm">
     <div class="container-fluid px-4">
         <a class="navbar-brand py-0" href="{% url 'home' %}">
@@ -282,6 +283,9 @@
                             data-bs-target="#solicitudesModal">
                         <i class="bi bi-inbox-fill me-1"></i>
                         Solicitudes
+                        <span id="solicitudes-pending-badge"
+                              class="badge rounded-pill text-bg-danger ms-1 d-none"
+                              aria-live="polite"></span>
                     </button>
                 </li>
             </ul>
@@ -317,6 +321,7 @@
         </div>
     </div>
 </nav>
+{% endblock %}
 
 <div class="container-fluid px-4">
     <div class="workspace-layout">
@@ -430,6 +435,9 @@
                         data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
             <div class="modal-body">
+                <div id="solicitudes-pending-notice"
+                     class="alert alert-warning d-none"
+                     role="status"></div>
                 <div class="row g-2 mb-3">
                     <div class="col-md-7">
                         <label class="form-label" for="solicitudes-search">Buscar</label>
@@ -477,6 +485,7 @@ document.addEventListener("DOMContentLoaded", function () {
     if (!modal) return;
 
     const inboxUrl = "{% url 'citizen_requests:request_inbox' %}";
+    const pendingCountUrl = "{% url 'citizen_requests:pending_request_count' %}";
     const detailBaseUrl = "{% url 'citizen_requests:request_detail' 0 %}";
     const createAttentionBaseUrl = "{% url 'registration:attention_entry_create' %}";
     const viewAttentionBaseUrl = "{% url 'registration:attention_entry_detail' 0 %}";
@@ -485,8 +494,39 @@ document.addEventListener("DOMContentLoaded", function () {
     const action = document.getElementById("solicitud-action");
     const search = document.getElementById("solicitudes-search");
     const status = document.getElementById("solicitudes-status");
+    const pendingBadge = document.getElementById("solicitudes-pending-badge");
+    const pendingNotice = document.getElementById("solicitudes-pending-notice");
+    const pendingPollInterval = 30000;
     let loaded = false;
     let activeDetailId = null;
+
+    function updatePendingIndicator(count) {
+        const pendingCount = Number.isFinite(Number(count)) ? Number(count) : 0;
+        if (pendingCount > 0) {
+            pendingBadge.textContent = pendingCount;
+            pendingBadge.classList.remove("d-none");
+            pendingNotice.textContent =
+                "Hay " + pendingCount + " solicitudes pendientes de derivación";
+            pendingNotice.classList.remove("d-none");
+        } else {
+            pendingBadge.textContent = "";
+            pendingBadge.classList.add("d-none");
+            pendingNotice.textContent = "";
+            pendingNotice.classList.add("d-none");
+        }
+    }
+
+    function refreshPendingCount() {
+        fetch(pendingCountUrl, {
+            headers: {"X-Requested-With": "XMLHttpRequest"},
+        })
+            .then(response => {
+                if (!response.ok) throw new Error("No se pudo actualizar el contador.");
+                return response.json();
+            })
+            .then(data => updatePendingIndicator(data.pending_count))
+            .catch(() => {});
+    }
 
     function showFeedback(message, kind) {
         feedback.textContent = message;
@@ -537,12 +577,12 @@ document.addEventListener("DOMContentLoaded", function () {
                 ? `<a class="btn btn-sm btn-outline-success"
                     href="${createAttentionBaseUrl}?citizen_request=${encodeURIComponent(item.id)}">Crear atención</a>`
                 : "";
-            const actionLabel = section === "pending" && canAssign
+            const actionLabel = section === "pending" && canAssign && item.can_derive
                 ? `<button type="button" class="btn btn-sm btn-outline-success"
                     data-assign-id="${item.id}">Derivar</button>`
                 : section === "delegated"
-                ? `${item.has_attention ? "" : `<button type="button" class="btn btn-sm btn-outline-warning"
-                    data-change-id="${item.id}">Cambiar derivación</button>`}${attentionAction}`
+                ? `${item.can_change_delegation ? `<button type="button" class="btn btn-sm btn-outline-warning"
+                    data-change-id="${item.id}">Cambiar derivación</button>` : ""}${attentionAction}`
                 : "";
             return `
             <tr>
@@ -586,12 +626,13 @@ document.addEventListener("DOMContentLoaded", function () {
             })
             .then(data => {
                 lastInboxData = data;
+                updatePendingIndicator(data.pending_count ?? data.pending.total);
                 renderSection(
                     "solicitudes-pending",
                     "pending",
                     data.pending,
                     params,
-                    data.temporary_pending_visibility
+                    data.can_derive
                 );
                 renderSection(
                     "solicitudes-delegated",
@@ -767,6 +808,8 @@ document.addEventListener("DOMContentLoaded", function () {
         loaded = false;
     });
     document.getElementById("solicitudes-filter").addEventListener("click", () => loadRequests());
+    refreshPendingCount();
+    window.setInterval(refreshPendingCount, pendingPollInterval);
 });
 </script>
 <script>

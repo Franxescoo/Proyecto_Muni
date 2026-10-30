@@ -7,6 +7,16 @@ app_name = "citizen_requests"
 
 urlpatterns = [
     path(
+        "portal/",
+        views.public_portal,
+        name="public_portal",
+    ),
+    path(
+        "solicitudes/confirmacion/<uuid:tracking_code>/",
+        views.public_request_confirmation,
+        name="public_request_confirmation",
+    ),
+    path(
         "solicitudes/bandeja/<int:request_id>/derivar/",
         views.assign_request,
         name="assign_request",
@@ -20,6 +30,11 @@ urlpatterns = [
         "solicitudes/bandeja/",
         views.request_inbox,
         name="request_inbox",
+    ),
+    path(
+        "solicitudes/bandeja/pendientes/conteo/",
+        views.pending_request_count,
+        name="pending_request_count",
     ),
     path(
         "solicitudes/bandeja/<int:request_id>/",

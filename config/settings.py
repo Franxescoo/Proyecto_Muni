@@ -195,6 +195,7 @@ PASSWORD_RESET_SITE_NAME = os.getenv(
 PASSWORD_RESET_USE_HTTPS = (
     os.getenv("PASSWORD_RESET_USE_HTTPS", "False").lower() == "true"
 )
+PUBLIC_PORTAL_URL = os.getenv("PUBLIC_PORTAL_URL", "").strip()
 if os.getenv("DJANGO_BEHIND_PROXY", "False").lower() == "true":
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 

@@ -1,4 +1,5 @@
 from django import forms
+from django.core.validators import MaxLengthValidator
 from accounts.permissions import allowed_delegation_ids
 from django.core.validators import FileExtensionValidator
 from django.db.models import Q
@@ -37,6 +38,22 @@ class BootstrapMixin:
             else:
                 css_class = "form-control"
             field.widget.attrs["class"] = css_class
+
+
+def _set_text_limit(field, limit, label):
+    """Aplica el límite tanto al formulario como al control HTML."""
+    field.widget.attrs["maxlength"] = limit
+    field.validators = [
+        validator
+        for validator in field.validators
+        if not isinstance(validator, MaxLengthValidator)
+    ]
+    field.validators.append(
+        MaxLengthValidator(
+            limit,
+            message=f"{label} no puede superar los {limit} caracteres.",
+        )
+    )
 
 # ---------------------------------------------------------
 # Campos para múltiples archivos
@@ -626,6 +643,13 @@ class ActivityTypeForm(BootstrapMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["description"].required = False
         self._apply_bootstrap()
+        _set_text_limit(self.fields["code"], 50, "El código")
+        _set_text_limit(self.fields["name"], 150, "El nombre")
+        _set_text_limit(
+            self.fields["description"],
+            300,
+            "La descripción",
+        )
 
     def clean_code(self):
         code = self.cleaned_data["code"].strip()
@@ -720,6 +744,13 @@ class ServiceForm(BootstrapMixin, forms.ModelForm):
         self.fields["description"].required = False
 
         self._apply_bootstrap()
+        _set_text_limit(self.fields["code"], 50, "El código")
+        _set_text_limit(self.fields["name"], 150, "El nombre")
+        _set_text_limit(
+            self.fields["description"],
+            300,
+            "La descripción",
+        )
 
     def clean_code(self):
         code = self.cleaned_data["code"].strip()

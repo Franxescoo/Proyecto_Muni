@@ -88,7 +88,7 @@ class PruebasRolesYCatalogoSinSuperusuario(TestCase):
         self.assertFalse(self.actor.is_superuser)
         self.assertEqual(list(created.permissions.values_list("pk", flat=True)), [permission.pk])
 
-    def test_admin_normal_no_puede_otorgar_un_permiso_ajeno(self):
+    def test_admin_normal_puede_otorgar_cualquier_permiso_del_catalogo(self):
         self.grant("view_organizationrole", "add_organizationrole")
         self.client.force_login(self.actor)
         permission = Permission.objects.get(content_type__app_label="organization", codename="delete_employee")
@@ -96,9 +96,9 @@ class PruebasRolesYCatalogoSinSuperusuario(TestCase):
             "action": "create", "name": "Intento de escalamiento", "description": "Prueba",
             "delegations": [self.delegation.pk], "permissions": [permission.pk],
         })
-        self.assertEqual(r.status_code, 200)
-        self.assertIn("permissions", r.context["form"].errors)
-        self.assertFalse(Group.objects.filter(name="Intento de escalamiento").exists())
+        self.assertEqual(r.status_code, 302)
+        created = Group.objects.get(name="Intento de escalamiento")
+        self.assertTrue(created.permissions.filter(pk=permission.pk).exists())
 
     def test_role_ajeno_no_visible_ni_editable(self):
         foreign = Group.objects.create(name="Rol de otra delegación")

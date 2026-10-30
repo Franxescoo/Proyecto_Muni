@@ -1,10 +1,13 @@
 from datetime import date
+import smtplib
+from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.core import mail
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
 from django.db import IntegrityError
+from django.db import transaction
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
@@ -18,6 +21,7 @@ from organization.models import (
 from registration_validation.models import AttentionEntry, AttentionType, SubAttention
 
 from .models import CitizenRequest, RequestEvent
+from .views import _public_portal_url
 
 
 class CitizenRequestModelTests(TestCase):
@@ -246,6 +250,187 @@ class PublicCitizenRequestViewTests(TestCase):
         self.assertFalse(request._state.adding)
         self.assertEqual(AttentionEntry.objects.count(), 0)
 
+    def test_anonymous_can_access_public_portal(self):
+        response = self.client.get(
+            reverse("citizen_requests:public_portal"),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Portal Ciudadano")
+        self.assertContains(response, "Ingresar solicitud")
+        self.assertContains(response, "Consultar solicitud")
+
+    def test_root_shows_public_portal_to_anonymous_visitors(self):
+        response = self.client.get(reverse("home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Portal Ciudadano")
+        self.assertContains(response, "Iniciar sesión")
+        self.assertContains(response, reverse("login"))
+        self.assertNotContains(response, 'data-bs-target="#chatInstitucionalModal"')
+        self.assertNotContains(response, 'data-bs-target="#solicitudesModal"')
+
+    def test_public_portal_header_links_to_existing_login(self):
+        response = self.client.get(
+            reverse("citizen_requests:public_portal"),
+        )
+
+        self.assertContains(response, 'href="/accounts/login/"')
+        self.assertContains(response, "Logo Municipalidad de La Serena")
+
+    def test_public_tracking_query_returns_only_safe_request_data(self):
+        citizen_request = CitizenRequest.objects.create(
+            requester_name="Nombre privado",
+            requester_email="privado@example.com",
+            requester_phone="+56 9 9999 9999",
+            address="Dirección privada",
+            subject="Asunto visible",
+            description="Descripción privada",
+            origin="CITIZEN",
+            delegation=None,
+        )
+
+        response = self.client.post(
+            reverse("citizen_requests:public_portal"),
+            {
+                "tracking_form": "1",
+                "tracking_code": str(citizen_request.tracking_code),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Asunto visible")
+        self.assertContains(response, "Solicitud recibida")
+        self.assertNotContains(response, "Nombre privado")
+        self.assertNotContains(response, "privado@example.com")
+        self.assertNotContains(response, "+56 9 9999 9999")
+        self.assertNotContains(response, "Descripción privada")
+        self.assertNotContains(response, f">{citizen_request.pk}<")
+        self.assertEqual(CitizenRequest.objects.count(), 1)
+
+    def test_public_tracking_query_rejects_invalid_and_unknown_codes(self):
+        invalid_response = self.client.post(
+            reverse("citizen_requests:public_portal"),
+            {"tracking_form": "1", "tracking_code": "no-es-uuid"},
+        )
+        self.assertContains(
+            invalid_response,
+            "Revisa el código de seguimiento ingresado.",
+        )
+
+        unknown_response = self.client.post(
+            reverse("citizen_requests:public_portal"),
+            {
+                "tracking_form": "1",
+                "tracking_code": "00000000-0000-0000-0000-000000000001",
+            },
+        )
+        self.assertContains(
+            unknown_response,
+            "No encontramos una solicitud con ese código",
+        )
+
+    def test_public_tracking_query_shows_derived_and_management_stages(self):
+        citizen_request = CitizenRequest.objects.create(
+            requester_name="Vecino",
+            requester_email="vecino@example.com",
+            address="Calle 1",
+            subject="Derivada",
+            description="Descripción",
+            origin="CITIZEN",
+            delegation=self.delegation,
+        )
+        response = self.client.post(
+            reverse("citizen_requests:public_portal"),
+            {
+                "tracking_form": "1",
+                "tracking_code": str(citizen_request.tracking_code),
+            },
+        )
+        self.assertContains(response, "Derivada para revisión")
+
+        attention_type = AttentionType.objects.create(
+            code="PUBLIC-AT",
+            name="Atención pública",
+        )
+        sub_attention = SubAttention.objects.create(
+            code="PUBLIC-SUB",
+            name="Seguimiento",
+            attention_type=attention_type,
+        )
+        attention = AttentionEntry.objects.create(
+            requester="Vecino",
+            attention_type=attention_type,
+            sub_attention=sub_attention,
+            description="Atención interna",
+            delegation=self.delegation,
+        )
+        citizen_request.attention_entry = attention
+        citizen_request.save(update_fields=("attention_entry", "updated_at"))
+
+        response = self.client.post(
+            reverse("citizen_requests:public_portal"),
+            {
+                "tracking_form": "1",
+                "tracking_code": str(citizen_request.tracking_code),
+            },
+        )
+        self.assertContains(response, "En gestión")
+        self.assertNotContains(response, "Cerrada")
+
+    def test_public_tracking_query_does_not_claim_closed_without_closed_request(self):
+        citizen_request = CitizenRequest.objects.create(
+            requester_name="Vecino",
+            requester_email="vecino@example.com",
+            address="Calle 1",
+            subject="En gestión",
+            description="Descripción",
+            origin="CITIZEN",
+            delegation=self.delegation,
+        )
+
+        response = self.client.post(
+            reverse("citizen_requests:public_portal"),
+            {
+                "tracking_form": "1",
+                "tracking_code": str(citizen_request.tracking_code),
+            },
+        )
+
+        self.assertContains(response, "Derivada para revisión")
+        self.assertNotContains(response, ">Cerrada<")
+
+    def test_html_registration_redirects_to_confirmation_without_duplicates(self):
+        response = self.client.post(
+            self.url,
+            {**self.data, "portal_form": "1"},
+        )
+
+        request = CitizenRequest.objects.get()
+        confirmation_url = reverse(
+            "citizen_requests:public_request_confirmation",
+            kwargs={"tracking_code": request.tracking_code},
+        )
+        self.assertRedirects(response, confirmation_url)
+        self.assertContains(
+            self.client.get(confirmation_url),
+            str(request.tracking_code),
+        )
+        self.assertEqual(CitizenRequest.objects.count(), 1)
+        self.assertEqual(len(mail.outbox), 1)
+
+        self.client.get(confirmation_url)
+        self.assertEqual(CitizenRequest.objects.count(), 1)
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_anonymous_cannot_access_request_inbox(self):
+        response = self.client.get(
+            reverse("citizen_requests:request_inbox"),
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/accounts/login/", response["Location"])
+
     def test_only_post_is_allowed(self):
         response = self.client.get(self.url)
 
@@ -312,6 +497,10 @@ class PublicCitizenRequestViewTests(TestCase):
         self.assertIsNone(request.assigned_to_id)
         self.assertIsNone(request.attention_entry_id)
 
+    @override_settings(
+        DEBUG=True,
+        PUBLIC_PORTAL_URL="http://127.0.0.1:8000/portal/",
+    )
     def test_confirmation_email_contains_tracking_code(self):
         response = self.client.post(self.url, self.data)
 
@@ -322,7 +511,52 @@ class PublicCitizenRequestViewTests(TestCase):
             ["vecino@example.com"],
         )
         self.assertIn(str(request.tracking_code), mail.outbox[0].body)
+        self.assertIn("http://127.0.0.1:8000/portal/", mail.outbox[0].body)
         self.assertTrue(response.json()["email_sent"])
+
+    @override_settings(
+        PUBLIC_PORTAL_URL="https://sgr.municipio.cl/portal/",
+    )
+    def test_initial_email_uses_configured_public_portal_url(self):
+        self.client.post(self.url, self.data)
+
+        self.assertIn(
+            "https://sgr.municipio.cl/portal/",
+            mail.outbox[0].body,
+        )
+
+    @override_settings(
+        DEBUG=False,
+        PUBLIC_PORTAL_URL="https://sgr.municipio.cl/portal/",
+    )
+    def test_public_portal_url_accepts_configured_production_url(self):
+        self.assertEqual(
+            _public_portal_url(),
+            "https://sgr.municipio.cl/portal/",
+        )
+
+    @override_settings(
+        DEBUG=False,
+        PUBLIC_PORTAL_URL="http://127.0.0.1:8000/portal/",
+    )
+    def test_public_portal_url_rejects_internal_production_url(self):
+        self.assertIsNone(_public_portal_url())
+
+    @override_settings(DEBUG=False, PUBLIC_PORTAL_URL="")
+    def test_missing_public_portal_url_is_safe_in_production(self):
+        self.assertIsNone(_public_portal_url())
+        self.client.post(self.url, self.data)
+
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertNotIn("localhost", mail.outbox[0].body)
+        self.assertNotIn("127.0.0.1", mail.outbox[0].body)
+
+    @override_settings(
+        DEBUG=False,
+        PUBLIC_PORTAL_URL="ftp://sgr.municipio.cl/portal/",
+    )
+    def test_malformed_public_portal_url_is_rejected(self):
+        self.assertIsNone(_public_portal_url())
 
     def test_invalid_form_does_not_send_email(self):
         response = self.client.post(
@@ -424,7 +658,7 @@ class RequestInboxTests(TestCase):
             group=cls.group,
             delegation=cls.north,
         )
-        cls.role.application_delegations.add(cls.north)
+        cls.role.application_delegations.add(cls.north, cls.south)
         cls.group.permissions.set(
             Permission.objects.filter(
                 content_type__app_label="registration_validation",
@@ -432,6 +666,12 @@ class RequestInboxTests(TestCase):
                     "add_attentionentry",
                     "view_attentionentry",
                 ),
+            )
+        )
+        cls.group.permissions.add(
+            Permission.objects.get(
+                content_type__app_label="citizen_requests",
+                codename="derivar_solicitud",
             )
         )
         cls.user.groups.add(cls.group)
@@ -460,6 +700,121 @@ class RequestInboxTests(TestCase):
             f"{reverse('registration:attention_entry_create')}"
             f"?citizen_request={request.pk}"
         )
+
+    def link_attention(self, citizen_request):
+        attention = AttentionEntry.objects.create(
+            requester=citizen_request.requester_name,
+            requester_email=citizen_request.requester_email,
+            requester_phone=citizen_request.requester_phone,
+            address=citizen_request.address,
+            subject=citizen_request.subject,
+            description=citizen_request.description,
+            delegation=citizen_request.delegation,
+            attention_type=self.attention_type,
+            sub_attention=self.sub_attention,
+        )
+        citizen_request.attention_entry = attention
+        citizen_request.save(update_fields=("attention_entry", "updated_at"))
+        return attention
+
+    @patch("citizen_requests.signals.send_attention_notification")
+    def test_first_attention_link_schedules_notification_after_commit(
+        self,
+        notification_mock,
+    ):
+        citizen_request = self.make_request("aviso-atencion", self.north)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            attention = self.link_attention(citizen_request)
+
+        notification_mock.assert_called_once_with(
+            citizen_request.pk,
+            citizen_request.requester_name,
+            citizen_request.requester_email,
+            str(citizen_request.tracking_code),
+        )
+        self.assertEqual(citizen_request.attention_entry_id, attention.pk)
+
+    @patch("citizen_requests.signals.send_attention_notification")
+    def test_repeated_attention_save_does_not_notify_again(
+        self,
+        notification_mock,
+    ):
+        citizen_request = self.make_request("atencion-repetida", self.north)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.link_attention(citizen_request)
+        notification_mock.reset_mock()
+
+        with self.captureOnCommitCallbacks(execute=True):
+            citizen_request.save(
+                update_fields=("attention_entry", "updated_at"),
+            )
+
+        notification_mock.assert_not_called()
+
+    @patch("citizen_requests.signals.send_attention_notification")
+    def test_request_without_attention_does_not_notify(
+        self,
+        notification_mock,
+    ):
+        citizen_request = self.make_request("sin-atencion", self.north)
+        citizen_request.save(update_fields=("updated_at",))
+        notification_mock.assert_not_called()
+
+    @patch("citizen_requests.signals.send_attention_notification")
+    def test_rolled_back_attention_link_does_not_notify(
+        self,
+        notification_mock,
+    ):
+        citizen_request = self.make_request("rollback-atencion", self.north)
+
+        with self.assertRaises(RuntimeError):
+            with transaction.atomic():
+                self.link_attention(citizen_request)
+                raise RuntimeError("rollback de prueba")
+
+        notification_mock.assert_not_called()
+        citizen_request.refresh_from_db()
+        self.assertIsNone(citizen_request.attention_entry_id)
+
+    @override_settings(PUBLIC_PORTAL_URL="https://sgr.municipio.cl/portal/")
+    @patch("citizen_requests.notifications.send_mail")
+    def test_attention_notification_has_recipient_code_and_public_url(
+        self,
+        send_mail_mock,
+    ):
+        citizen_request = self.make_request("correo-atencion", self.north)
+        with self.captureOnCommitCallbacks(execute=True):
+            self.link_attention(citizen_request)
+
+        send_mail_mock.assert_called_once()
+        kwargs = send_mail_mock.call_args.kwargs
+        self.assertEqual(
+            kwargs["recipient_list"],
+            [citizen_request.requester_email],
+        )
+        self.assertIn(str(citizen_request.tracking_code), kwargs["message"])
+        self.assertIn(
+            "https://sgr.municipio.cl/portal/",
+            kwargs["message"],
+        )
+        self.assertIn("Estado actual: En gestión.", kwargs["message"])
+
+    @patch("citizen_requests.notifications.send_mail")
+    def test_attention_smtp_failure_preserves_link(
+        self,
+        send_mail_mock,
+    ):
+        send_mail_mock.side_effect = smtplib.SMTPException("SMTP caído")
+        citizen_request = self.make_request("fallo-atencion", self.north)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.link_attention(citizen_request)
+
+        citizen_request.refresh_from_db()
+        self.assertIsNotNone(citizen_request.attention_entry_id)
+        self.assertEqual(citizen_request.events.count(), 0)
 
     def test_create_attention_from_derived_request_copies_citizen_data(self):
         citizen_request = self.make_request("crear", self.north)
@@ -714,6 +1069,50 @@ class RequestInboxTests(TestCase):
         self.assertIn(pending.pk, pending_ids)
         self.assertIn(north.pk, delegated_ids)
         self.assertNotIn(south.pk, delegated_ids)
+        self.assertEqual(payload["pending_count"], 1)
+
+    def test_pending_count_endpoint_is_restricted_and_counts_only_unassigned(self):
+        pending = self.make_request("conteo-pendiente")
+        self.make_request("conteo-derivada", self.north)
+
+        response = self.client.get(
+            reverse("citizen_requests:pending_request_count"),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"pending_count": 1})
+        self.assertEqual(
+            CitizenRequest.objects.get(pk=pending.pk).delegation_id,
+            None,
+        )
+
+        self.client.logout()
+        response = self.client.get(
+            reverse("citizen_requests:pending_request_count"),
+        )
+        self.assertEqual(response.status_code, 302)
+
+    def test_pending_count_updates_after_derivation(self):
+        pending = self.make_request("conteo-derivacion")
+        count_url = reverse("citizen_requests:pending_request_count")
+        assign_url = reverse(
+            "citizen_requests:assign_request",
+            args=[pending.pk],
+        )
+
+        self.assertEqual(
+            self.client.get(count_url).json()["pending_count"],
+            1,
+        )
+        response = self.client.post(
+            assign_url,
+            {"delegation": self.north.pk, "reason": "Derivada."},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            self.client.get(count_url).json()["pending_count"],
+            0,
+        )
 
     def test_changing_active_delegation_changes_results(self):
         north = self.make_request("norte-cambio", self.north)
@@ -845,7 +1244,10 @@ class RequestInboxTests(TestCase):
                 "citizen_requests:assign_request",
                 args=[pending.pk],
             ),
-            {"delegation": self.north.pk, "reason": "Corresponde a Norte."},
+            {
+                "delegation": self.north.pk,
+                "reason": "Corresponde a Norte.",
+            },
         )
 
         self.assertEqual(response.status_code, 200)
@@ -857,6 +1259,119 @@ class RequestInboxTests(TestCase):
         self.assertFalse(inbox["pending"]["items"])
         self.assertEqual(inbox["delegated"]["items"][0]["id"], pending.pk)
         self.assertIsNone(pending.attention_entry_id)
+
+    @override_settings(
+        PUBLIC_PORTAL_URL="http://127.0.0.1:8000/portal/",
+    )
+    @patch("citizen_requests.views.send_mail")
+    def test_first_derivation_sends_tracking_notification_after_commit(
+        self,
+        send_mail_mock,
+    ):
+        pending = self.make_request("aviso-derivacion")
+        endpoint = reverse(
+            "citizen_requests:assign_request",
+            args=[pending.pk],
+        )
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                endpoint,
+                {
+                    "delegation": self.north.pk,
+                    "reason": "Corresponde a Norte.",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        send_mail_mock.assert_called_once()
+        kwargs = send_mail_mock.call_args.kwargs
+        self.assertIn("Actualización de su solicitud", kwargs["subject"])
+        self.assertIn(str(pending.tracking_code), kwargs["message"])
+        self.assertIn(
+            "http://127.0.0.1:8000/portal/",
+            kwargs["message"],
+        )
+        self.assertEqual(kwargs["recipient_list"], [pending.requester_email])
+        self.assertEqual(pending.events.count(), 1)
+
+    @override_settings(
+        PUBLIC_PORTAL_URL="https://sgr.municipio.cl/portal/",
+    )
+    @patch("citizen_requests.views.send_mail")
+    def test_derivation_email_uses_configured_public_portal_url(
+        self,
+        send_mail_mock,
+    ):
+        pending = self.make_request("aviso-url-publica")
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                reverse(
+                    "citizen_requests:assign_request",
+                    args=[pending.pk],
+                ),
+                {
+                    "delegation": self.north.pk,
+                    "reason": "Derivación válida.",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(
+            "https://sgr.municipio.cl/portal/",
+            send_mail_mock.call_args.kwargs["message"],
+        )
+
+    @patch("citizen_requests.views.send_mail")
+    def test_derivation_email_failure_keeps_derivation_and_event(
+        self,
+        send_mail_mock,
+    ):
+        send_mail_mock.side_effect = smtplib.SMTPException("SMTP caído")
+        pending = self.make_request("aviso-fallido")
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                reverse(
+                    "citizen_requests:assign_request",
+                    args=[pending.pk],
+                ),
+                {
+                    "delegation": self.north.pk,
+                    "reason": "Derivación válida.",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        pending.refresh_from_db()
+        self.assertEqual(pending.delegation_id, self.north.pk)
+        self.assertEqual(pending.events.count(), 1)
+        send_mail_mock.assert_called_once()
+
+    @patch("citizen_requests.views.send_mail")
+    def test_repeated_derivation_does_not_send_duplicate_notification(
+        self,
+        send_mail_mock,
+    ):
+        pending = self.make_request("aviso-duplicado")
+        endpoint = reverse(
+            "citizen_requests:assign_request",
+            args=[pending.pk],
+        )
+        payload = {
+            "delegation": self.north.pk,
+            "reason": "Primera derivación.",
+        }
+
+        with self.captureOnCommitCallbacks(execute=True):
+            first_response = self.client.post(endpoint, payload)
+        second_response = self.client.post(endpoint, payload)
+
+        self.assertEqual(first_response.status_code, 200)
+        self.assertEqual(second_response.status_code, 404)
+        send_mail_mock.assert_called_once()
+        self.assertEqual(pending.events.count(), 1)
 
     def test_assign_rejects_inactive_delegation(self):
         inactive = Delegation.objects.create(
@@ -990,7 +1505,7 @@ class RequestInboxTests(TestCase):
         self.assertEqual(response.status_code, 403)
 
     @override_settings(DEBUG=False)
-    def test_temporary_operations_are_blocked_when_debug_is_false(self):
+    def test_derivation_works_when_debug_is_false(self):
         pending = self.make_request("produccion")
 
         response = self.client.post(
@@ -998,13 +1513,14 @@ class RequestInboxTests(TestCase):
             {"delegation": self.north.pk, "reason": "Motivo."},
         )
 
-        self.assertEqual(response.status_code, 403)
-        self.assertIsNone(
-            CitizenRequest.objects.get(pk=pending.pk).delegation_id
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            CitizenRequest.objects.get(pk=pending.pk).delegation_id,
+            self.north.pk,
         )
 
     @override_settings(DEBUG=False)
-    def test_pending_requests_are_hidden_when_debug_is_false(self):
+    def test_pending_requests_are_visible_when_authorized_and_debug_is_false(self):
         pending = self.make_request("pendiente-produccion")
 
         response = self.client.get(self.url)
@@ -1013,4 +1529,22 @@ class RequestInboxTests(TestCase):
         pending_ids = {
             item["id"] for item in response.json()["pending"]["items"]
         }
-        self.assertNotIn(pending.pk, pending_ids)
+        self.assertIn(pending.pk, pending_ids)
+
+    def test_user_without_derivation_permission_cannot_see_pending_requests(self):
+        self.user.groups.remove(self.group)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["pending"]["items"], [])
+        self.assertEqual(response.json()["pending_count"], 0)
+
+    def test_user_without_derivation_permission_cannot_derive(self):
+        self.user.groups.remove(self.group)
+        pending = self.make_request("sin-permiso")
+        response = self.client.post(
+            reverse("citizen_requests:assign_request", args=[pending.pk]),
+            {"delegation": self.north.pk, "reason": "Motivo"},
+        )
+        self.assertEqual(response.status_code, 403)
+        pending.refresh_from_db()
+        self.assertIsNone(pending.delegation_id)

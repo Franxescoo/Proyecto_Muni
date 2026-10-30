@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block titulo %}Solicitud registrada · Portal Ciudadano{% endblock %}
+
+{% block public_navigation %}
+<nav class="navbar navbar-expand topbar mb-4 shadow-sm">
+    <div class="container-fluid px-4">
+        <a class="navbar-brand py-0" href="{% url 'citizen_requests:public_portal' %}">
+            <img src="{% static 'img/horizontal-blanco.png' %}"
+                 alt="Logo Municipalidad de La Serena"
+                 height="55">
+        </a>
+        <a class="btn btn-outline-light ms-auto" href="{% url 'login' %}">
+            <i class="bi bi-box-arrow-in-right me-1"></i>Iniciar sesión
+        </a>
+    </div>
+</nav>
+{% endblock %}
+
+{% block contenido %}
+<div class="container py-2 py-md-5">
+    <div class="row justify-content-center">
+        <div class="col-12 col-lg-8">
+            <div class="card citizen-card shadow-sm text-center">
+                <div class="card-body p-4 p-md-5">
+                    <div class="text-success display-5 mb-3">
+                        <i class="bi bi-check-circle-fill"></i>
+                    </div>
+                    <h1 class="h3 mb-3">Solicitud registrada correctamente</h1>
+                    <p class="text-secondary">
+                        Conserva este código para consultar el estado de tu solicitud.
+                    </p>
+                    <div class="input-group input-group-lg my-4">
+                        <input id="tracking-code" class="form-control text-center fw-semibold"
+                               value="{{ confirmation.tracking_code }}" readonly aria-label="Código de seguimiento">
+                        <button class="btn btn-outline-secondary" type="button" id="copy-code">
+                            <i class="bi bi-clipboard me-1"></i>Copiar
+                        </button>
+                    </div>
+                    {% if confirmation.email_sent %}
+                    <div class="alert alert-success text-start" role="status">
+                        Se enviará una confirmación al correo proporcionado.
+                    </div>
+                    {% else %}
+                    <div class="alert alert-warning text-start" role="status">
+                        La solicitud fue conservada, pero no se pudo enviar el correo de confirmación.
+                        Conserva el código mostrado para futuras consultas.
+                    </div>
+                    {% endif %}
+                    <a class="btn btn-primary mt-2" href="{% url 'citizen_requests:public_portal' %}">
+                        Registrar otra solicitud
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+document.addEventListener("DOMContentLoaded", function () {
+    const button = document.getElementById("copy-code");
+    const input = document.getElementById("tracking-code");
+    if (!button || !input) return;
+    button.addEventListener("click", async function () {
+        try {
+            await navigator.clipboard.writeText(input.value);
+            button.innerHTML = '<i class="bi bi-check2 me-1"></i>Copiado';
+        } catch (error) {
+            input.select();
+        }
+    });
+});
+</script>
+</div>
+{% endblock %}

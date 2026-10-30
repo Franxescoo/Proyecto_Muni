@@ -86,14 +86,13 @@ def scoped_goals(user, permission="planning_measurements.view_goal"):
 
 
 def may_archive_period(user, period):
-    """Permiso normal de eliminación y permiso directo adicional si está cerrado."""
-    if not (user.is_superuser or user.has_perm("planning_measurements.delete_period")):
+    """Comprueba el permiso normal y el permiso efectivo para períodos cerrados."""
+    if not user.has_perm("planning_measurements.delete_period"):
         return False
-    if period.status == Period.Status.CLOSED and not user.is_superuser:
-        return user.user_permissions.filter(
-            content_type__app_label="planning_measurements", codename="delete_closed_period"
-        ).exists()
-    return True
+    return (
+        period.status != Period.Status.CLOSED
+        or user.has_perm("planning_measurements.delete_closed_period")
+    )
 
 
 def run_bulk_delete(request, queryset):
@@ -121,10 +120,7 @@ def run_bulk_delete(request, queryset):
     
     # o usuarios con el permiso asignado mediante grupos.
     if queryset.model is Period:
-        if not (
-            request.user.is_superuser
-            or request.user.has_perm("planning_measurements.delete_period")
-        ):
+        if not request.user.has_perm("planning_measurements.delete_period"):
             raise PermissionDenied(
                 "No tienes permiso para eliminar períodos."
             )
@@ -642,10 +638,8 @@ def period_list(request):
         "closed_periods": base_periods.filter(
             Q(status="Closed") | Q(status="Cerrado")
         ).count(),
-        "can_archive_closed_period": (
-            request.user.is_superuser or request.user.user_permissions.filter(
-                content_type__app_label="planning_measurements", codename="delete_closed_period"
-            ).exists()
+        "can_archive_closed_period": request.user.has_perm(
+            "planning_measurements.delete_closed_period"
         ),
     }
 

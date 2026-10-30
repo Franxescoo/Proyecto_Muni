@@ -1,6 +1,7 @@
 import logging
 import re
 import smtplib
+import time
 from urllib.parse import urlencode
 
 from django.conf import settings
@@ -19,13 +20,156 @@ from accounts.permissions import allowed_delegation_ids
 from organization.models import Delegation
 from registration_validation.models import AttentionEntry
 
-from .forms import CitizenRequestForm
+from .forms import CitizenRequestForm, PublicTrackingCodeForm
 from .models import CitizenRequest, RequestEvent
+from .notifications import (
+    LOCAL_PUBLIC_PORTAL_URL,
+    portal_link_text,
+    public_portal_url,
+)
 
 
 logger = logging.getLogger(__name__)
 
 REQUESTS_PAGE_SIZE = 10
+PUBLIC_CONFIRMATION_SESSION_KEY = "citizen_request_confirmation"
+PUBLIC_TRACKING_ATTEMPTS_SESSION_KEY = "citizen_tracking_attempts"
+PUBLIC_TRACKING_ATTEMPT_LIMIT = 10
+PUBLIC_TRACKING_WINDOW_SECONDS = 60
+_public_portal_url = public_portal_url
+_portal_link_text = portal_link_text
+
+
+def _send_derivation_notification(
+    request_id,
+    requester_name,
+    requester_email,
+    tracking_code,
+    portal_url,
+):
+    """Envía el aviso sin propagar un fallo del proveedor SMTP."""
+    try:
+        send_mail(
+            subject=(
+                "Actualización de su solicitud — "
+                "SGR Municipalidad de La Serena"
+            ),
+            message=(
+                f"Estimado/a {requester_name}:\n\n"
+                "Le informamos que su solicitud ha sido derivada al área "
+                "correspondiente para su revisión.\n\n"
+                "Estado actual: Derivada para revisión.\n"
+                f"Código de seguimiento: {tracking_code}\n\n"
+                f"Puede consultar el avance de su solicitud en el "
+                f"{portal_url}\n\n"
+                "Conserve su código de seguimiento para futuras consultas."
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[requester_email],
+            fail_silently=False,
+        )
+    except (OSError, smtplib.SMTPException):
+        logger.exception(
+            "No se pudo enviar el aviso de derivación para "
+            "CitizenRequest %s.",
+            request_id,
+        )
+
+
+def public_portal(request):
+    tracking_form = PublicTrackingCodeForm()
+    tracking_result = None
+    tracking_error = None
+    if request.method == "POST" and request.POST.get("tracking_form") == "1":
+        tracking_form = PublicTrackingCodeForm(request.POST)
+        if not _tracking_attempt_allowed(request):
+            tracking_error = (
+                "Se alcanzó el límite temporal de consultas. "
+                "Intenta nuevamente en un momento."
+            )
+        elif tracking_form.is_valid():
+            citizen_request = (
+                CitizenRequest.objects.select_related("attention_entry")
+                .filter(
+                    tracking_code=tracking_form.cleaned_data["tracking_code"],
+                    origin="CITIZEN",
+                )
+                .first()
+            )
+            if citizen_request is None:
+                tracking_error = (
+                    "No encontramos una solicitud con ese código de seguimiento."
+                )
+            else:
+                tracking_result = _public_tracking_data(citizen_request)
+        else:
+            tracking_error = "Revisa el código de seguimiento ingresado."
+
+    return render(
+        request,
+        "citizen_requests/portal.html",
+        {
+            "form": CitizenRequestForm(),
+            "tracking_form": tracking_form,
+            "tracking_result": tracking_result,
+            "tracking_error": tracking_error,
+        },
+    )
+
+
+def _tracking_attempt_allowed(request):
+    attempts = request.session.get(PUBLIC_TRACKING_ATTEMPTS_SESSION_KEY, [])
+    now = int(time.time())
+    attempts = [
+        timestamp
+        for timestamp in attempts
+        if now - timestamp < PUBLIC_TRACKING_WINDOW_SECONDS
+    ]
+    if len(attempts) >= PUBLIC_TRACKING_ATTEMPT_LIMIT:
+        request.session[PUBLIC_TRACKING_ATTEMPTS_SESSION_KEY] = attempts
+        return False
+    attempts.append(now)
+    request.session[PUBLIC_TRACKING_ATTEMPTS_SESSION_KEY] = attempts
+    return True
+
+
+def _public_tracking_data(citizen_request):
+    stages = [
+        {"label": "Solicitud recibida", "complete": True},
+    ]
+    if citizen_request.delegation_id:
+        stages.append({"label": "Derivada para revisión", "complete": True})
+    if citizen_request.attention_entry_id:
+        stages.append({"label": "En gestión", "complete": True})
+
+    if citizen_request.status == "CLOSED":
+        public_status = "Cerrada"
+        stages.append({"label": "Cerrada", "complete": True})
+    elif citizen_request.attention_entry_id:
+        public_status = "En gestión"
+    elif citizen_request.delegation_id:
+        public_status = "Derivada para revisión"
+    else:
+        public_status = "Solicitud recibida"
+
+    return {
+        "tracking_code": str(citizen_request.tracking_code),
+        "created_at": citizen_request.created_at,
+        "subject": citizen_request.subject,
+        "status": public_status,
+        "stages": stages,
+    }
+
+
+def public_request_confirmation(request, tracking_code):
+    confirmation = request.session.get(PUBLIC_CONFIRMATION_SESSION_KEY)
+    if not confirmation or confirmation["tracking_code"] != str(tracking_code):
+        return redirect("citizen_requests:public_portal")
+    return render(
+        request,
+        "citizen_requests/confirmation.html",
+        {"confirmation": confirmation},
+    )
 
 
 def _active_delegations():
@@ -39,19 +183,44 @@ def _active_delegation_id(request):
     return getattr(request.user, "sgr_active_delegation_id", None)
 
 
-def _temporary_operations_enabled():
-    return settings.DEBUG
+DERIVATION_PERMISSION = "citizen_requests.derivar_solicitud"
+
+
+def _derivation_scope(request):
+    if not request.user.has_perm(DERIVATION_PERMISSION):
+        return set()
+    scope = allowed_delegation_ids(
+        request.user,
+        DERIVATION_PERMISSION,
+        active_only=False,
+    )
+    return set(scope or ())
+
+
+def _can_derive(request):
+    return bool(
+        request.user.has_perm(DERIVATION_PERMISSION)
+        and _active_delegation_id(request) is not None
+        and _derivation_scope(request)
+    )
+
+
+def _authorized_active_delegations(request):
+    scope = _derivation_scope(request)
+    if not scope:
+        return Delegation.objects.none()
+    return _active_delegations().filter(pk__in=scope)
 
 
 def _request_queryset_for_user(request):
-    """Return only pending requests and the current authorized delegation."""
+    """Return pending derivation requests and the active assigned delegation."""
     active_delegation_id = _active_delegation_id(request)
-    pending = Q(delegation__isnull=True) if settings.DEBUG else Q(pk__in=[])
-    if active_delegation_id is None:
-        return CitizenRequest.objects.filter(pending)
-    return CitizenRequest.objects.filter(
-        pending | Q(delegation_id=active_delegation_id)
-    )
+    clauses = Q(pk__in=[])
+    if _can_derive(request):
+        clauses |= Q(delegation__isnull=True)
+    if active_delegation_id is not None:
+        clauses |= Q(delegation_id=active_delegation_id)
+    return CitizenRequest.objects.filter(clauses)
 
 
 def _attention_delegation_access(request, delegation_id, permission):
@@ -65,6 +234,18 @@ def _attention_delegation_access(request, delegation_id, permission):
 
 
 def _serialize_request(citizen_request, request=None):
+    can_derive = bool(
+        request
+        and _can_derive(request)
+        and citizen_request.status != "CLOSED"
+    )
+    can_change_delegation = bool(
+        can_derive
+        and citizen_request.delegation_id
+        and citizen_request.attention_entry_id is None
+        and citizen_request.delegation_id in _derivation_scope(request)
+        and _active_delegation_id(request) == citizen_request.delegation_id
+    )
     can_create_attention = bool(
         request
         and citizen_request.delegation_id
@@ -101,6 +282,8 @@ def _serialize_request(citizen_request, request=None):
         "attention_entry_id": citizen_request.attention_entry_id,
         "can_create_attention": can_create_attention,
         "can_view_attention": can_view_attention,
+        "can_derive": can_derive and citizen_request.delegation_id is None,
+        "can_change_delegation": can_change_delegation,
     }
 
 
@@ -184,7 +367,6 @@ def _page_data(queryset, page_number, request=None):
         }
 
 
-@require_POST
 def register_public_request(request):
     """
     Recibe el POST del formulario del mismo sitio protegido por CSRF.
@@ -192,8 +374,22 @@ def register_public_request(request):
     La interfaz debe incluir {% csrf_token %} en un formulario Django o
     enviar el token en la cabecera X-CSRFToken al hacer una petición AJAX.
     """
+    if request.method != "POST":
+        return JsonResponse(
+            {"result": "error", "message": "Método no permitido."},
+            status=405,
+        )
+
+    portal_form = request.POST.get("portal_form") == "1"
     form = CitizenRequestForm(request.POST)
     if not form.is_valid():
+        if portal_form:
+            return render(
+                request,
+                "citizen_requests/portal.html",
+                {"form": form},
+                status=400,
+            )
         return JsonResponse(
             {
                 "result": "error",
@@ -221,7 +417,8 @@ def register_public_request(request):
                 "Hemos recibido tu solicitud correctamente.\n"
                 f"Tu código de seguimiento es: {tracking_code}\n\n"
                 "Conserva este código para consultar posteriormente "
-                "el estado de tu solicitud.\n"
+                "el estado de tu solicitud.\n\n"
+                f"{_portal_link_text()}\n"
             ),
             from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=[citizen_request.requester_email],
@@ -242,6 +439,17 @@ def register_public_request(request):
             "el correo de confirmación."
         )
 
+    if portal_form:
+        request.session[PUBLIC_CONFIRMATION_SESSION_KEY] = {
+            "tracking_code": tracking_code,
+            "email_sent": email_sent,
+        }
+        request.session.modified = True
+        return redirect(
+            "citizen_requests:public_request_confirmation",
+            tracking_code=tracking_code,
+        )
+
     return JsonResponse(
         {
             "result": "success",
@@ -258,6 +466,7 @@ def request_inbox(request):
     queryset = _request_queryset_for_user(request).select_related(
         "delegation",
     )
+    pending_count = queryset.filter(delegation__isnull=True).count()
     pending = _filtered_requests(
         queryset.filter(delegation__isnull=True),
         request,
@@ -278,6 +487,7 @@ def request_inbox(request):
                 request.GET.get("delegated_page", 1),
                 request,
             ),
+            "pending_count": pending_count,
             "active_delegation": getattr(
                 getattr(request, "sgr_active_delegation", None),
                 "name",
@@ -285,19 +495,32 @@ def request_inbox(request):
             ),
             "active_delegations": [
                 {"id": delegation.pk, "name": delegation.name}
-                for delegation in _active_delegations()
+                for delegation in _authorized_active_delegations(request)
             ],
-            "temporary_pending_visibility": settings.DEBUG,
+            "can_derive": _can_derive(request),
         }
     )
 
 
 @login_required
+def pending_request_count(request):
+    if not _can_derive(request):
+        return JsonResponse(
+            {"result": "error", "message": "No tienes permiso para consultar pendientes."},
+            status=403,
+        )
+    pending = _request_queryset_for_user(request).filter(
+        delegation__isnull=True,
+    )
+    return JsonResponse({"pending_count": pending.count()})
+
+
+@login_required
 @require_POST
 def assign_request(request, request_id):
-    if not _temporary_operations_enabled():
+    if not _can_derive(request):
         return JsonResponse(
-            {"result": "error", "message": "Funcionalidad no disponible."},
+            {"result": "error", "message": "No tienes permiso para derivar solicitudes."},
             status=403,
         )
 
@@ -314,13 +537,21 @@ def assign_request(request, request_id):
             status=400,
         )
 
-    delegation = get_object_or_404(_active_delegations(), pk=delegation_id)
+    delegation = get_object_or_404(
+        _authorized_active_delegations(request),
+        pk=delegation_id,
+    )
     with transaction.atomic():
         citizen_request = get_object_or_404(
             CitizenRequest.objects.select_for_update(),
             pk=request_id,
             delegation__isnull=True,
         )
+        if citizen_request.status == "CLOSED":
+            return JsonResponse(
+                {"result": "error", "message": "No se puede derivar una solicitud cerrada."},
+                status=409,
+            )
         previous_label = "Sin derivar"
         citizen_request.delegation = delegation
         citizen_request.save(update_fields=("delegation", "updated_at"))
@@ -334,6 +565,27 @@ def assign_request(request, request_id):
             previous_status=citizen_request.status,
             new_status=citizen_request.status,
         )
+        portal_url = _public_portal_url()
+        if citizen_request.origin == "CITIZEN" and citizen_request.requester_email:
+            transaction.on_commit(
+                lambda request_id=citizen_request.pk,
+                requester_name=citizen_request.requester_name,
+                requester_email=citizen_request.requester_email,
+                tracking_code=str(citizen_request.tracking_code),
+                portal_url=(
+                    portal_url
+                    or (
+                        "Portal Ciudadano desde el sitio oficial de la "
+                        "Municipalidad."
+                    )
+                ): _send_derivation_notification(
+                    request_id,
+                    requester_name,
+                    requester_email,
+                    tracking_code,
+                    portal_url,
+                )
+            )
 
     return JsonResponse({"result": "success", "message": "Solicitud derivada."})
 
@@ -341,12 +593,13 @@ def assign_request(request, request_id):
 @login_required
 @require_POST
 def change_request_delegation(request, request_id):
-    if not _temporary_operations_enabled():
+    if not _can_derive(request):
         return JsonResponse(
-            {"result": "error", "message": "Funcionalidad no disponible."},
+            {"result": "error", "message": "No tienes permiso para derivar solicitudes."},
             status=403,
         )
 
+    allowed_ids = _derivation_scope(request)
     delegation_id = request.POST.get("delegation", "").strip()
     reason = request.POST.get("reason", "").strip()
     if not delegation_id:
@@ -360,13 +613,28 @@ def change_request_delegation(request, request_id):
             status=400,
         )
 
-    destination = get_object_or_404(_active_delegations(), pk=delegation_id)
+    destination = get_object_or_404(
+        _authorized_active_delegations(request),
+        pk=delegation_id,
+    )
     with transaction.atomic():
         citizen_request = get_object_or_404(
             _request_queryset_for_user(request).select_for_update(),
             pk=request_id,
             delegation__isnull=False,
         )
+        if citizen_request.status == "CLOSED":
+            return JsonResponse(
+                {"result": "error", "message": "No se puede cambiar una solicitud cerrada."},
+                status=409,
+            )
+        if (
+            citizen_request.delegation_id not in allowed_ids
+            or _active_delegation_id(request) != citizen_request.delegation_id
+        ):
+            raise PermissionDenied(
+                "No tienes autorización sobre la delegación de origen."
+            )
         if citizen_request.attention_entry_id:
             return JsonResponse(
                 {

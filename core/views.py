@@ -1,6 +1,7 @@
-from django.contrib.auth.decorators import login_required
 from django.shortcuts import render
 from django.urls import NoReverseMatch, reverse
+
+from citizen_requests.views import public_portal
 
 from .modules import MODULES
 
@@ -38,8 +39,10 @@ def build_sections(user):
     return sections
 
 
-@login_required
 def home(request):
+    if not request.user.is_authenticated:
+        return public_portal(request)
+
     # Valor temporal en la sesión: visitas a la página principal
     visits = request.session.get("home_visits", 0) + 1
     request.session["home_visits"] = visits

@@ -7,7 +7,10 @@ from django.contrib.auth.forms import (
 )
 from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth.models import Group, Permission
-from organization.permission_labels import SpanishPermissionMultipleChoiceField
+from organization.permission_labels import (
+    SpanishPermissionMultipleChoiceField,
+    catalog_permission_queryset,
+)
 from accounts.permissions import allowed_delegation_ids
 from django.db.models import Q
 from django.conf import settings
@@ -110,21 +113,10 @@ class GroupForm(BootstrapMixin, forms.ModelForm):
 
     permissions = SpanishPermissionMultipleChoiceField(
         label="Permisos",
-        queryset=Permission.objects.filter(
-            content_type__app_label__in=[
-                "organization",
-                "accounts",
-                "planning_measurements",
-                "registration_validation",
-                "monitoring_traceability",
-            ],
+        queryset=catalog_permission_queryset(
+            Permission.objects.all()
         )
-        .select_related("content_type")
-        .order_by(
-            "content_type__app_label",
-            "content_type__model",
-            "codename",
-        ),
+        .select_related("content_type"),
         widget=forms.CheckboxSelectMultiple,
         required=False,
         help_text="Selecciona las acciones permitidas para este grupo.",
@@ -429,7 +421,7 @@ class AccountCreateForm(BootstrapMixin, UserCreationForm):
 
 
 class AccountEditForm(BootstrapMixin, forms.ModelForm):
-    """Edita perfil y cuenta; no modifica contraseñas ni da privilegios de superusuario."""
+    """Edita perfil, cuenta, roles y delegaciones autorizadas."""
     employee = forms.ModelChoiceField(label="Empleado vinculado (opcional)",
                                        queryset=Employee.objects.none(), required=False)
     employee_code = forms.CharField(label="Código de empleado", max_length=30)
@@ -441,16 +433,12 @@ class AccountEditForm(BootstrapMixin, forms.ModelForm):
         label="Roles asignados", queryset=Group.objects.none(),
         widget=forms.CheckboxSelectMultiple, required=True,
     )
-    can_delete_closed_period = forms.BooleanField(
-        label="Permiso individual: eliminar períodos cerrados", required=False,
-        help_text="Requiere además permiso normal de eliminación de períodos; no se hereda de un rol.",
-    )
 
     class Meta:
         model = get_user_model()
         fields = ["username", "first_name", "last_name", "email", "is_active",
                   "employee", "employee_code", "authorized_delegations",
-                  "groups", "can_delete_closed_period"]
+                  "groups"]
         labels = {"username": "Nombre de usuario", "first_name": "Nombre",
                   "last_name": "Apellidos", "email": "Correo", "is_active": "Cuenta activa"}
 
@@ -475,16 +463,8 @@ class AccountEditForm(BootstrapMixin, forms.ModelForm):
             organization_role__isnull=False
         ).prefetch_related("organization_role__application_delegations").order_by("name")
         self.fields["groups"].initial = self.instance.groups.all()
-        self.fields["can_delete_closed_period"].initial = self.instance.user_permissions.filter(
-            codename="delete_closed_period", content_type__app_label="planning_measurements"
-        ).exists() if self.instance.pk else False
         self.fields["email"].required = True
         _restrict_account_actor_choices(self, self.actor, "change")
-        if self.actor is not None and not self.actor.is_superuser:
-            # La facultad de borrar períodos cerrados solo puede delegarse de forma individual.
-            self.fields["can_delete_closed_period"].disabled = not self.actor.has_perm(
-                "planning_measurements.delete_closed_period"
-            )
         self.apply_bootstrap()
 
     def clean_email(self):
@@ -523,6 +503,17 @@ class AccountEditForm(BootstrapMixin, forms.ModelForm):
             self.add_error("groups", "Cada rol debe coincidir con alguna delegación autorizada.")
         if employee and UserProfile.objects.exclude(pk=self.profile.pk).filter(employee=employee).exists():
             self.add_error("employee", "Este empleado ya tiene otra cuenta, incluso si está archivada.")
+        if (
+            self.actor is not None
+            and self.actor.pk == self.instance.pk
+            and groups is not None
+            and set(groups.values_list("pk", flat=True))
+            != set(self.instance.groups.values_list("pk", flat=True))
+        ):
+            self.add_error(
+                "groups",
+                "No puedes modificar los roles asignados a tu propia cuenta.",
+            )
         return data
 
     def save(self, commit=True):
@@ -530,7 +521,6 @@ class AccountEditForm(BootstrapMixin, forms.ModelForm):
             return super().save(commit=False)
         from django.db import transaction
         from .services import sync_user_groups
-        from django.contrib.auth.models import Permission
         with transaction.atomic():
             account = super().save(commit=False)
             account.save()
@@ -547,18 +537,6 @@ class AccountEditForm(BootstrapMixin, forms.ModelForm):
             profile.authorized_delegations.set(delegations)
             if old_employee and old_employee.pk != getattr(new_employee, "pk", None):
                 old_employee.assigned_groups.clear()
-            # Solo permiso otorgado de forma directa, no por grupos.
-            privilege = Permission.objects.filter(
-                codename="delete_closed_period", content_type__app_label="planning_measurements"
-            ).first()
-            if privilege and (
-                self.actor is None or self.actor.is_superuser or
-                self.actor.has_perm("planning_measurements.delete_closed_period")
-            ):
-                if self.cleaned_data["can_delete_closed_period"]:
-                    account.user_permissions.add(privilege)
-                else:
-                    account.user_permissions.remove(privilege)
             sync_user_groups(account)
             return account
 

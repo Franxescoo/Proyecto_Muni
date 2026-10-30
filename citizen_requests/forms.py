@@ -24,6 +24,24 @@ class CitizenRequestForm(forms.ModelForm):
             "subject": "Asunto",
             "description": "Descripción",
         }
+        widgets = {
+            "requester_name": forms.TextInput(
+                attrs={"class": "form-control", "autocomplete": "name"},
+            ),
+            "requester_email": forms.EmailInput(
+                attrs={"class": "form-control", "autocomplete": "email"},
+            ),
+            "requester_phone": forms.TextInput(
+                attrs={"class": "form-control", "autocomplete": "tel"},
+            ),
+            "address": forms.TextInput(
+                attrs={"class": "form-control", "autocomplete": "street-address"},
+            ),
+            "subject": forms.TextInput(attrs={"class": "form-control"}),
+            "description": forms.Textarea(
+                attrs={"class": "form-control", "rows": 5},
+            ),
+        }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -52,3 +70,21 @@ class CitizenRequestForm(forms.ModelForm):
         if not value:
             self.add_error(field_name, "Este campo es obligatorio.")
         return value
+
+
+class PublicTrackingCodeForm(forms.Form):
+    tracking_code = forms.UUIDField(
+        label="Código de seguimiento",
+        error_messages={
+            "required": "Ingresa un código de seguimiento.",
+            "invalid": "Ingresa un código de seguimiento válido.",
+        },
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "placeholder": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+                "autocomplete": "off",
+                "spellcheck": "false",
+            },
+        ),
+    )

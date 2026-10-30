@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block titulo %}Portal Ciudadano · SGR{% endblock %}
+
+{% block public_navigation %}
+<nav class="navbar navbar-expand topbar mb-4 shadow-sm">
+    <div class="container-fluid px-4">
+        <a class="navbar-brand py-0" href="{% url 'citizen_requests:public_portal' %}">
+            <img src="{% static 'img/horizontal-blanco.png' %}"
+                 alt="Logo Municipalidad de La Serena"
+                 height="55">
+        </a>
+        <a class="btn btn-outline-light ms-auto" href="{% url 'login' %}">
+            <i class="bi bi-box-arrow-in-right me-1"></i>Iniciar sesión
+        </a>
+    </div>
+</nav>
+{% endblock %}
+
+{% block estilos %}
+<style>
+    .citizen-hero {
+        background: linear-gradient(135deg, #a60a17 0%, #6a040d 100%);
+        border-left: 8px solid #ffb3b3;
+        border-radius: .5rem;
+        box-shadow: 0 4px 15px rgba(166, 10, 23, .25);
+        color: #fff;
+    }
+    .citizen-section-title {
+        border-left: 5px solid #a60a17;
+        color: #000;
+        font-size: 1.35rem;
+        font-weight: 700;
+        padding-left: 12px;
+    }
+    .citizen-card {
+        border: 1px solid #e5e7eb;
+        border-radius: .5rem;
+    }
+    .citizen-card .card-header {
+        background: #a60a17;
+        color: #fff;
+        font-weight: 700;
+    }
+    .citizen-card .form-label {
+        color: #384350;
+        font-size: .86rem;
+        font-weight: 650;
+    }
+    .citizen-card .form-control {
+        border: 1px solid #cfd6df;
+        border-radius: .55rem;
+    }
+    .citizen-card .form-control:focus {
+        border-color: #a60a17;
+        box-shadow: 0 0 0 .22rem rgba(166, 10, 23, .13);
+    }
+    .citizen-card .btn-primary {
+        background: #a60a17;
+        border-color: #a60a17;
+    }
+    .citizen-card .btn-primary:hover {
+        background: #800711;
+        border-color: #800711;
+    }
+</style>
+{% endblock %}
+
+{% block contenido %}
+<div class="container py-2 py-md-4">
+    <section class="citizen-hero p-4 p-md-5 mb-4">
+        <div class="h2 mb-2 fw-bold">Portal Ciudadano</div>
+        <p class="mb-0">
+            Registra solicitudes y comunica situaciones que requieren atención
+            municipal. Recibirás un código para consultar su estado más adelante.
+        </p>
+    </section>
+
+    <div class="row g-4">
+        <div class="col-12 col-lg-8">
+            <section class="citizen-card card shadow-sm">
+                <div class="card-header py-3">
+                    <h1 class="h5 mb-0">
+                        <i class="bi bi-pencil-square me-2"></i>Ingresar solicitud
+                    </h1>
+                </div>
+                <div class="card-body p-4">
+                    <p class="text-secondary">
+                        Completa los datos para registrar tu solicitud. Los campos
+                        marcados con <span class="text-danger">*</span> son obligatorios.
+                    </p>
+                    {% if form.non_field_errors %}
+                    <div class="alert alert-danger" role="alert">{{ form.non_field_errors }}</div>
+                    {% endif %}
+                    <form method="post" action="{% url 'citizen_requests:register_public_request' %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="portal_form" value="1">
+                        <div class="row g-3">
+                            {% for field in form %}
+                            <div class="{% if field.name == 'description' %}col-12{% else %}col-12 col-md-6{% endif %}">
+                                <label class="form-label" for="{{ field.id_for_label }}">
+                                    {{ field.label }}{% if field.field.required %} <span class="text-danger">*</span>{% endif %}
+                                </label>
+                                {{ field }}
+                                {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+                                {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <button class="btn btn-primary mt-4 px-4" type="submit">
+                            <i class="bi bi-send me-1"></i>Registrar solicitud
+                        </button>
+                    </form>
+                </div>
+            </section>
+        </div>
+        <div class="col-12 col-lg-4">
+            <section class="citizen-card card shadow-sm h-100">
+                <div class="card-header py-3">
+                    <h2 class="h5 mb-0">
+                        <i class="bi bi-search me-2"></i>Consultar solicitud
+                    </h2>
+                </div>
+                <div class="card-body d-flex flex-column">
+                    <p class="text-secondary">
+                        Ingresa tu código de seguimiento para consultar el avance
+                        público de tu solicitud.
+                    </p>
+                    <form method="post" action="{% url 'citizen_requests:public_portal' %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="tracking_form" value="1">
+                        <label class="form-label" for="{{ tracking_form.tracking_code.id_for_label }}">
+                            {{ tracking_form.tracking_code.label }}
+                        </label>
+                        {{ tracking_form.tracking_code }}
+                        {% if tracking_error %}
+                        <div class="alert alert-warning mt-3 mb-0" role="alert">
+                            {{ tracking_error }}
+                        </div>
+                        {% endif %}
+                        <button class="btn btn-primary w-100 mt-3" type="submit">
+                            <i class="bi bi-search me-1"></i>Consultar estado
+                        </button>
+                    </form>
+                    {% if tracking_result %}
+                    <div class="border rounded p-3 mt-4">
+                        <h3 class="h6 mb-3">Estado de la solicitud</h3>
+                        <dl class="row small mb-3">
+                            <dt class="col-5">Código</dt>
+                            <dd class="col-7 text-break">{{ tracking_result.tracking_code }}</dd>
+                            <dt class="col-5">Fecha de ingreso</dt>
+                            <dd class="col-7">{{ tracking_result.created_at|date:"d/m/Y H:i" }}</dd>
+                            <dt class="col-5">Asunto</dt>
+                            <dd class="col-7">{{ tracking_result.subject }}</dd>
+                            <dt class="col-5">Estado</dt>
+                            <dd class="col-7"><span class="badge text-bg-secondary">{{ tracking_result.status }}</span></dd>
+                        </dl>
+                        <h4 class="h6">Etapas públicas</h4>
+                        <ul class="list-group list-group-flush">
+                            {% for stage in tracking_result.stages %}
+                            <li class="list-group-item px-0">
+                                <i class="bi bi-check-circle-fill text-success me-2"></i>{{ stage.label }}
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                </div>
+            </section>
+        </div>
+    </div>
+</div>
+{% endblock %}

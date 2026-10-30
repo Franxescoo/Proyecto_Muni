@@ -13,7 +13,10 @@ from accounts.forms import (
 from .models import Delegation, OrganizationRole, PositionFunction, Employee
 from accounts.models import UserProfile
 from accounts.permissions import allowed_delegation_ids
-from .permission_labels import SpanishPermissionMultipleChoiceField
+from .permission_labels import (
+    SpanishPermissionMultipleChoiceField,
+    catalog_permission_queryset,
+)
 
 STATUS_CHOICES = (
     ("", "Selecciona un estado"),
@@ -61,19 +64,9 @@ class OrganizationRoleForm(BootstrapMixin, forms.Form):
     )
     permissions = SpanishPermissionMultipleChoiceField(
         label="Permisos",
-        queryset=Permission.objects.filter(
-            content_type__app_label__in=[
-                "organization",
-                "accounts",
-                "planning_measurements",
-                "registration_validation",
-                "monitoring_traceability",
-            ],
-        ).select_related("content_type").order_by(
-            "content_type__app_label",
-            "content_type__model",
-            "codename",
-        ),
+        queryset=catalog_permission_queryset(
+            Permission.objects.all()
+        ).select_related("content_type"),
         widget=forms.CheckboxSelectMultiple,
         required=False,
         help_text="Selecciona las acciones permitidas para este rol.",
@@ -106,37 +99,6 @@ class OrganizationRoleForm(BootstrapMixin, forms.Form):
         self._preserved_permission_ids = set()
 
         if self.actor is not None and not self.actor.is_superuser:
-            owned = self.actor.get_all_permissions()
-
-            if self.group:
-                self._preserved_permission_ids = {
-                    p.pk
-                    for p in self.group.permissions.select_related("content_type")
-                    if f"{p.content_type.app_label}.{p.codename}" not in owned
-                }
-
-            permitted = [
-                (name.split(".", 1)[0], name.split(".", 1)[1])
-                for name in owned
-            ]
-
-            from django.db.models import Q
-            from functools import reduce
-            from operator import or_
-
-            lookup = [
-                Q(content_type__app_label=app, codename=code)
-                for app, code in permitted
-            ]
-
-            self.fields["permissions"].queryset = (
-                self.fields["permissions"].queryset.filter(
-                    reduce(or_, lookup)
-                )
-                if lookup
-                else self.fields["permissions"].queryset.none()
-            )
-
             scopes = allowed_delegation_ids(
                 self.actor,
                 "organization.change_organizationrole"
@@ -158,8 +120,7 @@ class OrganizationRoleForm(BootstrapMixin, forms.Form):
                 )
 
                 self.fields["permissions"].help_text = (
-                    "Puedes modificar los permisos que posees. "
-                    "Los demás se conservarán sin cambios."
+                    "Puedes seleccionar cualquier permiso funcional del catálogo."
                 )
 
         self.apply_bootstrap()
@@ -190,51 +151,9 @@ class OrganizationRoleForm(BootstrapMixin, forms.Form):
             and self.actor is not None
             and self.actor.groups.filter(pk=self.group.pk).exists()
         ):
-            role = OrganizationRole.objects.filter(
-                group=self.group
-            ).first()
-
-            # Proteger las delegaciones actuales.
-            if role is not None and delegations is not None:
-                anteriores = set(
-                    role.application_delegations.values_list(
-                        "pk", flat=True
-                    )
-                ) or {role.delegation_id}
-
-                nuevas = {
-                    delegation.pk for delegation in delegations
-                }
-
-                if not anteriores.issubset(nuevas):
-                    self.add_error(
-                        "delegations",
-                        "No puedes quitar delegaciones de un rol "
-                        "que tienes asignado. Solicita el cambio "
-                        "a otro administrador autorizado.",
-                    )
-
-            # Proteger también los permisos actuales.
-            permissions = cleaned_data.get("permissions")
-
-            if permissions is not None:
-                anteriores = set(
-                    self.group.permissions.values_list(
-                        "pk", flat=True
-                    )
-                )
-
-                nuevas = {
-                    permission.pk for permission in permissions
-                } | self._preserved_permission_ids
-
-                if not anteriores.issubset(nuevas):
-                    self.add_error(
-                        "permissions",
-                        "No puedes quitar permisos de un rol "
-                        "que tienes asignado. Solicita el cambio "
-                        "a otro administrador autorizado.",
-                    )
+            raise ValidationError(
+                "No puedes modificar un rol que tienes asignado."
+            )
 
         return cleaned_data
 
@@ -247,9 +166,7 @@ class OrganizationRoleForm(BootstrapMixin, forms.Form):
                 p.pk for p in self.cleaned_data["permissions"]
             }
 
-            group.permissions.set(
-                selected | self._preserved_permission_ids
-            )
+            group.permissions.set(selected)
             role, _ = OrganizationRole.objects.update_or_create(
                 group=group,
                 defaults={"delegation": self.cleaned_data["delegations"].first()},

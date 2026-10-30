@@ -17,7 +17,12 @@ from organization.models import (
     PositionFunction,
 )
 
-from .forms import GoalForm, GoalInlineForm, PeriodForm
+from .forms import (
+    GoalForm,
+    GoalInlineForm,
+    MeasurementItemForm,
+    PeriodForm,
+)
 from .models import Goal, Period, MeasurementItem
 from .views import scoped_goals
 from .working_days import calculate_computable_days
@@ -147,6 +152,46 @@ class PlanningTests(TestCase):
             "thresholds": "Verde: 100, Amarillo: 80, Rojo: 60",
             "parameters_version": "1",
         }
+
+    def test_text_limits_are_enforced_in_planning_forms(self):
+        item_form = MeasurementItemForm(data={
+            "code": "X" * 21,
+            "name": "Nombre",
+            "description": "",
+            "item_type": MeasurementItem.ItemType.QUANTITATIVE,
+            "unit": "",
+            "formula": "",
+            "is_active": "on",
+        })
+        self.assertFalse(item_form.is_valid())
+        self.assertIn("code", item_form.errors)
+        self.assertEqual(
+            item_form.fields["description"].widget.attrs["maxlength"],
+            300,
+        )
+        self.assertEqual(
+            item_form.fields["formula"].widget.attrs["maxlength"],
+            500,
+        )
+
+        period_form = PeriodForm(data={
+            **self.period_data(),
+            "thresholds": "x" * 256,
+        })
+        self.assertFalse(period_form.is_valid())
+        self.assertIn("thresholds", period_form.errors)
+
+    def test_planning_forms_accept_exact_text_limits(self):
+        item_form = MeasurementItemForm(data={
+            "code": "X" * 20,
+            "name": "N" * 150,
+            "description": "D" * 300,
+            "item_type": MeasurementItem.ItemType.QUANTITATIVE,
+            "unit": "U" * 50,
+            "formula": "F" * 500,
+            "is_active": "on",
+        })
+        self.assertTrue(item_form.is_valid(), item_form.errors)
 
     def inline_data(self):
         data = self.period_data()

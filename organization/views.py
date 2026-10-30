@@ -332,6 +332,10 @@ def _role_groups_for(user, action="view"):
 def _role_target(user, pk, action):
     group = get_object_or_404(_role_groups_for(user, action), pk=pk)
     if not user.is_superuser and action in ("change", "delete"):
+        if action == "change" and user.groups.filter(pk=group.pk).exists():
+            raise PermissionDenied(
+                "No puedes modificar un rol que tienes asignado."
+            )
         if action == "delete":
             own = user.get_all_permissions()
             if any(
@@ -365,6 +369,9 @@ def role_list(request):
         account_count=Count("user", distinct=True),
         employee_count=Count("assigned_employees", distinct=True),
     ).order_by("name")
+    own_role_ids = set(
+        request.user.groups.values_list("pk", flat=True)
+    )
     search = _query(request.GET.get("q"))
     if search:
         groups = groups.filter(
@@ -459,6 +466,7 @@ def role_list(request):
             pk__in=allowed_delegation_ids(request.user, "organization.view_organizationrole", active_only=False),
             deleted_at__isnull=True
         ).order_by("name") if not request.user.is_superuser else Delegation.objects.filter(deleted_at__isnull=True).order_by("name"),
+        "own_role_ids": own_role_ids,
     }
     page, querystring = organization_pagination(request, groups)
     context["roles"] = page

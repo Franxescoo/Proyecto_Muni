@@ -2,12 +2,14 @@
 from datetime import date
 
 from django.contrib.auth import get_user_model
-from django.contrib.auth.models import Group
+from django.contrib.auth.models import Group, Permission
+from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from accounts.forms import AccountCreateForm, AccountEditForm
+from accounts.permission_audit import direct_permission_inventory
 from accounts.models import UserProfile
 from organization.models import (
     Delegation,
@@ -109,6 +111,108 @@ class AccountTests(TestCase):
         self.assertIn("username", form.fields)
         self.assertIn("email", form.fields)
         self.assertIn("is_active", form.fields)
+
+    def test_user_cannot_change_own_roles_from_account_form(self):
+        user = self.create_account()
+        other_role = Group.objects.create(name="Otro rol")
+        form = AccountEditForm(
+            data={
+                "username": user.username,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "email": user.email,
+                "is_active": "on",
+                "employee": user.profile.employee_id,
+                "employee_code": user.profile.employee_code,
+                "authorized_delegations": [self.delegation.pk],
+                "groups": [self.role.pk, other_role.pk],
+            },
+            instance=user,
+            actor=user,
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("groups", form.errors)
+
+    def test_user_form_does_not_assign_individual_permissions(self):
+        user = self.create_account()
+        special = Permission.objects.get(
+            content_type__app_label="planning_measurements",
+            codename="delete_closed_period",
+        )
+        user.user_permissions.add(special)
+
+        form = AccountEditForm(instance=user, actor=self.admin)
+        self.assertNotIn("can_delete_closed_period", form.fields)
+        self.assertNotIn("can_delete_closed_period_inherited", form.fields)
+
+        form = AccountEditForm(
+            data={
+                "username": user.username,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "email": user.email,
+                "is_active": "on",
+                "employee": user.profile.employee_id,
+                "employee_code": user.profile.employee_code,
+                "authorized_delegations": [self.delegation.pk],
+                "groups": [self.role.pk],
+            },
+            instance=user,
+            actor=self.admin,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        form.save()
+        user.refresh_from_db()
+
+        self.assertTrue(user.user_permissions.filter(pk=special.pk).exists())
+
+    def test_role_permissions_are_inherited_by_user(self):
+        user = self.create_account()
+        special = Permission.objects.get(
+            content_type__app_label="planning_measurements",
+            codename="delete_closed_period",
+        )
+        self.role.permissions.add(special)
+
+        user.refresh_from_db()
+
+        self.assertTrue(user.has_perm("planning_measurements.delete_closed_period"))
+
+    def test_direct_permission_inventory_identifies_uncovered_permissions(self):
+        user = self.create_account()
+        special = Permission.objects.get(
+            content_type__app_label="planning_measurements",
+            codename="delete_closed_period",
+        )
+        user.user_permissions.add(special)
+
+        rows = direct_permission_inventory(get_user_model())
+
+        row = next(
+            item for item in rows
+            if item["username"] == user.username
+            and item["direct_permission"]
+            == "planning_measurements.delete_closed_period"
+        )
+        self.assertFalse(row["covered_by_role"])
+        self.assertEqual(row["roles"], [self.role.name])
+
+    def test_direct_permission_audit_command_is_read_only(self):
+        user = self.create_account()
+        special = Permission.objects.get(
+            content_type__app_label="planning_measurements",
+            codename="delete_closed_period",
+        )
+        user.user_permissions.add(special)
+
+        from io import StringIO
+
+        output = StringIO()
+        call_command("audit_direct_permissions", stdout=output)
+
+        self.assertIn(user.username, output.getvalue())
+        user.refresh_from_db()
+        self.assertTrue(user.user_permissions.filter(pk=special.pk).exists())
 
     def test_create_account_inherits_employee_roles(self):
         user = self.create_account()

@@ -3,6 +3,7 @@ from django import forms
 
 APP_NAMES = {
     "accounts": "Cuentas",
+    "citizen_requests": "Solicitudes ciudadanas",
     "organization": "Organización",
     "planning_measurements": "Planificación y medición",
     "registration_validation": "Registro y validación",
@@ -30,6 +31,11 @@ MODEL_NAMES = {
     "commitment": "Compromisos",
     "audit": "Auditorías",
     "comment": "Comentarios",
+    "commitmentcomment": "Comentarios de compromisos",
+    "citizenrequest": "Solicitudes ciudadanas",
+    "requestevent": "Historial de solicitudes",
+    "passwordrecoverycode": "Códigos de recuperación",
+    "periodarchivelog": "Historial de archivado de períodos",
 }
 ACTIONS = {
     "add": "Puede crear",
@@ -38,8 +44,94 @@ ACTIONS = {
     "view": "Puede consultar",
 }
 SPECIAL = {
-    "delete_closed_period": "Puede eliminar períodos cerrados (permiso individual)",
+    "delete_closed_period": "Puede eliminar períodos cerrados",
+    "derivar_solicitud": "Puede derivar solicitudes ciudadanas",
 }
+
+CATALOG_MODELS = {
+    "accounts": {
+        "userprofile",
+    },
+    "citizen_requests": {
+        "citizenrequest",
+    },
+    "organization": {
+        "delegation",
+        "employee",
+        "organizationrole",
+        "positionfunction",
+    },
+    "planning_measurements": {
+        "goal",
+        "measurementitem",
+        "period",
+    },
+    "registration_validation": {
+        "activity",
+        "activitytype",
+        "attentionentry",
+        "attentiontype",
+        "evidence",
+        "evidencefile",
+        "service",
+        "subattention",
+        "validation",
+    },
+    "monitoring_traceability": {
+        "activity",
+        "audit",
+        "commitment",
+        "commitmentcomment",
+        "evidence",
+        "indicator",
+    },
+}
+
+CATALOG_ACTIONS = {
+    ("citizen_requests", "citizenrequest"): {"derivar_solicitud"},
+    ("monitoring_traceability", "activity"): {
+        "add_activity",
+        "change_activity",
+        "delete_activity",
+        "view_activity",
+    },
+    ("monitoring_traceability", "evidence"): {
+        "add_evidence",
+        "change_evidence",
+        "delete_evidence",
+        "view_evidence",
+    },
+    ("monitoring_traceability", "commitment"): {"view_commitment"},
+    ("monitoring_traceability", "indicator"): {"view_indicator"},
+    ("monitoring_traceability", "audit"): {"view_audit"},
+    ("monitoring_traceability", "commitmentcomment"): {
+        "add_commitmentcomment",
+        "delete_commitmentcomment",
+    },
+}
+
+
+def catalog_permission_queryset(queryset):
+    """Return only permissions backed by real application operations."""
+    from django.db.models import Q
+
+    permission_filter = Q()
+    for app_label, models in CATALOG_MODELS.items():
+        for model in models:
+            actions = CATALOG_ACTIONS.get((app_label, model))
+            model_filter = Q(
+                content_type__app_label=app_label,
+                content_type__model=model,
+            )
+            if actions is not None:
+                model_filter &= Q(codename__in=actions)
+            permission_filter |= model_filter
+
+    return queryset.filter(permission_filter).order_by(
+        "content_type__app_label",
+        "content_type__model",
+        "codename",
+    )
 
 
 def permission_label(permission):

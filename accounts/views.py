@@ -323,6 +323,7 @@ def account_edit(request, pk):
     form = AccountEditForm(
         request.POST if request.method == "POST" else None,
         instance=user,
+        actor=request.user,
     )
 
     return save_model_form(
