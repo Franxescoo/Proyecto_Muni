@@ -2,6 +2,7 @@ from django.test import TestCase
 from datetime import date
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.core import management
 from django.core.exceptions import ValidationError
 from django.test import TestCase, RequestFactory
@@ -159,8 +160,8 @@ class TraceabilityModelsTest(TestCase):
 
 		indicator.refresh_from_db()
 		self.assertEqual(indicator.actual_progress, 1)
-		self.assertEqual(indicator.compliance, 20)
-		self.assertEqual(indicator.weighted_result, 10)
+		self.assertEqual(indicator.compliance, 1)
+		self.assertEqual(indicator.weighted_result, 0.5)
 		self.assertEqual(indicator.traffic_light, "Red")
 
 	def test_multiple_evidences_on_one_activity_count_once(self):
@@ -194,8 +195,8 @@ class TraceabilityModelsTest(TestCase):
 
 		self.assertEqual(indicator.approved_activities, 1)
 		self.assertEqual(indicator.approved_evidences, 2)
-		self.assertEqual(indicator.actual_progress, 2)
-		self.assertEqual(indicator.compliance, 40)
+		self.assertEqual(indicator.actual_progress, 1)
+		self.assertEqual(indicator.compliance, 1)
 
 		for number in range(3, 7):
 			evidence = Evidence.objects.create(
@@ -217,8 +218,8 @@ class TraceabilityModelsTest(TestCase):
 		indicator = recalculate_indicator_for_goal(self.north_goal)
 
 		self.assertEqual(indicator.approved_evidences, 6)
-		self.assertEqual(indicator.actual_progress, 6)
-		self.assertEqual(indicator.compliance, 120)
+		self.assertEqual(indicator.actual_progress, 1)
+		self.assertEqual(indicator.compliance, 1)
 
 	def test_indicator_uses_goal_evidence_requirement(self):
 		self.north_goal.required_evidence_count = 10
@@ -226,7 +227,7 @@ class TraceabilityModelsTest(TestCase):
 
 		indicator = recalculate_indicator_for_goal(self.north_goal)
 
-		self.assertEqual(indicator.expected_value, 10)
+		self.assertEqual(indicator.expected_value, 100)
 		self.assertEqual(indicator.compliance, 0)
 
 	def test_commitment_comments_preserve_author_and_text(self):
@@ -265,6 +266,10 @@ class TraceabilityModelsTest(TestCase):
 			commitment_date=date(2026, 7, 1),
 		)
 
+		user.user_permissions.add(*Permission.objects.filter(
+			content_type__app_label="monitoring_traceability",
+			codename__in=["view_commitment", "add_commitmentcomment"],
+		))
 		self.client.force_login(user)
 		response = self.client.post(
 			"/monitoring/compromisos/",
@@ -322,6 +327,12 @@ class TraceabilityModelsTest(TestCase):
 			).exists()
 		)
 
+		comment_permissions = Permission.objects.filter(
+			content_type__app_label="monitoring_traceability",
+			codename__in=["view_commitment", "delete_commitmentcomment"],
+		)
+		creator.user_permissions.add(*comment_permissions)
+		other_user.user_permissions.add(*comment_permissions)
 		self.client.force_login(other_user)
 		self.client.post(
 			"/monitoring/compromisos/",

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="es">
+<meta charset="utf-8">
+<title>Chat del equipo</title>
+<h1>Chat de la organización</h1>
+<p id="chat-status" role="status">Conectando...</p>
+<ul id="messages" aria-live="polite"></ul>
+<form id="chat-form" action="{% url 'websocket:send' %}">
+    {% csrf_token %}
+    <label for="message">Mensaje</label>
+    <input id="message" name="message" maxlength="300" required>
+    <button id="send" disabled>Enviar</button>
+</form>
+<script>
+// Agregar aquí las partes 2, 3 y 4.
+const form = document.querySelector("#chat-form");
+const button = document.querySelector("#send");
+const input = document.querySelector("#message");
+const state = document.querySelector("#chat-status");
+const scheme = location.protocol === "https:" ? "wss" : "ws";
+const chatSocket = new WebSocket(
+    scheme + "://" + location.host + "/ws/chat/"
+);
+chatSocket.onopen = () => {
+    state.textContent = "Conectado";
+    button.disabled = false;
+};
+chatSocket.onclose = () => {
+    state.textContent = "Desconectado. Vuelve a abrir el chat.";
+    button.disabled = true;
+};
+chatSocket.onerror = () => console.error("Error WebSocket");
+
+form.onsubmit = async (event) => {
+    event.preventDefault();
+    const message = input.value.trim();
+    if (!message || chatSocket.readyState !== WebSocket.OPEN) return;
+    const response = await fetch(form.action, {
+        method: "POST",
+        headers: {
+            "X-CSRFToken": form.querySelector(
+                "[name=csrfmiddlewaretoken]").value
+        },
+        body: new URLSearchParams({ message })
+    });
+    if (response.redirected || !response.ok) {
+        state.textContent = "No se pudo enviar el mensaje";
+        return;
+    }
+    input.value = "";
+};
+
+chatSocket.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    if (data.type !== "chat_message") return;
+    const item = document.createElement("li");
+    item.textContent = data.username + ": " + data.message;
+    document.querySelector("#messages").append(item);
+};
+</script>
+</html>

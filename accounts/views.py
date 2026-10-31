@@ -7,6 +7,8 @@ from django.contrib.auth.models import Group
 from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from django.utils import timezone
 
 from organization.models import Employee, PositionFunction
 
@@ -14,12 +16,112 @@ from .forms import (
     AccountCreateForm,
     AccountEditForm,
     EmployeeForm,
-    GroupForm,
     PositionForm,
     ProfileLinkForm,
 )
 from .models import UserProfile
-from .services import sync_employee, sync_position, sync_profile
+from .models import PasswordRecoveryCode
+from .recovery import create_recovery_code, send_recovery_code, valid_recovery_code
+from .recovery_forms import (
+    RecoveryCodeForm,
+    RecoveryPasswordForm,
+    RecoveryRequestForm,
+)
+from .services import (
+    sync_employee,
+    sync_position,
+    sync_profile,
+    sync_user_groups,
+)
+from .services import create_user_account
+
+
+RECOVERY_SESSION_KEY = "password_recovery_code_id"
+RECOVERY_VERIFIED_SESSION_KEY = "password_recovery_verified"
+
+
+def password_reset_request(request):
+    form = RecoveryRequestForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        user = form.find_user()
+        if user is not None and user.email:
+            recovery, code = create_recovery_code(user)
+            send_recovery_code(request, user, code)
+            request.session[RECOVERY_SESSION_KEY] = recovery.pk
+            return redirect("password_reset_verify")
+        return redirect("password_reset_done")
+
+    return render(
+        request,
+        "registration/password_reset_form.html",
+        {"form": form},
+    )
+
+
+def password_reset_verify(request):
+    recovery_id = request.session.get(RECOVERY_SESSION_KEY)
+    if not recovery_id:
+        return redirect("password_reset")
+
+    recovery = get_object_or_404(
+        PasswordRecoveryCode.objects.select_related("user"),
+        pk=recovery_id,
+    )
+    form = RecoveryCodeForm(request.POST or None)
+    if request.method == "POST":
+        if not valid_recovery_code(recovery, request.POST.get("code", "")):
+            form.add_error("code", "El código es incorrecto o ya expiró.")
+        elif form.is_valid():
+            request.session[RECOVERY_VERIFIED_SESSION_KEY] = True
+            return redirect("password_reset_password")
+
+    return render(
+        request,
+        "registration/password_reset_verify.html",
+        {"form": form, "expires_at": recovery.expires_at},
+    )
+
+
+def password_reset_password(request):
+    recovery_id = request.session.get(RECOVERY_SESSION_KEY)
+    if not request.session.get(RECOVERY_VERIFIED_SESSION_KEY) or not recovery_id:
+        return redirect("password_reset")
+
+    recovery = get_object_or_404(
+        PasswordRecoveryCode.objects.select_related("user"),
+        pk=recovery_id,
+    )
+    if recovery.expires_at <= timezone.now() or recovery.used_at is not None:
+        request.session.pop(RECOVERY_SESSION_KEY, None)
+        request.session.pop(RECOVERY_VERIFIED_SESSION_KEY, None)
+        return redirect("password_reset")
+
+    form = RecoveryPasswordForm(recovery.user, request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        with transaction.atomic():
+            locked = PasswordRecoveryCode.objects.select_for_update().get(
+                pk=recovery.pk,
+            )
+            if locked.used_at is not None or locked.expires_at <= timezone.now():
+                form.add_error(
+                    None,
+                    "El código ha expirado. Solicita uno nuevo.",
+                )
+            else:
+                user = locked.user
+                user.set_password(form.cleaned_data["new_password1"])
+                user.save(update_fields=["password"])
+                locked.used_at = timezone.now()
+                locked.save(update_fields=["used_at"])
+                request.session.pop(RECOVERY_SESSION_KEY, None)
+                request.session.pop(RECOVERY_VERIFIED_SESSION_KEY, None)
+                return redirect("login")
+
+    return render(
+        request,
+        "registration/password_reset_password.html",
+        {"form": form},
+    )
 
 
 def administrator_required(view):
@@ -39,7 +141,7 @@ def administrator_required(view):
 
 @administrator_required
 def access_home(request):
-    """Muestra grupos, cargos, funcionarios y cuentas."""
+    """Muestra grupos, cargos, empleados y cuentas."""
 
     return render(
         request,
@@ -106,24 +208,11 @@ def save_model_form(request, form, title, on_save=None):
 
 @administrator_required
 def group_form(request, pk=None):
-    """Crea o edita un grupo y sus permisos."""
-
-    group = (
-        get_object_or_404(Group, pk=pk)
-        if pk is not None
-        else None
-    )
-
-    form = GroupForm(
-        request.POST if request.method == "POST" else None,
-        instance=group,
-    )
-
-    return save_model_form(
-        request,
-        form,
-        "Editar grupo" if pk is not None else "Crear grupo",
-    )
+    """Envía la gestión de roles al espacio dedicado de Organización."""
+    url = reverse("organization:role_list")
+    if pk is not None:
+        return redirect(f"{url}?modal=edit&id={pk}")
+    return redirect(f"{url}?modal=create")
 
 
 @administrator_required
@@ -155,7 +244,7 @@ def position_form(request, pk=None):
 
 @administrator_required
 def employee_form(request, pk=None):
-    """Crea o edita un funcionario y sincroniza su delegación."""
+    """Crea o edita un empleado y sincroniza su delegación."""
 
     employee = (
         get_object_or_404(
@@ -175,53 +264,37 @@ def employee_form(request, pk=None):
     return save_model_form(
         request,
         form,
-        "Editar funcionario" if pk is not None else "Crear funcionario",
+        "Editar empleado" if pk is not None else "Crear empleado",
         on_save=sync_employee,
     )
 
 
+
 @administrator_required
 def account_create(request):
-    """Crea una cuenta y asigna los grupos elegidos."""
+    """Crea una cuenta heredando los roles del empleado."""
 
     form = AccountCreateForm(
-        request.POST if request.method == "POST" else None
+        request.POST if request.method == "POST" else None,
+        request.FILES if request.method == "POST" else None,
     )
 
     if request.method == "POST" and form.is_valid():
         try:
-            with transaction.atomic():
-                user = form.save(commit=False)
-
-                # No permite crear superusuarios ni acceso al panel admin.
-                user.is_staff = False
-                user.is_superuser = False
-                user.save()
-
-                user.groups.set(form.cleaned_data["groups"])
-
-                employee = form.cleaned_data["employee"]
-
-                profile = UserProfile.objects.create(
-                    user=user,
-                    employee=employee,
-                    employee_code=form.cleaned_data["employee_code"],
-                    delegation=employee.delegation,
-                )
-
-                sync_profile(profile)
+            create_user_account(form)
 
         except IntegrityError:
             form.add_error(
                 None,
-                "No se pudo crear la cuenta. El usuario, "
-                "el código o el funcionario podrían estar "
-                "registrados."
+                "No se pudo crear la cuenta. "
+                "El usuario, código o empleado "
+                "podría estar registrado."
             )
+
         else:
             messages.success(
                 request,
-                "Cuenta creada con los grupos seleccionados."
+                "Cuenta creada correctamente."
             )
             return redirect("accounts:access_home")
 
@@ -235,6 +308,7 @@ def account_create(request):
     )
 
 
+
 @administrator_required
 def account_edit(request, pk):
     """Edita una cuenta de trabajador y sus grupos."""
@@ -243,10 +317,13 @@ def account_edit(request, pk):
         get_user_model(),
         pk=pk,
         is_superuser=False,
+        profile__isnull=False,
+        profile__deleted_at__isnull=True,
     )
 
     form = AccountEditForm(
         request.POST if request.method == "POST" else None,
+        request.FILES if request.method == "POST" else None,
         instance=user,
     )
 
@@ -257,9 +334,15 @@ def account_edit(request, pk):
     )
 
 
+def sync_profile_access(profile):
+    sync_profile(profile)
+    if profile.employee_id:
+        sync_employee(profile.employee)
+
+
 @administrator_required
 def profile_link(request, pk):
-    """Vincula un perfil existente con un funcionario."""
+    """Vincula un perfil existente con un empleado."""
 
     profile = get_object_or_404(
         UserProfile,
@@ -277,5 +360,5 @@ def profile_link(request, pk):
         request,
         form,
         f"Vincular cuenta: {profile.user.username}",
-        on_save=sync_profile,
+        on_save=sync_profile_access,
     )

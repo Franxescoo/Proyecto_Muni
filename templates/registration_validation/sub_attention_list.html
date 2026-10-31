@@ -1,0 +1,773 @@
+
+{% extends "registration_validation/base.html" %}
+
+{% block titulo %}Sub Atención | Registro y validación{% endblock %}
+
+
+{% block contenido %}
+
+<div class="registration-shell">
+
+    <!-- ======================================
+         ENCABEZADO
+         ====================================== -->
+
+    <section class="registration-hero mb-4">
+
+        <div class="d-flex flex-column flex-md-row
+                    justify-content-between align-items-md-center gap-3">
+
+            <div>
+                <h1 class="fw-bold mb-2">
+                    <i class="bi bi-diagram-3 me-2"></i>
+                    Sub Atención
+                </h1>
+
+                <p class="mb-0">
+                    Administra las subatenciones y su relación
+                    con los tipos de atención registrados.
+                </p>
+            </div>
+
+
+
+        </div>
+
+    </section>
+
+
+    <!-- ======================================
+         INDICADORES
+         ====================================== -->
+
+    <div class="row g-3 mb-4">
+
+        <div class="col-12 col-md-4">
+            <div class="section-card metric h-100">
+
+                <div class="label">
+                    Total de subatenciones
+                </div>
+
+                <div class="value">
+                    {{ total_sub_attentions }}
+                </div>
+
+            </div>
+        </div>
+
+        <div class="col-12 col-md-4">
+            <div class="section-card metric h-100">
+
+                <div class="label">
+                    Subatenciones activas
+                </div>
+
+                <div class="value text-success">
+                    {{ active_sub_attentions }}
+                </div>
+
+            </div>
+        </div>
+
+        <div class="col-12 col-md-4">
+            <div class="section-card metric h-100">
+
+                <div class="label">
+                    Subatenciones inactivas
+                </div>
+
+                <div class="value">
+                    {{ inactive_sub_attentions }}
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+
+
+    <!-- ======================================
+         LISTADO Y FILTROS
+         ====================================== -->
+
+    <section class="section-card p-3 p-md-4 sgr-catalog">
+
+        <div class="catalog-toolbar">
+
+            <div>
+                <h2 class="h5 fw-bold mb-1">
+                    Listado de subatenciones
+                </h2>
+
+                <p class="text-muted small mb-0">
+                    Consulta, busca y administra los registros.
+                </p>
+            </div>
+
+            <div class="catalog-toolbar-actions">
+                {% if perms.registration_validation.add_subattention %}<a href="{% url 'registration:sub_attention_create' %}" class="btn btn-success"><i class="bi bi-plus-lg me-1"></i>Crear subatención</a>{% endif %}
+                <a href="{% url 'registration:sub_attention_export' %}?{{ request.GET.urlencode }}" class="btn btn-outline-secondary"><i class="bi bi-file-earmark-excel me-1"></i>Exportar Excel</a>
+            </div>
+        </div>
+
+
+        <!-- Búsqueda y estado -->
+
+        <form method="get"
+              action="{% url 'registration:sub_attention_list' %}"
+              class="row g-3 align-items-end catalog-filters">
+
+            <div class="col-12 col-lg-3">
+
+                <label for="searchSubAttention"
+                       class="filter-label">
+                    Buscar subatención
+                </label>
+
+                <input
+                    type="search"
+                    id="searchSubAttention"
+                    name="q"
+                    class="form-control"
+                    value="{{ query }}"
+                    placeholder="Buscar por código, nombre o tipo de atención"
+                >
+
+            </div>
+
+            <div class="col-12 col-md-4 col-lg-3">
+                <label for="sub-attention-type" class="filter-label">Tipo de atención</label>
+                <select id="sub-attention-type" name="attention_type" class="form-select">
+                    <option value="">Todos los tipos</option>
+                    {% for type_option in attention_type_options %}<option value="{{ type_option.pk }}" {% if selected_type == type_option.pk|stringformat:"s" %}selected{% endif %}>{{ type_option.name }}</option>{% endfor %}
+                </select>
+            </div>
+
+            <div class="col-12 col-md-5 col-lg-3">
+
+                <label for="filterSubAttentionStatus"
+                       class="filter-label">
+                    Estado
+                </label>
+
+                <select
+                    id="filterSubAttentionStatus"
+                    name="status"
+                    class="form-select"
+                >
+
+                    <option value="">
+                        Todos
+                    </option>
+
+                    <option value="active"
+                        {% if selected_status == "active" %}selected{% endif %}>
+                        Activo
+                    </option>
+
+                    <option value="inactive"
+                        {% if selected_status == "inactive" %}selected{% endif %}>
+                        Inactivo
+                    </option>
+
+                </select>
+
+            </div>
+
+            <div class="col-12 col-md-7 col-lg-3">
+
+                <div class="d-flex gap-2">
+
+                    <button
+                        type="submit"
+                        class="btn btn-dark flex-fill"
+                    >
+                        <i class="bi bi-funnel me-1"></i>
+                        Filtrar
+                    </button>
+
+                    <a
+                        href="{% url 'registration:sub_attention_list' %}"
+                        class="btn btn-outline-secondary"
+                        title="Limpiar filtros"
+                        aria-label="Limpiar filtros"
+                    >
+                        Limpiar
+                    </a>
+
+                </div>
+
+            </div>
+
+        </form>
+
+
+        {% if not open_modal %}
+            {% include "shared/catalog_page_size.html" with page_size_url="registration:set_page_size" page_size_id="subatenciones" %}
+        {% endif %}
+
+        <!-- ======================================
+             TABLA DE SUBATENCIONES
+             ====================================== -->
+
+        <div class="table-responsive">
+
+            <table class="table table-hover align-middle mb-0">
+
+                <thead class="table-light">
+                    <tr>
+
+                        <th scope="col">
+                            Código
+                        </th>
+
+                        <th scope="col">
+                            Nombre
+                        </th>
+
+                        <th scope="col">
+                            Tipo de atención
+                        </th>
+
+                        <th scope="col">
+                            Estado
+                        </th>
+
+                        <th scope="col" class="text-end">
+                            Acciones
+                        </th>
+
+                    </tr>
+                </thead>
+
+                <tbody>
+
+                    {% for sub_attention in sub_attentions %}
+
+                    <tr>
+
+                        <!-- Código -->
+
+                        <td>
+                            <span class="fw-semibold">
+                                {{ sub_attention.code }}
+                            </span>
+                        </td>
+
+
+                        <!-- Nombre -->
+
+                        <td>
+                            {{ sub_attention.name }}
+                        </td>
+
+
+                        <!-- Tipo de atención relacionado -->
+
+                        <td>
+
+                            <span class="fw-medium">
+                                {{ sub_attention.attention_type.name }}
+                            </span>
+
+                            <div class="small text-muted">
+                                {{ sub_attention.attention_type.code }}
+                            </div>
+
+                        </td>
+
+
+                        <!-- Estado -->
+
+                        <td>
+
+                            {% if sub_attention.status %}
+
+                                <span class="status status-green">
+                                    <i class="bi bi-check-circle me-1"></i>
+                                    Activo
+                                </span>
+
+                            {% else %}
+
+                                <span class="status status-muted">
+                                    <i class="bi bi-dash-circle me-1"></i>
+                                    Inactivo
+                                </span>
+
+                            {% endif %}
+
+                        </td>
+
+
+                        <!-- Acciones -->
+
+                        <td>
+
+                            <div class="d-flex justify-content-end
+                                        flex-wrap gap-2">
+
+                                {% if perms.registration_validation.change_subattention %}
+
+                                <a
+                                    href="{% url 'registration:sub_attention_update' sub_attention.sub_attention_id %}"
+                                    class="btn btn-sm btn-light border"
+                                    title="Modificar subatención"
+                                >
+                                    <i class="bi bi-pencil-square"></i>
+                                    <span class="ms-1">
+                                        Modificar
+                                    </span>
+                                </a>
+
+                                {% endif %}
+
+
+                                {% if perms.registration_validation.delete_subattention %}
+
+                                <form
+                                    method="post"
+                                    action="{% url 'registration:sub_attention_delete' sub_attention.sub_attention_id %}"
+                                    class="js-delete-sub-attention m-0"
+                                >
+
+                                    {% csrf_token %}
+
+                                    <button
+                                        type="submit"
+                                        class="btn btn-sm btn-outline-danger"
+                                        title="Eliminar subatención"
+                                        data-name="{{ sub_attention.name }}"
+                                    >
+                                        <i class="bi bi-trash"></i>
+                                        <span class="ms-1">
+                                            Eliminar
+                                        </span>
+                                    </button>
+
+                                </form>
+
+                                {% endif %}
+
+                                {% if not perms.registration_validation.change_subattention and not perms.registration_validation.delete_subattention %}
+
+                                <span class="text-muted small">
+                                    Solo lectura
+                                </span>
+
+                                {% endif %}
+
+                            </div>
+
+                        </td>
+
+                    </tr>
+
+                    {% empty %}
+
+                    <tr>
+                        <td colspan="5" class="text-center py-5">
+
+                            <i class="bi bi-inbox fs-2 text-muted"></i>
+
+                            <p class="fw-semibold mb-1 mt-2">
+                                No se encontraron subatenciones
+                            </p>
+
+                            <p class="text-muted small mb-0">
+                                Prueba con otros filtros o registra
+                                una nueva subatención.
+                            </p>
+
+                        </td>
+                    </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+
+        {% if not open_modal %}
+            {% include "shared/catalog_pagination.html" with page_data=page_obj page_querystring=page_querystring item_label="subatenciones" %}
+        {% endif %}
+
+    </section>
+
+</div>
+
+
+<!-- ======================================
+     MODAL PARA CREAR Y MODIFICAR
+     Se incluye aquí para evitar dependencias
+     de archivos adicionales.
+     ====================================== -->
+
+{% if open_modal %}
+
+<div
+    class="modal fade sgr-upgraded-modal"
+    id="subAttentionModal"
+    tabindex="-1"
+    aria-labelledby="subAttentionModalLabel"
+    aria-hidden="true"
+    data-bs-backdrop="static"
+>
+
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+
+        <div class="modal-content">
+
+            <form method="post" novalidate>
+
+                {% csrf_token %}
+
+                <!-- Encabezado -->
+
+                <div class="modal-header">
+
+                    <div class="sgr-modal-title-block">
+                        <div class="sgr-modal-eyebrow"><i class="bi bi-shield-check me-2" aria-hidden="true"></i>REGISTRO Y VALIDACIÓN</div>
+                        <h2
+                        class="modal-title fs-5 fw-bold"
+                        id="subAttentionModalLabel"
+                    >
+
+                        {% if form.instance.pk %}
+
+                            <i class="bi bi-pencil-square me-2"></i>
+                            Modificar subatención
+
+                        {% else %}
+
+                            <i class="bi bi-plus-circle me-2"></i>
+                            Agregar subatención
+
+                        {% endif %}
+
+                    </h2>
+                        <p class="sgr-modal-subtitle mb-0">Consulta o completa la información del registro de forma segura.</p>
+                    </div>
+
+                    <a
+                        href="{% url 'registration:sub_attention_list' %}"
+                        class="btn-close"
+                        aria-label="Cerrar"
+                    ></a>
+
+                </div>
+
+
+                <!-- Campos del formulario -->
+
+                <div class="modal-body">
+                    <div class="sgr-form-section-title"><span class="sgr-section-icon"><i class="bi bi-card-list" aria-hidden="true"></i></span><span>Datos de la subatención</span></div>
+
+                    <p class="text-muted small mb-4">
+                        Completa los campos para registrar
+                        o modificar una subatención.
+                    </p>
+
+
+                    <!-- Errores generales -->
+
+                    {% if form.non_field_errors %}
+
+                    <div class="alert alert-danger" role="alert">
+
+                        {% for error in form.non_field_errors %}
+                            <div>{{ error }}</div>
+                        {% endfor %}
+
+                    </div>
+
+                    {% endif %}
+
+
+                    <div class="row g-3">
+
+                        <!-- Código -->
+
+                        <div class="col-12 col-md-6">
+
+                            <label
+                                for="{{ form.code.id_for_label }}"
+                                class="form-label fw-semibold"
+                            >
+                                Código
+                                <span class="text-danger">*</span>
+                            </label>
+
+                            {{ form.code }}
+
+                            {% for error in form.code.errors %}
+                                <div class="text-danger small mt-1">
+                                    {{ error }}
+                                </div>
+                            {% endfor %}
+
+                        </div>
+
+
+                        <!-- Estado -->
+
+                        <div class="col-12 col-md-6">
+
+                            <label
+                                for="{{ form.status.id_for_label }}"
+                                class="form-label fw-semibold"
+                            >
+                                Estado
+                                <span class="text-danger">*</span>
+                            </label>
+
+                            {{ form.status }}
+
+                            {% for error in form.status.errors %}
+                                <div class="text-danger small mt-1">
+                                    {{ error }}
+                                </div>
+                            {% endfor %}
+
+                        </div>
+
+
+                        <!-- Nombre -->
+
+                        <div class="col-12">
+
+                            <label
+                                for="{{ form.name.id_for_label }}"
+                                class="form-label fw-semibold"
+                            >
+                                Nombre de la subatención
+                                <span class="text-danger">*</span>
+                            </label>
+
+                            {{ form.name }}
+
+                            {% for error in form.name.errors %}
+                                <div class="text-danger small mt-1">
+                                    {{ error }}
+                                </div>
+                            {% endfor %}
+
+                        </div>
+
+
+                        <!-- Tipo de atención -->
+
+                        <div class="col-12">
+
+                            <label
+                                for="{{ form.attention_type.id_for_label }}"
+                                class="form-label fw-semibold"
+                            >
+                                Tipo de atención asociado
+                                <span class="text-danger">*</span>
+                            </label>
+
+                            {{ form.attention_type }}
+
+                            {% if form.attention_type.help_text %}
+
+                                <div class="form-text">
+                                    {{ form.attention_type.help_text }}
+                                </div>
+
+                            {% endif %}
+
+                            {% for error in form.attention_type.errors %}
+                                <div class="text-danger small mt-1">
+                                    {{ error }}
+                                </div>
+                            {% endfor %}
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="small text-muted mt-4">
+
+                        <span class="text-danger">*</span>
+                        Campos obligatorios.
+
+                    </div>
+
+                </div>
+
+
+                <!-- Botones -->
+
+                <div class="modal-footer">
+
+                    <a
+                        href="{% url 'registration:sub_attention_list' %}"
+                        class="btn btn-outline-secondary"
+                    >
+                        Cancelar
+                    </a>
+
+                    <button
+                        type="submit"
+                        class="btn btn-danger"
+                    >
+
+                        <i class="bi bi-check-lg me-1"></i>
+
+                        {% if form.instance.pk %}
+                            Guardar cambios
+                        {% else %}
+                            Guardar subatención
+                        {% endif %}
+
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endif %}
+
+{% endblock %}
+
+
+{% block scripts %}
+
+{{ block.super }}
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+
+        // ========================================
+        // ABRIR MODAL DE CREACIÓN O MODIFICACIÓN
+        // ========================================
+
+        {% if open_modal %}
+
+        const modalElement =
+            document.getElementById("subAttentionModal");
+
+        if (modalElement && window.bootstrap) {
+
+            const modal =
+                bootstrap.Modal.getOrCreateInstance(
+                    modalElement
+                );
+
+            modal.show();
+        }
+
+        {% endif %}
+
+
+        // ========================================
+        // CONFIRMAR ELIMINACIÓN
+        // ========================================
+
+        const deleteForms =
+            document.querySelectorAll(
+                ".js-delete-sub-attention"
+            );
+
+        deleteForms.forEach(function (form) {
+
+            form.addEventListener(
+                "submit",
+                function (event) {
+
+                    event.preventDefault();
+
+                    const button =
+                        form.querySelector(
+                            "button[type='submit']"
+                        );
+
+                    const name = button
+                        ? button.dataset.name
+                        : "esta subatención";
+
+                    if (!window.Swal) {
+
+                        if (window.confirm(
+                            "¿Eliminar la subatención " + name + "?"
+                        )) {
+                            form.submit();
+                        }
+
+                        return;
+                    }
+
+                    Swal.fire({
+                        title: "¿Eliminar subatención?",
+                        text:
+                            "¿Estás seguro de eliminar '" +
+                            name +
+                            "'? Esta acción la retirará del listado.",
+                        icon: "warning",
+                        showCancelButton: true,
+                        confirmButtonText: "Sí, eliminar",
+                        cancelButtonText: "Cancelar",
+                        confirmButtonColor: "#a60a17",
+                        reverseButtons: true
+                    }).then(function (result) {
+
+                        if (result.isConfirmed) {
+                            form.submit();
+                        }
+
+                    });
+
+                }
+            );
+
+        });
+
+
+        // ========================================
+        // MENSAJES DE RESULTADO
+        // ========================================
+
+        if (window.Swal) {
+
+            const alerts =
+                document.querySelectorAll("main > .alert");
+
+            alerts.forEach(function (alert) {
+
+                const isError =
+                    alert.classList.contains("alert-danger")
+                    || alert.classList.contains("alert-error");
+
+                const message = alert.textContent.trim();
+
+                alert.remove();
+
+                Swal.fire({
+                    icon: isError ? "error" : "success",
+                    title: isError ? "Atención" : "Operación realizada",
+                    text: message,
+                    confirmButtonColor: "#a60a17"
+                });
+
+            });
+
+        }
+
+    });
+</script>
+
+{% endblock %}

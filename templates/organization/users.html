@@ -1,0 +1,240 @@
+
+{% extends "organization/base.html" %}
+
+{% block organization_content %}
+
+<!-- TARJETAS DE RESUMEN -->
+<div class="row g-3 mb-4">
+
+    <div class="col-12 col-md-4">
+        <div class="section-card metric h-100">
+            <div class="value">{{ total_users }}</div>
+            <div class="label">Total de usuarios</div>
+        </div>
+    </div>
+
+
+
+    <div class="col-12 col-md-4">
+        <div class="section-card metric h-100">
+            <div class="value text-success">{{ active_users }}</div>
+            <div class="label">Usuarios activos</div>
+        </div>
+    </div>
+
+    <div class="col-12 col-md-4">
+        <div class="section-card metric h-100">
+            <div class="value text-secondary">{{ inactive_users }}</div>
+            <div class="label">Usuarios inactivos</div>
+        </div>
+    </div>
+
+</div>
+
+<!-- LISTADO DE USUARIOS -->
+<section class="section-card p-3 p-lg-4 sgr-catalog">
+    <div class="catalog-toolbar">
+        <div>
+            <h2 class="h5 mb-1 fw-bold">Administración de usuarios</h2>
+            <p class="text-muted small mb-0">Cuentas registradas en el sistema y sus roles asignados.</p>
+        </div>
+        <div class="catalog-toolbar-actions">
+            {% if perms.accounts.add_userprofile %}<a href="?modal=create" class="btn btn-success"><i class="bi bi-plus-lg me-1"></i>Crear usuario</a>{% endif %}
+            <a href="{% url 'organization:user_export' %}?{{ request.GET.urlencode }}" class="btn btn-outline-secondary"><i class="bi bi-file-earmark-excel me-1"></i>Exportar Excel</a>
+        </div>
+    </div>
+    <form class="row g-3 align-items-end catalog-filters" method="get">
+        <div class="col-12 col-lg-4">
+            <label class="filter-label" for="user-search">Buscar usuario</label>
+            <input id="user-search" name="q" value="{{ search }}" class="form-control" placeholder="Usuario, correo o empleado" type="search">
+        </div>
+        <div class="col-12 col-md-4 col-lg-3">
+            <label class="filter-label" for="user-delegation">Delegación autorizada</label>
+            <select id="user-delegation" name="delegation" class="form-select">
+                <option value="">Todas las delegaciones</option>
+                {% for delegation in delegation_options %}<option value="{{ delegation.pk }}" {% if selected_delegation == delegation.pk|stringformat:"s" %}selected{% endif %}>{{ delegation.name }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="col-12 col-md-4 col-lg-2">
+            <label class="filter-label" for="user-role">Rol</label>
+            <select id="user-role" name="role" class="form-select">
+                <option value="">Todos los roles</option>
+                {% for role in role_options %}<option value="{{ role.pk }}" {% if selected_role == role.pk|stringformat:"s" %}selected{% endif %}>{{ role.name }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="col-12 col-md-4 col-lg-3">
+            <label class="filter-label" for="user-status">Estado</label>
+            <select id="user-status" name="status" class="form-select">
+                <option value="">Todos los estados</option>
+                <option value="active" {% if selected_status == "active" %}selected{% endif %}>Activo</option>
+                <option value="inactive" {% if selected_status == "inactive" %}selected{% endif %}>Inactivo</option>
+            </select>
+        </div>
+        <div class="col-6 col-md-3"><button class="btn btn-dark w-100" type="submit"><i class="bi bi-funnel me-1"></i>Filtrar</button></div>
+        <div class="col-6 col-md-3"><a class="btn btn-outline-secondary w-100" href="{% url 'organization:user_list' %}">Limpiar</a></div>
+    </form>
+    {% include "shared/catalog_page_size.html" with page_size_url="organization:set_page_size" page_size_id="usuarios" %}
+
+    <div class="table-responsive">
+
+        <table class="table table-hover align-middle mb-0">
+
+            <thead>
+                <tr>
+                    <th>Usuario</th>
+                    <th>Correo</th>
+                    <th>Empleado</th>
+                    <th>Código</th>
+                    <th>Delegaciones autorizadas</th>
+                    <th>Roles asignados</th>
+                    <th>Estado</th>
+                    <th class="text-end">Acciones</th>
+                </tr>
+            </thead>
+
+            <tbody>
+
+                {% for account in users %}
+
+                <tr>
+
+                    <td class="fw-semibold">
+                        {% if account.profile.profile_photo %}
+                            <img src="{{ account.profile.profile_photo.url }}"
+                                 alt="Foto de {{ account.username }}"
+                                 class="rounded-circle me-2"
+                                 width="40"
+                                 height="40"
+                                 style="object-fit: cover;">
+                        {% else %}
+                            <i class="bi bi-person-circle text-secondary me-2" aria-hidden="true"></i>
+                        {% endif %}
+                        {{ account.username }}
+                    </td>
+
+                    <td>
+                        {{ account.email|default:"Sin correo" }}
+                    </td>
+
+                    <td>
+                        {{ account.profile.employee.name|default:"Sin empleado" }}
+                    </td>
+
+                    <td>
+                        {{ account.profile.employee_code|default:"—" }}
+                    </td>
+
+                    <td>
+                        {% for delegation in account.profile.authorized_delegations.all %}
+                            <span class="organization-role">{{ delegation.name }}</span>{% if not forloop.last %}, {% endif %}
+                        {% empty %}
+                            {{ account.profile.delegation.name|default:"Sin delegación" }}
+                        {% endfor %}
+                    </td>
+
+                    <td>
+                        {% for role in account.groups.all %}
+                            <span class="organization-role">
+                                {{ role.name }}
+                            </span>
+                        {% empty %}
+                            <span class="text-muted small">
+                                Sin roles
+                            </span>
+                        {% endfor %}
+                    </td>
+
+                    <td>
+                        {% if account.is_active %}
+                            <span class="organization-status organization-status-active">
+                                Activo
+                            </span>
+                        {% else %}
+                            <span class="organization-status">
+                                Inactivo
+                            </span>
+                        {% endif %}
+                    </td>
+                                        
+                    
+                    <td class="text-end">
+                        <div class="d-flex justify-content-end gap-1">
+                                <a class="btn btn-sm btn-outline-info" href="?modal=view&amp;id={{ account.pk }}" title="Ver detalles" aria-label="Ver account {{ account.username }}"><i class="bi bi-eye me-1" aria-hidden="true"></i>Ver</a>
+
+                            <!-- MODIFICAR USUARIO -->
+                            {% if perms.accounts.change_userprofile %}<a
+                                href="?modal=edit&amp;id={{ account.pk }}"
+                                class="btn btn-sm btn-light border"
+                                title="Modificar usuario"
+                                aria-label="Modificar {{ account.username }}"
+                            >
+                                <i class="bi bi-pencil-square me-1" aria-hidden="true"></i>Modificar
+                            </a>
+
+                            {% endif %}
+                            <!-- ELIMINAR USUARIO -->
+                            {% if perms.accounts.delete_userprofile %}
+                            <form
+                                method="post"
+                                action="{% url 'organization:user_list' %}"
+                                data-organization-delete
+                                data-delete-label="al usuario {{ account.username }}"
+                                data-delete-detail="Se eliminará lógicamente la cuenta de {{ account.username }}. El usuario no podrá iniciar sesión y dejará de aparecer en el listado. Sus datos históricos se conservarán."
+                            >
+                                {% csrf_token %}
+
+                                <input
+                                    type="hidden"
+                                    name="action"
+                                    value="delete"
+                                >
+
+                                <input
+                                    type="hidden"
+                                    name="object_id"
+                                    value="{{ account.pk }}"
+                                >
+
+                                <button
+                                    type="submit"
+                                    class="btn btn-sm btn-outline-danger"
+                                    title="Eliminar usuario"
+                                    aria-label="Eliminar {{ account.username }}"
+                                >
+                                    <i class="bi bi-trash3 me-1" aria-hidden="true"></i>Eliminar
+                                </button>
+
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+
+
+
+                </tr>
+
+                {% empty %}
+
+                <tr>
+                    <td colspan="8" class="text-center py-5">
+                        <i class="bi bi-people fs-2 text-muted d-block mb-2"></i>
+                        <span class="text-muted">
+                            No hay usuarios registrados.
+                        </span>
+                    </td>
+                </tr>
+
+                {% endfor %}
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+    {% include "shared/catalog_pagination.html" with page_data=users page_querystring=querystring item_label="usuarios" %}
+</section>
+
+{% include "organization/_record_modal.html" with form_route="organization:user_list" %}
+
+{% endblock %}

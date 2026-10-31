@@ -1,0 +1,59 @@
+{% if form %}
+<div 
+    class="modal fade sgr-upgraded-modal" 
+    id="organization-record-modal" 
+    data-has-errors="{% if form.errors %}true{% else %}false{% endif %}" 
+    tabindex="-1" 
+    aria-labelledby="organization-record-modal-title" 
+    aria-hidden="true"
+>
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable organization-form-dialog">
+        <div class="modal-content border-0 shadow sgr-record-modal {% if modal_action == 'view' %}sgr-view-modal{% endif %}">
+            <form 
+                method="post" 
+                enctype="multipart/form-data" 
+                action="{% url form_route %}" 
+                data-action="{{ modal_action }}" 
+                data-edit-confirmation="{{ edit_confirmation }}" 
+                novalidate
+            >
+                {% csrf_token %}
+                <input type="hidden" name="action" value="{{ modal_action }}">
+                {% if object_id %}
+                    <input type="hidden" name="object_id" value="{{ object_id }}">
+                {% endif %}
+
+                <!-- Modal Header -->
+                <div class="modal-header sgr-record-header align-items-start">
+                    <div>
+                        <div class="small text-uppercase fw-semibold mb-1 opacity-75"><i class="bi {% if modal_action == 'view' %}bi-eye{% elif modal_action == 'edit' %}bi-pencil-square{% else %}bi-plus-circle{% endif %} me-2"></i>Organización</div>
+                        <h2 class="modal-title fs-5 fw-bold" id="organization-record-modal-title">
+                            {{ modal_title }}
+                        </h2>
+                        <p class="small mb-0 opacity-75">{% if modal_action == 'view' %}Consulta la información sin realizar cambios.{% elif modal_action == 'edit' %}Actualiza los datos y conserva la información registrada.{% else %}Completa los campos para registrar una nueva información.{% endif %}</p>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+
+                <!-- Modal Body -->
+                <div class="modal-body sgr-record-body {% if modal_action == 'view' %}sgr-detail-form{% endif %}">
+                    <div class="sgr-form-section-title"><span class="sgr-section-icon"><i class="bi bi-card-list" aria-hidden="true"></i></span><span>{% if modal_action == 'view' %}Detalle del registro{% else %}Información general{% endif %}</span></div>
+                    {% include "organization/_form_fields.html" %}
+                </div>
+
+                <!-- Modal Footer -->
+                <div class="modal-footer border-top-0 pt-0">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                        {% if modal_action == 'view' %}<i class="bi bi-x-lg me-1"></i>Cerrar{% else %}Cancelar{% endif %}
+                    </button>
+                    {% if modal_action != 'view' %}
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-check2-circle me-1"></i>{% if modal_action == "edit" %}Guardar cambios{% else %}Guardar{% endif %}
+                    </button>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}

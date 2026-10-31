@@ -96,20 +96,55 @@ def _audit_employee(instance):
     return None
 
 
+
 def _record_audit(instance, event):
     employee = _audit_employee(instance)
+
     if employee is None:
         return
+
+    previous_value = None
+    new_value = None
+
+    if isinstance(instance, Goal):
+        campos = (
+            "period_id",
+            "employee_id",
+            "position_id",
+            "measurement_item_id",
+            "item",
+            "objective_value",
+            "required_evidence_count",
+            "unit",
+            "weight",
+        )
+
+        previous_value = getattr(
+            instance, "_audit_before", None
+        )
+
+        new_value = {
+            "datos": {
+                campo: str(getattr(instance, campo))
+                for campo in campos
+            },
+            "editado_por": getattr(
+                instance, "_audit_actor", None
+            ),
+        }
+
+    elif isinstance(instance, CommitmentComment):
+        new_value = {"text": instance.text}
 
     Audit.objects.create(
         user=employee,
         event=event,
         entity=instance.__class__.__name__,
         object_identifier=str(instance.pk),
-        new_value={"text": instance.text}
-        if isinstance(instance, CommitmentComment)
-        else None,
+        previous_value=previous_value,
+        new_value=new_value,
     )
+
 
 
 @receiver(post_save, sender=Commitment)
@@ -133,3 +168,186 @@ def tracked_object_saved(sender, instance, created, **kwargs):
 @receiver(post_delete, sender=Validation)
 def tracked_object_deleted(sender, instance, **kwargs):
     _record_audit(instance, f"Deleted {sender.__name__}")
+
+
+# AUDITORÍA GENERAL DEL SGR
+
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
+from django.db.models.signals import pre_save
+
+from accounts.models import UserProfile
+from organization.models import (
+    Delegation,
+    Employee,
+    PositionFunction,
+    OrganizationRole,
+)
+from planning_measurements.models import MeasurementItem
+from registration_validation.models import (
+    ActivityType,
+    AttentionType,
+    Service,
+    SubAttention,
+    AttentionEntry,
+)
+from .audit_context import get_audit_user
+
+
+# Modelos que necesitan auditoría general.
+# Los que ya tienen señales específicas quedan fuera.
+GENERAL_AUDIT_MODELS = (
+    get_user_model(),
+    Group,
+    UserProfile,
+    Delegation,
+    Employee,
+    PositionFunction,
+    OrganizationRole,
+    Period,
+    MeasurementItem,
+    ActivityType,
+    AttentionType,
+    Service,
+    SubAttention,
+    AttentionEntry,
+)
+
+# No almacenar contraseñas ni determinados datos sensibles.
+AUDIT_EXCLUDED_FIELDS = {
+    "created_at",
+    "updated_at",
+    "password",
+    "last_login",
+    "email",
+    "phone",
+    "profile_photo",
+    "employee_code",
+}
+
+
+def _general_audit_actor():
+    user = get_audit_user()
+
+    if user is None:
+        return None
+
+    profile = getattr(user, "profile", None)
+    return getattr(profile, "employee", None)
+
+
+def _general_audit_values(obj):
+    values = {}
+
+    for field in obj._meta.concrete_fields:
+        if field.primary_key or field.name in AUDIT_EXCLUDED_FIELDS:
+            continue
+
+        value = getattr(obj, field.attname)
+        values[field.attname] = (
+            str(value) if value is not None else None
+        )
+
+    return values
+
+
+@receiver(pre_save)
+def general_audit_before(sender, instance, **kwargs):
+    if sender not in GENERAL_AUDIT_MODELS:
+        return
+
+    if _general_audit_actor() is None:
+        return
+
+    previous = (
+        sender.objects.filter(pk=instance.pk).first()
+        if instance.pk else None
+    )
+
+    instance._general_audit_previous = (
+        _general_audit_values(previous)
+        if previous else None
+    )
+
+
+@receiver(post_save)
+def general_audit_after(sender, instance, created, **kwargs):
+    if sender not in GENERAL_AUDIT_MODELS:
+        return
+
+    employee = _general_audit_actor()
+    if employee is None:
+        return
+
+    previous = getattr(
+        instance, "_general_audit_previous", None
+    )
+
+    current = _general_audit_values(
+        sender.objects.get(pk=instance.pk)
+    )
+
+    if created:
+        before = None
+        after = current
+    else:
+        if previous is None:
+            return
+
+        before = {
+            key: value
+            for key, value in previous.items()
+            if value != current[key]
+        }
+
+        after = {
+            key: current[key]
+            for key in before
+        }
+
+        if not before:
+            return
+
+    # La reapertura ya tiene su propio registro con motivo.
+    if (
+        sender is Period
+        and before == {"status": "Closed"}
+        and after == {"status": "Active"}
+    ):
+        return
+
+    Audit.objects.create(
+        user=employee,
+        event=(
+            f"{'Created' if created else 'Updated'} "
+            f"{sender.__name__}"
+        ),
+        entity=sender.__name__,
+        object_identifier=str(instance.pk),
+        previous_value=before,
+        new_value={
+            **after,
+            "editado_por": get_audit_user().get_username(),
+        },
+    )
+
+
+@receiver(post_delete)
+def general_audit_deleted(sender, instance, **kwargs):
+    if sender not in GENERAL_AUDIT_MODELS:
+        return
+
+    employee = _general_audit_actor()
+    if employee is None:
+        return
+
+    Audit.objects.create(
+        user=employee,
+        event=f"Deleted {sender.__name__}",
+        entity=sender.__name__,
+        object_identifier=str(instance.pk),
+        previous_value=_general_audit_values(instance),
+        new_value={
+            "editado_por": get_audit_user().get_username()
+        },
+    )

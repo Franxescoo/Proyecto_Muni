@@ -16,7 +16,7 @@
     </a>
     <a class="btn btn-primary"
        href="{% url 'accounts:employee_create' %}">
-        Crear funcionario
+        Crear empleado
     </a>
     <a class="btn btn-success"
        href="{% url 'accounts:account_create' %}">
@@ -52,7 +52,7 @@
     {% endfor %}
 </ul>
 
-<h4>Funcionarios</h4>
+<h4>Empleados</h4>
 <ul class="list-group mb-4">
     {% for employee in employees %}
     <li class="list-group-item d-flex justify-content-between">
@@ -64,7 +64,7 @@
         </a>
     </li>
     {% empty %}
-    <li class="list-group-item">No hay funcionarios.</li>
+    <li class="list-group-item">No hay empleados.</li>
     {% endfor %}
 </ul>
 
@@ -97,10 +97,10 @@
     <li class="list-group-item d-flex justify-content-between">
         <span>
             {{ profile.user.username }}
-            — {{ profile.employee|default:"Sin funcionario" }}
+            — {{ profile.employee|default:"Sin empleado" }}
         </span>
         <a href="{% url 'accounts:profile_link' profile.pk %}">
-            Vincular funcionario
+            Vincular empleado
         </a>
     </li>
     {% empty %}

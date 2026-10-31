@@ -21,6 +21,7 @@ class Period(BaseModel):
     class Meta:
         verbose_name = "Period"
         verbose_name_plural = "Periods"
+        permissions = [("delete_closed_period", "Puede archivar períodos cerrados sin historial")]
 
     class Status(models.TextChoices):
         ACTIVE = "Active", "Activo"
@@ -62,6 +63,17 @@ class Period(BaseModel):
         return f"Period {self.start_date} to {self.end_date}"
 
 
+class PeriodArchiveLog(models.Model):
+    period = models.ForeignKey("planning_measurements.Period", on_delete=models.PROTECT, related_name="archive_logs")
+    user = models.ForeignKey("auth.User", on_delete=models.PROTECT, related_name="period_archive_logs")
+    archived_at = models.DateTimeField(auto_now_add=True)
+    was_closed = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = "Registro de archivado de período"
+        verbose_name_plural = "Registros de archivado de períodos"
+
+
 class Goal(BaseModel):
     goal_id = models.BigAutoField(primary_key=True)
     period = models.ForeignKey(
@@ -81,6 +93,14 @@ class Goal(BaseModel):
         on_delete=models.PROTECT,
         related_name="goals",
         verbose_name="Position",
+    )
+    measurement_item = models.ForeignKey(
+        "planning_measurements.MeasurementItem",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="goals",
+        verbose_name="Ítem de medición",
     )
     item = models.CharField(max_length=150, verbose_name="Item")
     objective_value = models.DecimalField(
