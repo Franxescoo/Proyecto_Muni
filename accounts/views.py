@@ -275,7 +275,8 @@ def account_create(request):
     """Crea una cuenta heredando los roles del empleado."""
 
     form = AccountCreateForm(
-        request.POST if request.method == "POST" else None
+        request.POST if request.method == "POST" else None,
+        request.FILES if request.method == "POST" else None,
     )
 
     if request.method == "POST" and form.is_valid():
@@ -322,6 +323,7 @@ def account_edit(request, pk):
 
     form = AccountEditForm(
         request.POST if request.method == "POST" else None,
+        request.FILES if request.method == "POST" else None,
         instance=user,
         actor=request.user,
     )

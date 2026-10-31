@@ -157,7 +157,7 @@ def run_bulk_delete(request, queryset):
         if queryset.model is Period:
             for period in selected:
                 if not may_archive_period(request.user, period):
-                    raise PermissionDenied("Falta el permiso individual para archivar un período cerrado.")
+                    raise PermissionDenied("Falta el permiso especial para archivar un período cerrado.")
                 if period.goals.exists():
                     raise PermissionDenied(
                         "No se puede archivar este período: conserva metas o historial asociado."
@@ -177,11 +177,11 @@ def run_bulk_delete(request, queryset):
                     return
 
                 # Bloquear metas con actividades o indicadores.
-                if goal.activities.exists():
+                if goal.activities.exists() or goal.indicators.exists():
                     messages.error(
                         request,
                         f"No se puede eliminar la meta '{goal.item}' "
-                        "porque tiene actividades asociadas. "
+                        "porque tiene actividades o indicadores asociados. "
                         "No se eliminó ninguna meta."
                     )
                     return
@@ -1455,21 +1455,18 @@ def goal_delete(request, goal_id):
     )
 
     if goal.period.status == Period.Status.CLOSED:
-        messages.error(
-            request,
-            "No se puede eliminar esta meta porque pertenece "
-            "a un período cerrado."
+        raise PermissionDenied(
+            "No puedes eliminar metas de un período cerrado. "
+            "Primero debe realizarse una reapertura autorizada."
         )
-        return redirect("planning:goal_list")
 
 
-    # No bloqueamos por estado cerrado: ese es el cambio solicitado.
-    # Protegemos las referencias de otros módulos.
-    if goal.activities.exists():
+    # El estado cerrado ya fue bloqueado. Proteger las referencias.
+    if goal.activities.exists() or goal.indicators.exists():
         messages.error(
             request,
             "No se puede eliminar esta meta porque tiene "
-            "actividades asociadas."
+            "actividades o indicadores asociados."
         )
         return redirect("planning:goal_list")
 

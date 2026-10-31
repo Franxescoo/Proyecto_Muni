@@ -271,15 +271,15 @@ class OrganizationListTests(TestCase):
             },
         )
 
-    def test_role_catalog_is_not_limited_by_personal_permissions(self):
+    def test_role_catalog_respects_personal_permissions(self):
         manager = get_user_model().objects.create_user(
             username="role_manager_without_catalog_access",
             password="test-pass-123",
         )
         form = OrganizationRoleForm(actor=manager)
-        self.assertTrue(form.fields["permissions"].queryset.exists())
+        self.assertFalse(form.fields["permissions"].queryset.exists())
 
-    def test_editing_other_role_can_replace_permissions(self):
+    def test_editing_other_role_preserves_permissions_outside_actor_scope(self):
         manager = get_user_model().objects.create_user(
             username="scoped_role_manager",
             password="test-pass-123",
@@ -307,9 +307,10 @@ class OrganizationListTests(TestCase):
             group=group,
             actor=manager,
         )
-        self.assertTrue(
+        self.assertFalse(
             form.fields["permissions"].queryset.filter(pk=protected.pk).exists()
         )
+        self.assertIn(protected.pk, form._preserved_permission_ids)
 
     def test_assigned_role_cannot_be_modified_by_owner(self):
         manager = get_user_model().objects.create_user(

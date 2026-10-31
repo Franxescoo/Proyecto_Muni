@@ -99,6 +99,37 @@ class OrganizationRoleForm(BootstrapMixin, forms.Form):
         self._preserved_permission_ids = set()
 
         if self.actor is not None and not self.actor.is_superuser:
+            owned = self.actor.get_all_permissions()
+
+            if self.group:
+                self._preserved_permission_ids = {
+                    p.pk
+                    for p in self.group.permissions.select_related("content_type")
+                    if f"{p.content_type.app_label}.{p.codename}" not in owned
+                }
+
+            permitted = [
+                (name.split(".", 1)[0], name.split(".", 1)[1])
+                for name in owned
+            ]
+
+            from django.db.models import Q
+            from functools import reduce
+            from operator import or_
+
+            lookup = [
+                Q(content_type__app_label=app, codename=code)
+                for app, code in permitted
+            ]
+
+            self.fields["permissions"].queryset = (
+                self.fields["permissions"].queryset.filter(
+                    reduce(or_, lookup)
+                )
+                if lookup
+                else self.fields["permissions"].queryset.none()
+            )
+
             scopes = allowed_delegation_ids(
                 self.actor,
                 "organization.change_organizationrole"
@@ -120,7 +151,8 @@ class OrganizationRoleForm(BootstrapMixin, forms.Form):
                 )
 
                 self.fields["permissions"].help_text = (
-                    "Puedes seleccionar cualquier permiso funcional del catálogo."
+                    "Puedes modificar los permisos que posees. "
+                    "Los demás se conservarán sin cambios."
                 )
 
         self.apply_bootstrap()
@@ -166,7 +198,9 @@ class OrganizationRoleForm(BootstrapMixin, forms.Form):
                 p.pk for p in self.cleaned_data["permissions"]
             }
 
-            group.permissions.set(selected)
+            group.permissions.set(
+                selected | self._preserved_permission_ids
+            )
             role, _ = OrganizationRole.objects.update_or_create(
                 group=group,
                 defaults={"delegation": self.cleaned_data["delegations"].first()},

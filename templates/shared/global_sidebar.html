@@ -1,0 +1,400 @@
+{% load static %}
+
+<style>
+    .global-sidebar {
+        position: fixed;
+        top: 74px;
+        left: 0;
+        bottom: 0;
+        z-index: 1040;
+        width: 285px;
+        background: #fff;
+        border: 0;
+        border-right: 1px solid #dfe3e8;
+        border-radius: 0;
+        box-shadow: 0 18px 36px rgba(24, 33, 44, .18);
+        display: flex;
+        flex-direction: column;
+        overflow: visible;
+        transform: translateX(-110%);
+        transition: transform .25s ease;
+    }
+
+    .global-sidebar-close {
+        position: absolute;
+        top: 50%;
+        right: -30px;
+        z-index: 2;
+        align-items: center;
+        background: #fff;
+        border: 0;
+        border: 1px solid #dfe3e8;
+        border-left: 0;
+        border-radius: 0 .8rem .8rem 0;
+        box-shadow: 3px 0 8px rgba(24, 33, 44, .08);
+        color: #9d0b18;
+        display: flex;
+        font-size: 1.65rem;
+        height: 74px;
+        justify-content: center;
+        padding: 0;
+        transform: translateY(-50%);
+        width: 30px;
+    }
+
+    .global-sidebar-close:hover,
+    .global-sidebar-close:focus {
+        background: #fff;
+        color: #750710;
+        outline: 0;
+    }
+
+    .global-sidebar-heading {
+        color: #343434;
+        font-size: 1.45rem;
+        font-weight: 700;
+        margin: 0;
+        padding: 1rem 2.7rem 1rem 1.2rem;
+    }
+
+    .global-sidebar-heading::after {
+        background: #980b17;
+        content: "";
+        display: block;
+        height: 3px;
+        margin-top: .75rem;
+        width: 100%;
+    }
+
+    .global-sidebar .global-sidebar-home-link {
+        font-family: inherit;
+        font-size: 1.1rem;
+        font-weight: 700;
+        letter-spacing: -.02em;
+        line-height: 1.2;
+        margin: .45rem 0 .35rem;
+    }
+
+    .global-sidebar-scroll {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        padding-bottom: 1rem;
+    }
+
+    .global-sidebar.is-open {
+        transform: translateX(0);
+    }
+
+    .global-sidebar-accordion {
+        --bs-accordion-bg: transparent;
+        --bs-accordion-border-color: transparent;
+        --bs-accordion-btn-padding-x: 1.05rem;
+        --bs-accordion-btn-padding-y: .85rem;
+        --bs-accordion-btn-color: #2d2d2d;
+        --bs-accordion-btn-bg: transparent;
+        --bs-accordion-btn-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 16 16'%3E%3Cpath fill='currentColor' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3C/svg%3E");
+        --bs-accordion-btn-icon-width: .9rem;
+        --bs-accordion-btn-active-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 16 16'%3E%3Cpath fill='currentColor' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3C/svg%3E");
+        --bs-accordion-border-width: 0;
+    }
+
+    .global-sidebar .accordion-item {
+        border: 0;
+        background: transparent;
+    }
+
+    .global-sidebar .accordion-header {
+        margin: 0;
+    }
+
+    .global-sidebar .accordion-button {
+        background: transparent;
+        border: 0;
+        border-bottom: 0;
+        border-radius: 0;
+        color: #2e2e2e;
+        font-size: 1.1rem;
+        font-weight: 700;
+        letter-spacing: -.02em;
+        padding: 1rem 1rem .8rem;
+        box-shadow: none;
+        text-align: left;
+    }
+
+    .global-sidebar .accordion-button:focus,
+    .global-sidebar .accordion-button:active {
+        box-shadow: none;
+    }
+
+    .global-sidebar .accordion-button:not(.collapsed) {
+        background: transparent;
+        color: #2e2e2e;
+        box-shadow: none;
+    }
+
+    .global-sidebar .accordion-button::after {
+        display: none;
+    }
+
+    .global-sidebar .accordion-button > span::after {
+        color: #777;
+        content: "\f282";
+        font-family: "bootstrap-icons";
+        font-size: .75rem;
+        margin-left: .55rem;
+    }
+
+    .global-sidebar .accordion-button.collapsed > span::after {
+        content: "\f285";
+    }
+
+    .global-sidebar .accordion-body {
+        background: #f8f8f8;
+        padding: 0.8rem 0.8rem 0.4rem;
+    }
+
+    .global-sidebar-link {
+        display: flex;
+        align-items: center;
+        gap: .7rem;
+        padding: .78rem .8rem;
+        margin: 0.1rem 0;
+        border-radius: .45rem;
+        color: #2d2d2d;
+        text-decoration: none;
+        font-size: .98rem;
+        font-weight: 600;
+        transition: all .15s ease;
+    }
+
+    .global-sidebar-link:hover {
+        background: #fbe2e5;
+        color: #a60a17;
+        text-decoration: none;
+    }
+
+    .global-sidebar-link.active {
+        background: #b00818;
+        color: #fff;
+        font-weight: 600;
+        box-shadow: none;
+    }
+
+    .global-sidebar-link.active:hover {
+        color: #fff;
+    }
+
+    .global-sidebar-link i {
+        width: 1.15rem;
+        text-align: center;
+        font-size: 1rem;
+    }
+
+    .global-sidebar-link.active i {
+        color: #fff;
+    }
+
+    @media (max-width: 991.98px) {
+        .global-sidebar {
+            width: min(285px, 88vw);
+        }
+    }
+
+    @media (max-width: 767.98px) {
+        .global-sidebar { top: 70px; }
+    }
+</style>
+
+<aside class="global-sidebar" aria-label="Navegación general del sistema">
+    <button type="button" class="global-sidebar-close" aria-label="Cerrar menú">
+        <i class="bi bi-chevron-left"></i>
+    </button>
+    <h2 class="global-sidebar-heading">Navegación</h2>
+        {% if request.resolver_match.url_name != 'home' and request.resolver_match.url_name != 'index' %}
+                <a class="global-sidebar-link global-sidebar-home-link" href="{% url 'home' %}"><i class="bi bi-house-door"></i> Inicio</a>
+        {% endif %}
+        <div class="global-sidebar-scroll">
+            <div class="accordion global-sidebar-accordion" id="globalSidebarAccordion">
+        {% if perms.planning_measurements.view_period or perms.planning_measurements.view_goal or perms.planning_measurements.view_measurementitem %}
+        <div class="accordion-item">
+            <h2 class="accordion-header">
+                <button class="accordion-button {% if request.resolver_match.namespace != 'planning' %}collapsed{% endif %}"
+                        type="button"
+                        data-bs-toggle="collapse"
+                        data-bs-target="#globalSidebarPlanning"
+                        aria-expanded="{% if request.resolver_match.namespace == 'planning' %}true{% else %}false{% endif %}"
+                        aria-controls="globalSidebarPlanning">
+                    <span class="d-inline-flex align-items-center gap-2"><i class="bi bi-calendar3"></i> Planificación</span>
+                </button>
+            </h2>
+            <div id="globalSidebarPlanning" class="accordion-collapse collapse {% if request.resolver_match.namespace == 'planning' %}show{% endif %}">
+                <div class="accordion-body">
+                    {% if perms.planning_measurements.view_period %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'period_list' or request.resolver_match.url_name == 'period_create' or request.resolver_match.url_name == 'period_edit' %} active{% endif %}" href="{% url 'planning:period_list' %}"><i class="bi bi-calendar-range"></i> Períodos</a>
+                    {% endif %}
+                    {% if perms.planning_measurements.view_goal %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'goal_list' or request.resolver_match.url_name == 'goal_create' or request.resolver_match.url_name == 'goal_edit' %} active{% endif %}" href="{% url 'planning:goal_list' %}"><i class="bi bi-bullseye"></i> Metas</a>
+                    {% endif %}
+                    {% if perms.planning_measurements.view_measurementitem %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'item_list' or request.resolver_match.url_name == 'item_create' or request.resolver_match.url_name == 'item_edit' or request.resolver_match.url_name == 'item_detail' %} active{% endif %}" href="{% url 'planning:item_list' %}"><i class="bi bi-card-checklist"></i> Ítems</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if perms.organization.view_employee or perms.accounts.view_userprofile or perms.organization.view_delegation or perms.organization.view_positionfunction or perms.organization.view_organizationrole %}
+        <div class="accordion-item">
+            <h2 class="accordion-header">
+                <button class="accordion-button {% if request.resolver_match.namespace != 'organization' %}collapsed{% endif %}"
+                        type="button"
+                        data-bs-toggle="collapse"
+                        data-bs-target="#globalSidebarOrganization"
+                        aria-expanded="{% if request.resolver_match.namespace == 'organization' %}true{% else %}false{% endif %}"
+                        aria-controls="globalSidebarOrganization">
+                    <span class="d-inline-flex align-items-center gap-2"><i class="bi bi-people"></i> Organización</span>
+                </button>
+            </h2>
+            <div id="globalSidebarOrganization" class="accordion-collapse collapse {% if request.resolver_match.namespace == 'organization' %}show{% endif %}">
+                <div class="accordion-body">
+                    {% if perms.organization.view_employee %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'employee_list' %} active{% endif %}" href="{% url 'organization:employee_list' %}"><i class="bi bi-person-lines-fill"></i> Empleados</a>
+                    {% endif %}
+                    {% if perms.accounts.view_userprofile %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'user_list' %} active{% endif %}" href="{% url 'organization:user_list' %}"><i class="bi bi-person-gear"></i> Usuarios</a>
+                    {% endif %}
+                    {% if perms.organization.view_delegation %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'delegation_list' %} active{% endif %}" href="{% url 'organization:delegation_list' %}"><i class="bi bi-building"></i> Delegaciones</a>
+                    {% endif %}
+                    {% if perms.organization.view_positionfunction %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'position_list' %} active{% endif %}" href="{% url 'organization:position_list' %}"><i class="bi bi-person-badge"></i> Cargos y funciones</a>
+                    {% endif %}
+                    {% if perms.organization.view_organizationrole %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'role_list' %} active{% endif %}" href="{% url 'organization:role_list' %}"><i class="bi bi-shield-lock"></i> Roles y permisos</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if perms.registration_validation.view_activity or perms.registration_validation.view_evidence or perms.registration_validation.view_validation or perms.registration_validation.view_service or perms.registration_validation.view_activitytype or perms.registration_validation.view_attentiontype or perms.registration_validation.view_subattention or perms.registration_validation.view_attentionentry %}
+        <div class="accordion-item">
+            <h2 class="accordion-header">
+                <button class="accordion-button {% if request.resolver_match.namespace != 'registration' %}collapsed{% endif %}"
+                        type="button"
+                        data-bs-toggle="collapse"
+                        data-bs-target="#globalSidebarRegistration"
+                        aria-expanded="{% if request.resolver_match.namespace == 'registration' %}true{% else %}false{% endif %}"
+                        aria-controls="globalSidebarRegistration">
+                    <span class="d-inline-flex align-items-center gap-2"><i class="bi bi-clipboard-check"></i> Registro y validación</span>
+                </button>
+            </h2>
+            <div id="globalSidebarRegistration" class="accordion-collapse collapse {% if request.resolver_match.namespace == 'registration' %}show{% endif %}">
+                <div class="accordion-body">
+                    {% if perms.registration_validation.view_activity %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'activity_list' or request.resolver_match.url_name == 'activity_create' or request.resolver_match.url_name == 'activity_update' %} active{% endif %}" href="{% url 'registration:activity_list' %}"><i class="bi bi-list-check"></i> Actividades</a>
+                    {% endif %}
+                    {% if perms.registration_validation.view_evidence %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'evidence_list' or request.resolver_match.url_name == 'evidence_create' or request.resolver_match.url_name == 'evidence_update' %} active{% endif %}" href="{% url 'registration:evidence_list' %}"><i class="bi bi-file-earmark-check"></i> Evidencias</a>
+                    {% endif %}
+                    {% if perms.registration_validation.view_validation %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'validation_list' or request.resolver_match.url_name == 'validation_create' or request.resolver_match.url_name == 'validation_update' %} active{% endif %}" href="{% url 'registration:validation_list' %}"><i class="bi bi-patch-check"></i> Validaciones</a>
+                    {% endif %}
+                    {% if perms.registration_validation.view_service %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'service_list' or request.resolver_match.url_name == 'service_create' or request.resolver_match.url_name == 'service_update' %} active{% endif %}" href="{% url 'registration:service_list' %}"><i class="bi bi-gear-wide-connected"></i> Servicios</a>
+                    {% endif %}
+                    {% if perms.registration_validation.view_activitytype %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'activity_type_list' or request.resolver_match.url_name == 'activity_type_create' or request.resolver_match.url_name == 'activity_type_update' %} active{% endif %}" href="{% url 'registration:activity_type_list' %}"><i class="bi bi-clipboard-data"></i> Tipos de actividad</a>
+                    {% endif %}
+                    {% if perms.registration_validation.view_attentiontype %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'attention_type_list' %} active{% endif %}" href="{% url 'registration:attention_type_list' %}"><i class="bi bi-card-checklist"></i> Tipos de atención</a>
+                    {% endif %}
+                    {% if perms.registration_validation.view_subattention %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'sub_attention_list' %} active{% endif %}" href="{% url 'registration:sub_attention_list' %}"><i class="bi bi-diagram-3"></i> Subatenciones</a>
+                    {% endif %}
+                    {% if perms.registration_validation.view_attentionentry %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'attention_entry_list' %} active{% endif %}" href="{% url 'registration:attention_entry_list' %}"><i class="bi bi-journal-check"></i> Ingreso de atención</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if perms.municipal_events.view_municipalevent or perms.municipal_events.view_campaign or perms.municipal_events.view_enrollment or perms.municipal_events.view_giftdelivery %}
+        <div class="accordion-item">
+            <h2 class="accordion-header">
+                <button class="accordion-button {% if request.resolver_match.namespace != 'municipal_events' %}collapsed{% endif %}"
+                        type="button" data-bs-toggle="collapse" data-bs-target="#globalSidebarCampaigns"
+                        aria-expanded="{% if request.resolver_match.namespace == 'municipal_events' %}true{% else %}false{% endif %}"
+                        aria-controls="globalSidebarCampaigns">
+                    <span class="d-inline-flex align-items-center gap-2"><i class="bi bi-gift"></i> Eventos y campañas</span>
+                </button>
+            </h2>
+            <div id="globalSidebarCampaigns" class="accordion-collapse collapse {% if request.resolver_match.namespace == 'municipal_events' %}show{% endif %}">
+                <div class="accordion-body">
+                    {% if perms.municipal_events.view_municipalevent %}
+                    <a class="global-sidebar-link{% if request.resolver_match.url_name == 'event_list' %} active{% endif %}" href="{% url 'municipal_events:event_list' %}"><i class="bi bi-calendar-event"></i> Eventos</a>
+                    {% endif %}
+                    {% if perms.municipal_events.view_campaign %}
+                    <a class="global-sidebar-link{% if request.resolver_match.url_name == 'campaign_list' %} active{% endif %}" href="{% url 'municipal_events:campaign_list' %}"><i class="bi bi-gift"></i> Campañas</a>
+                    {% endif %}
+                    {% if perms.municipal_events.view_enrollment %}
+                    <a class="global-sidebar-link{% if request.resolver_match.url_name == 'enrollment_list' %} active{% endif %}" href="{% url 'municipal_events:enrollment_list' %}"><i class="bi bi-person-vcard"></i> Inscripciones</a>
+                    {% endif %}
+                    {% if perms.municipal_events.view_giftdelivery and perms.municipal_events.view_enrollment %}
+                    <a class="global-sidebar-link{% if request.resolver_match.url_name == 'delivery_list' %} active{% endif %}" href="{% url 'municipal_events:delivery_list' %}"><i class="bi bi-box-seam"></i> Entregas</a>
+                    {% endif %}
+                    {% if perms.municipal_events.view_enrollment %}
+                    <a class="global-sidebar-link{% if request.resolver_match.url_name == 'history_list' %} active{% endif %}" href="{% url 'municipal_events:history_list' %}"><i class="bi bi-clock-history"></i> Historial</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if perms.monitoring_traceability.view_indicator or perms.monitoring_traceability.view_commitment or perms.monitoring_traceability.view_audit %}
+        <div class="accordion-item">
+            <h2 class="accordion-header">
+                <button class="accordion-button {% if request.resolver_match.namespace != 'monitoring' %}collapsed{% endif %}"
+                        type="button"
+                        data-bs-toggle="collapse"
+                        data-bs-target="#globalSidebarMonitoring"
+                        aria-expanded="{% if request.resolver_match.namespace == 'monitoring' %}true{% else %}false{% endif %}"
+                        aria-controls="globalSidebarMonitoring">
+                    <span class="d-inline-flex align-items-center gap-2"><i class="bi bi-graph-up-arrow"></i> Monitoreo y trazabilidad</span>
+                </button>
+            </h2>
+            <div id="globalSidebarMonitoring" class="accordion-collapse collapse {% if request.resolver_match.namespace == 'monitoring' %}show{% endif %}">
+                <div class="accordion-body">
+                    {% if perms.monitoring_traceability.view_indicator %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'indicator_list' %} active{% endif %}" href="{% url 'monitoring:indicator_list' %}"><i class="bi bi-bar-chart-line"></i> Indicadores</a>
+                    {% endif %}
+                    {% if perms.monitoring_traceability.view_commitment %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'commitment_list' %} active{% endif %}" href="{% url 'monitoring:commitment_list' %}"><i class="bi bi-people"></i> Compromisos</a>
+                    {% endif %}
+                    {% if perms.monitoring_traceability.view_audit %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'audit_list' %} active{% endif %}" href="{% url 'monitoring:audit_list' %}"><i class="bi bi-shield-check"></i> Auditoría</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if user.is_superuser %}
+        <div class="accordion-item">
+            <h2 class="accordion-header">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#globalSidebarAccess" aria-expanded="false" aria-controls="globalSidebarAccess">
+                    <span class="d-inline-flex align-items-center gap-2"><i class="bi bi-shield-lock"></i> Accesos</span>
+                </button>
+            </h2>
+            <div id="globalSidebarAccess" class="accordion-collapse collapse">
+                <div class="accordion-body">
+                    <a class="global-sidebar-link{% if request.resolver_match.url_name == 'access_home' %} active{% endif %}" href="{% url 'accounts:access_home' %}"><i class="bi bi-sliders"></i> Gestión de accesos</a>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+            </div>
+        </div>
+</aside>

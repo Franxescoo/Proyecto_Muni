@@ -115,6 +115,7 @@ class AccountTests(TestCase):
     def test_user_cannot_change_own_roles_from_account_form(self):
         user = self.create_account()
         other_role = Group.objects.create(name="Otro rol")
+
         form = AccountEditForm(
             data={
                 "username": user.username,
@@ -130,44 +131,74 @@ class AccountTests(TestCase):
             instance=user,
             actor=user,
         )
+
         self.assertFalse(form.is_valid())
         self.assertIn("groups", form.errors)
 
-    def test_user_form_does_not_assign_individual_permissions(self):
+    def test_user_form_manages_individual_closed_period_permission(self):
         user = self.create_account()
+
         special = Permission.objects.get(
             content_type__app_label="planning_measurements",
             codename="delete_closed_period",
         )
         user.user_permissions.add(special)
 
-        form = AccountEditForm(instance=user, actor=self.admin)
-        self.assertNotIn("can_delete_closed_period", form.fields)
-        self.assertNotIn("can_delete_closed_period_inherited", form.fields)
-
         form = AccountEditForm(
-            data={
-                "username": user.username,
-                "first_name": user.first_name,
-                "last_name": user.last_name,
-                "email": user.email,
-                "is_active": "on",
-                "employee": user.profile.employee_id,
-                "employee_code": user.profile.employee_code,
-                "authorized_delegations": [self.delegation.pk],
-                "groups": [self.role.pk],
-            },
             instance=user,
             actor=self.admin,
         )
+
+        self.assertIn("can_delete_closed_period", form.fields)
+        self.assertTrue(
+            form.fields["can_delete_closed_period"].initial
+        )
+
+        data = {
+            "username": user.username,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "email": user.email,
+            "is_active": "on",
+            "employee": user.profile.employee_id,
+            "employee_code": user.profile.employee_code,
+            "authorized_delegations": [self.delegation.pk],
+            "groups": [self.role.pk],
+            "can_delete_closed_period": "on",
+        }
+
+        form = AccountEditForm(
+            data=data,
+            instance=user,
+            actor=self.admin,
+        )
+
         self.assertTrue(form.is_valid(), form.errors)
         form.save()
-        user.refresh_from_db()
 
-        self.assertTrue(user.user_permissions.filter(pk=special.pk).exists())
+        self.assertTrue(
+            user.user_permissions.filter(pk=special.pk).exists()
+        )
+
+        # Al desmarcar la casilla, se revoca el permiso directo.
+        data.pop("can_delete_closed_period")
+
+        form = AccountEditForm(
+            data=data,
+            instance=user,
+            actor=self.admin,
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        form.save()
+
+        self.assertFalse(
+            user.user_permissions.filter(pk=special.pk).exists()
+        )
 
     def test_role_permissions_are_inherited_by_user(self):
         user = self.create_account()
+
         special = Permission.objects.get(
             content_type__app_label="planning_measurements",
             codename="delete_closed_period",
@@ -176,17 +207,24 @@ class AccountTests(TestCase):
 
         user.refresh_from_db()
 
-        self.assertTrue(user.has_perm("planning_measurements.delete_closed_period"))
+        self.assertTrue(
+            user.has_perm(
+                "planning_measurements.delete_closed_period"
+            )
+        )
 
     def test_direct_permission_inventory_identifies_uncovered_permissions(self):
         user = self.create_account()
+
         special = Permission.objects.get(
             content_type__app_label="planning_measurements",
             codename="delete_closed_period",
         )
         user.user_permissions.add(special)
 
-        rows = direct_permission_inventory(get_user_model())
+        rows = direct_permission_inventory(
+            get_user_model()
+        )
 
         row = next(
             item for item in rows
@@ -194,11 +232,16 @@ class AccountTests(TestCase):
             and item["direct_permission"]
             == "planning_measurements.delete_closed_period"
         )
+
         self.assertFalse(row["covered_by_role"])
-        self.assertEqual(row["roles"], [self.role.name])
+        self.assertEqual(
+            row["roles"],
+            [self.role.name],
+        )
 
     def test_direct_permission_audit_command_is_read_only(self):
         user = self.create_account()
+
         special = Permission.objects.get(
             content_type__app_label="planning_measurements",
             codename="delete_closed_period",
@@ -208,11 +251,21 @@ class AccountTests(TestCase):
         from io import StringIO
 
         output = StringIO()
-        call_command("audit_direct_permissions", stdout=output)
+        call_command(
+            "audit_direct_permissions",
+            stdout=output,
+        )
 
-        self.assertIn(user.username, output.getvalue())
+        self.assertIn(
+            user.username,
+            output.getvalue(),
+        )
+
         user.refresh_from_db()
-        self.assertTrue(user.user_permissions.filter(pk=special.pk).exists())
+
+        self.assertTrue(
+            user.user_permissions.filter(pk=special.pk).exists()
+        )
 
     def test_create_account_inherits_employee_roles(self):
         user = self.create_account()
@@ -246,13 +299,31 @@ class AccountTests(TestCase):
         )
 
     def test_create_account_rejects_role_without_organization_scope(self):
-        other_role = Group.objects.create(name="Rol no autorizado")
-        response = self.client.post(
-            self.create_url, self.account_data(groups=[other_role.pk])
+        other_role = Group.objects.create(
+            name="Rol no autorizado"
         )
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("groups", response.context["form"].errors)
-        self.assertFalse(get_user_model().objects.filter(username="usuario_prueba").exists())
+
+        response = self.client.post(
+            self.create_url,
+            self.account_data(
+                groups=[other_role.pk]
+            ),
+        )
+
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
+        self.assertIn(
+            "groups",
+            response.context["form"].errors,
+        )
+
+        self.assertFalse(
+            get_user_model().objects.filter(
+                username="usuario_prueba"
+            ).exists()
+        )
 
     def test_invalid_password_confirmation_prevents_creation(self):
         response = self.client.post(
@@ -262,7 +333,10 @@ class AccountTests(TestCase):
             ),
         )
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
         self.assertIn(
             "password2",
             response.context["form"].errors,
@@ -276,8 +350,15 @@ class AccountTests(TestCase):
 
     def test_account_edit_rejects_role_outside_authorized_scope(self):
         user = self.create_account()
-        unauthorized = Group.objects.create(name="Rol enviado manualmente")
-        edit_url = reverse("accounts:account_edit", args=[user.pk])
+        unauthorized = Group.objects.create(
+            name="Rol enviado manualmente"
+        )
+
+        edit_url = reverse(
+            "accounts:account_edit",
+            args=[user.pk],
+        )
+
         payload = {
             "username": user.username,
             "email": "nuevo_correo@example.com",
@@ -287,19 +368,56 @@ class AccountTests(TestCase):
             "authorized_delegations": [self.delegation.pk],
             "groups": [unauthorized.pk],
         }
-        response = self.client.post(edit_url, payload)
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("groups", response.context["form"].errors)
+
+        response = self.client.post(
+            edit_url,
+            payload,
+        )
+
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
+        self.assertIn(
+            "groups",
+            response.context["form"].errors,
+        )
+
         user.refresh_from_db()
-        self.assertNotEqual(user.email, payload["email"])
-        self.assertNotIn(unauthorized, user.groups.all())
+        self.assertNotEqual(
+            user.email,
+            payload["email"],
+        )
+        self.assertNotIn(
+            unauthorized,
+            user.groups.all(),
+        )
+
         payload["groups"] = [self.role.pk]
-        response = self.client.post(edit_url, payload)
-        self.assertRedirects(response, self.home_url)
+
+        response = self.client.post(
+            edit_url,
+            payload,
+        )
+
+        self.assertRedirects(
+            response,
+            self.home_url,
+        )
+
         user.refresh_from_db()
-        self.assertEqual(user.email, payload["email"])
-        self.assertIn(self.role, user.groups.all())
-        self.assertIn(self.role, self.employee.assigned_groups.all())
+        self.assertEqual(
+            user.email,
+            payload["email"],
+        )
+        self.assertIn(
+            self.role,
+            user.groups.all(),
+        )
+        self.assertIn(
+            self.role,
+            self.employee.assigned_groups.all(),
+        )
 
     def test_inactive_account_cannot_login(self):
         user = self.create_account()
@@ -321,7 +439,10 @@ class AccountTests(TestCase):
             },
         )
 
-        self.assertRedirects(response, self.home_url)
+        self.assertRedirects(
+            response,
+            self.home_url,
+        )
 
         user.refresh_from_db()
         self.assertFalse(user.is_active)
@@ -352,7 +473,10 @@ class AccountTests(TestCase):
 
         response = self.client.get(edit_url)
 
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(
+            response.status_code,
+            404,
+        )
 
         response = self.client.post(
             edit_url,
@@ -363,7 +487,10 @@ class AccountTests(TestCase):
             },
         )
 
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(
+            response.status_code,
+            404,
+        )
 
         user.refresh_from_db()
         self.assertFalse(user.is_active)

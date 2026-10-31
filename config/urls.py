@@ -16,7 +16,6 @@ from accounts.forms import (
     UsuarioOCorreoAuthenticationForm,
 )
 from accounts import views as account_views
-from django.urls import include, path
 
 
 urlpatterns = [
@@ -93,6 +92,7 @@ urlpatterns = [
     ),
 
     # -----------------------------------------------------
+    # -----------------------------------------------------
     # Solicitudes públicas de vecinos
     # -----------------------------------------------------
     path(
@@ -103,7 +103,10 @@ urlpatterns = [
     # -----------------------------------------------------
     # Eventos, campañas e inscripciones municipales
     # -----------------------------------------------------
-    path("eventos-campanas/", include("municipal_events.urls")),
+    path(
+        "eventos-campanas/",
+        include("municipal_events.urls"),
+    ),
 
     # -----------------------------------------------------
     # Cuentas de usuario

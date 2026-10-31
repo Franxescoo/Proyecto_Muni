@@ -4,20 +4,136 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block titulo %}Proyecto Muni{% endblock %}</title>
+    <title>{% block titulo %}Municipalidad de La Serena{% endblock %}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     <style>
         /* Estilos base de tu proyecto */
-        body { background: #f8f9fb; }
+        body {
+            background: #f8f9fb;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+        .bg-gris-90 { background: #1a1a1a; }
+        .site-footer { margin-top: 2rem; }
+        .global-page-content { flex: 1 0 auto; }
+        .site-footer ul { margin: 0; padding-left: 1.2rem; }
+        .site-footer a:hover { color: #fff; text-decoration: underline!important; }
+        .site-footer-logo { max-width: 240px; height: auto; }
         
         /* Navbar institucional La Serena */
-        .topbar { background-color: #a60a17; border-bottom: 3px solid #800711; }
+        .topbar { background-color: #a60a17; position: sticky; top: 0; z-index: 1050; }
+        body.sidebar-open { overflow: hidden; }
         .topbar .navbar-brand, .topbar .nav-link, .topbar .navbar-text { color: #fff; }
         .topbar .nav-link:hover { color: #ffcccc; }
         .topbar .navbar-brand { font-weight: bold; font-size: 1.2rem; }
+        .profile-menu-toggle {
+            align-items: center;
+            background: transparent;
+            border: 0;
+            color: #fff;
+            display: inline-flex;
+            gap: .55rem;
+            padding: .2rem .35rem;
+        }
+        .profile-menu-toggle:hover,
+        .profile-menu-toggle:focus,
+        .profile-menu-toggle:active {
+            background: transparent!important;
+            border: 0!important;
+            box-shadow: none!important;
+            color: #fff!important;
+        }
+        .profile-menu-avatar {
+            align-items: center;
+            background: #fff;
+            border: 2px solid rgba(255,255,255,.85);
+            border-radius: 50%;
+            color: #a60a17;
+            display: inline-flex;
+            height: 36px;
+            justify-content: center;
+            overflow: hidden;
+            width: 36px;
+        }
+        .profile-menu-avatar img { height: 100%; object-fit: cover; width: 100%; }
+        .profile-menu-label { line-height: 1.15; text-align: left; }
+        .profile-menu-label strong { display: block; font-size: .88rem; }
+        .profile-menu-label small { display: block; font-size: .72rem; opacity: .8; }
+        .profile-menu-dropdown {
+            border: 1px solid #e1e4e8;
+            border-radius: .7rem;
+            box-shadow: 0 14px 34px rgba(20, 27, 38, .2);
+            min-width: 290px;
+            overflow: hidden;
+            padding: 0;
+        }
+        .profile-menu-summary {
+            align-items: center;
+            background: #fff7f7;
+            border-bottom: 1px solid #f0d9dc;
+            display: flex;
+            gap: .75rem;
+            padding: .9rem 1rem;
+        }
+        .profile-menu-summary .profile-menu-avatar { flex: 0 0 48px; height: 48px; width: 48px; }
+        .profile-menu-summary strong { color: #242a31; display: block; font-size: .94rem; }
+        .profile-menu-summary small { color: #68727d; display: block; margin-top: .15rem; }
+        .profile-menu-details { color: #596572; font-size: .78rem; line-height: 1.45; padding: .75rem 1rem; }
+        .profile-menu-details div + div { margin-top: .2rem; }
+        .profile-menu-details i { color: #a60a17; margin-right: .35rem; width: 1rem; }
+        .profile-menu-delegation-form { align-items: center; display: flex; gap: .35rem; margin-top: .35rem; }
+        .profile-menu-delegation-form i { flex: 0 0 auto; }
+        .profile-menu-delegation-form select { border-color: #d7dce2; font-size: .76rem; min-width: 0; }
+        .profile-menu-chat { border-top: 1px solid #edf0f2; padding: .55rem; }
+        .profile-menu-chat .btn { color: #a60a17; font-weight: 600; width: 100%; }
+        .profile-menu-chat .btn:hover { background: #fbe2e5; color: #800711; }
+        .profile-menu-logout { border-top: 1px solid #edf0f2; padding: .55rem; }
+        .profile-menu-logout .btn { color: #a60a17; font-weight: 600; width: 100%; }
+        .profile-menu-logout .btn:hover { background: #fbe2e5; color: #800711; }
         .workspace-layout { display: flex; align-items: flex-start; gap: 1.25rem; }
         .workspace-sidebar { flex: 0 0 225px; overflow: hidden; background: #fff; border: 1px solid #e1e3e5; border-radius: .65rem; box-shadow: 0 3px 12px rgba(24, 33, 44, .08); }
+        .global-sidebar-toggle {
+            align-items: center;
+            background: transparent;
+            border: 0;
+            color: #fff;
+            display: inline-flex;
+            font-size: 1.55rem;
+            justify-content: center;
+            line-height: 1;
+            min-height: 38px;
+            padding: .2rem .35rem;
+            width: 42px;
+        }
+        .global-sidebar-toggle:hover,
+        .global-sidebar-toggle:focus,
+        .global-sidebar-toggle:active {
+            background: transparent;
+            border: 0;
+            box-shadow: none;
+            color: #fff;
+        }
+        .global-sidebar-backdrop {
+            position: fixed;
+            top: 74px;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            background: rgba(16, 21, 29, 0.25);
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity .2s ease, visibility .2s ease;
+            z-index: 1030;
+        }
+        .global-sidebar-backdrop.is-visible {
+            opacity: 1;
+            visibility: visible;
+        }
+        @media (max-width: 767.98px) {
+            .global-sidebar-backdrop { top: 70px; }
+        }
         .workspace-sidebar-header { align-items: center; background: #a60a17; color: #fff; display: flex; gap: .85rem; min-height: 56px; padding: .75rem 1rem; }
         .workspace-sidebar-header i:first-child { font-size: 1.05rem; }
         .workspace-sidebar-header strong { flex: 1; font-size: .95rem; font-weight: 700; line-height: 1.15; }
@@ -249,9 +365,19 @@
 {% block public_navigation %}
 <nav class="navbar navbar-expand-lg topbar mb-4 shadow-sm">
     <div class="container-fluid px-4">
-        <a class="navbar-brand py-0" href="{% url 'home' %}">
-            <img src="{% static 'img/horizontal-blanco.png' %}" alt="Logo La Serena" height="55">
-        </a>
+        <div class="d-flex align-items-center gap-3">
+            {% if request.resolver_match.url_name != 'login' and request.resolver_match.url_name != 'password_reset' and request.resolver_match.url_name != 'password_reset_verify' and request.resolver_match.url_name != 'password_reset_password' and request.resolver_match.url_name != 'password_reset_done' and request.resolver_match.url_name != 'password_reset_confirm' and request.resolver_match.url_name != 'password_reset_complete' %}
+                <button type="button"
+                        class="btn global-sidebar-toggle"
+                        aria-label="Abrir menú"
+                        aria-expanded="false">
+                    <i class="bi bi-list"></i>
+                </button>
+            {% endif %}
+            <a class="navbar-brand py-0" href="{% url 'home' %}">
+                <img src="{% static 'img/horizontal-blanco.png' %}" alt="Logo La Serena" height="65">
+            </a>
+        </div>
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarMain" style="filter: invert(1);">
             <span class="navbar-toggler-icon"></span>
         </button>
@@ -289,43 +415,70 @@
                     </button>
                 </li>
             </ul>
-            <span class="navbar-text me-2" title="Usuario y rol">
-                <i class="bi bi-person-circle"></i> {{ user.username }}
-                <span class="small opacity-75">· {% if user.is_superuser %}Administrador global{% elif sgr_display_roles %}{{ sgr_display_roles|join:", " }}{% else %}Sin rol asignado{% endif %}</span>
-            </span>
-            {% if user.is_superuser %}
-                <span class="badge text-bg-light me-3"><i class="bi bi-building"></i> Delegaciones: global</span>
-            {% elif sgr_active_delegation %}
-                {% if sgr_delegation_options|length > 1 %}
-                <form method="post" action="{% url 'accounts:change_active_delegation' %}" class="d-inline-flex align-items-center me-3 gap-2">
-                    {% csrf_token %}
-                    <label for="sgr-active-delegation" class="text-white small">Delegación activa</label>
-                    <select class="form-select form-select-sm" id="sgr-active-delegation" name="delegation" onchange="if(confirm('¿Cambiar delegación? Guarda antes tus formularios pendientes.')) this.form.submit(); else this.value=this.dataset.selected;" data-selected="{{ sgr_active_delegation.pk }}">
-                    {% for delegation in sgr_delegation_options %}
-                        <option value="{{ delegation.pk }}" {% if delegation.pk == sgr_active_delegation.pk %}selected{% endif %}>{{ delegation.code }} · {{ delegation.name }}</option>
-                    {% endfor %}
-                    </select>
-                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                </form>
-                {% else %}
-                <span class="badge text-bg-light me-3"><i class="bi bi-building"></i> {{ sgr_active_delegation.code }} · {{ sgr_active_delegation.name }}</span>
-                {% endif %}
-            {% else %}
-                <span class="badge text-bg-warning me-3">Sin delegación autorizada</span>
-            {% endif %}
-            <form method="post" action="{% url 'logout' %}" class="d-inline">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-outline-light btn-sm">Cerrar sesión</button>
-            </form>
+            <div class="dropdown">
+                <button class="profile-menu-toggle dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <span class="profile-menu-avatar">
+                        {% if user.profile.profile_photo %}
+                            <img src="{{ user.profile.profile_photo.url }}" alt="Foto de {{ user.username }}">
+                        {% else %}
+                            <i class="bi bi-person-fill" aria-hidden="true"></i>
+                        {% endif %}
+                    </span>
+                    <span class="profile-menu-label">
+                        <strong>{{ user.username }}</strong>
+                        <small>{% if user.is_superuser %}Administrador global{% elif sgr_display_roles %}{{ sgr_display_roles|join:", " }}{% else %}Sin rol asignado{% endif %}</small>
+                    </span>
+                </button>
+                <div class="dropdown-menu dropdown-menu-end profile-menu-dropdown">
+                    <div class="profile-menu-summary">
+                        <span class="profile-menu-avatar">
+                            {% if user.profile.profile_photo %}
+                                <img src="{{ user.profile.profile_photo.url }}" alt="Foto de {{ user.username }}">
+                            {% else %}
+                                <i class="bi bi-person-fill" aria-hidden="true"></i>
+                            {% endif %}
+                        </span>
+                        <div>
+                            <strong>{{ user.get_full_name|default:user.username }}</strong>
+                            <small>{{ user.email|default:"Sin correo registrado" }}</small>
+                        </div>
+                    </div>
+                    <div class="profile-menu-details">
+                        <div><i class="bi bi-person-badge"></i>{% if user.is_superuser %}Administrador global{% elif sgr_display_roles %}{{ sgr_display_roles|join:", " }}{% else %}Sin rol asignado{% endif %}</div>
+                        <div><i class="bi bi-building"></i>{% if user.is_superuser %}Delegaciones: global{% elif sgr_delegation_options|length > 1 %}
+                            <form method="post" action="{% url 'accounts:change_active_delegation' %}" class="profile-menu-delegation-form">
+                                {% csrf_token %}
+                                <select class="form-select form-select-sm" name="delegation" onchange="if(confirm('¿Cambiar delegación? Guarda antes tus formularios pendientes.')) this.form.submit(); else this.value=this.dataset.selected;" data-selected="{{ sgr_active_delegation.pk }}" aria-label="Delegación activa">
+                                    {% for delegation in sgr_delegation_options %}
+                                        <option value="{{ delegation.pk }}" {% if delegation.pk == sgr_active_delegation.pk %}selected{% endif %}>{{ delegation.code }} · {{ delegation.name }}</option>
+                                    {% endfor %}
+                                </select>
+                                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                            </form>
+                        {% elif sgr_active_delegation %}{{ sgr_active_delegation.name }}{% else %}Sin delegación autorizada{% endif %}</div>
+                    </div>
+                    <div class="profile-menu-logout">
+                        <form method="post" action="{% url 'logout' %}" class="m-0">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm"><i class="bi bi-box-arrow-right me-1"></i>Cerrar sesión</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
             {% endif %}
         </div>
     </div>
 </nav>
 {% endblock %}
 
+<div class="global-page-content">
 <div class="container-fluid px-4">
     <div class="workspace-layout">
-        {% block sidebar %}{% endblock %}
+        {% block sidebar %}
+            {% if request.resolver_match.url_name != 'login' and request.resolver_match.url_name != 'password_reset' and request.resolver_match.url_name != 'password_reset_verify' and request.resolver_match.url_name != 'password_reset_password' and request.resolver_match.url_name != 'password_reset_done' and request.resolver_match.url_name != 'password_reset_confirm' and request.resolver_match.url_name != 'password_reset_complete' %}
+                {% include "shared/global_sidebar.html" %}
+            {% endif %}
+        {% endblock %}
         <div class="workspace-content">
             {% block submenu %}{% endblock %}
             <main>
@@ -344,8 +497,100 @@
         </div>
     </div>
 </div>
+</div>
+{% if request.resolver_match.url_name == 'login' or request.resolver_match.url_name == 'home' or request.resolver_match.url_name == 'password_reset' or request.resolver_match.url_name == 'password_reset_verify' or request.resolver_match.url_name == 'password_reset_password' or request.resolver_match.url_name == 'password_reset_done' or request.resolver_match.url_name == 'password_reset_confirm' or request.resolver_match.url_name == 'password_reset_complete' %}
+<footer class="site-footer bg-gris-90 pt-3 pb-3">
+    <div class="container">
+        <div class="row align-items-center">
+            <div class="col-md d-none d-md-block order-2 order-md-1 mb-2">
+                <div class="text-light tx-2">
+                    <ul>
+                        <li>
+                            <a class="text-light text-decoration-none"
+                               href="https://www.portaltransparencia.cl/PortalPdT/directorio-de-organismos-regulados/?org=MU126"
+                               target="_blank" rel="noopener noreferrer">
+                                Transparencia Activa | Ley de Transparencia
+                            </a>
+                        </li>
+                        <li>
+                            <a class="text-light text-decoration-none"
+                               href="https://www.portaltransparencia.cl/PortalPdT/web/guest/directorio-de-organismos-regulados?p_p_id=pdtorganismos_WAR_pdtorganismosportlet&amp;orgcode=d67e38e61d6896e0e50080a9baaabf3f"
+                               target="_blank" rel="noopener noreferrer">
+                                Solicitar Información | Ley de Transparencia
+                            </a>
+                        </li>
+                        <li>
+                            <a class="text-light text-decoration-none"
+                               href="https://www.leylobby.gob.cl/instituciones/MU126"
+                               target="_blank" rel="noopener noreferrer">
+                                Plataforma Ley del Lobby
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+            <div class="col-md-4 ms-auto col-12 order-1 order-md-2 mb-2">
+                <div class="text-light text-md-end text-center lh-1">
+                    <div class="mb-2">
+                        <img class="site-footer-logo"
+                             src="{% static 'img/horizontal-blanco.png' %}"
+                             alt="Ilustre Municipalidad de La Serena">
+                    </div>
+                    <div><strong>Ilustre Municipalidad de La Serena</strong></div>
+                    <div>Arturo Prat #451</div>
+                    <div>(56) 51 - 2 206600</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</footer>
+{% endif %}
+<div class="global-sidebar-backdrop" id="globalSidebarBackdrop" aria-hidden="true"></div>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="{% static 'js/catalog_details.js' %}?v=20261021a" defer></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const toggle = document.querySelector('.global-sidebar-toggle');
+    const sidebar = document.querySelector('.global-sidebar');
+    const closeButton = document.querySelector('.global-sidebar-close');
+    const backdrop = document.getElementById('globalSidebarBackdrop');
+    if (!toggle || !sidebar || !closeButton || !backdrop) return;
+
+    const closeSidebar = function () {
+        sidebar.classList.remove('is-open');
+        document.body.classList.remove('sidebar-open');
+        toggle.setAttribute('aria-expanded', 'false');
+        toggle.setAttribute('aria-label', 'Abrir menú');
+        backdrop.classList.remove('is-visible');
+        backdrop.setAttribute('aria-hidden', 'true');
+    };
+
+    const openSidebar = function () {
+        sidebar.classList.add('is-open');
+        document.body.classList.add('sidebar-open');
+        toggle.setAttribute('aria-expanded', 'true');
+        toggle.setAttribute('aria-label', 'Cerrar menú');
+        backdrop.classList.add('is-visible');
+        backdrop.setAttribute('aria-hidden', 'false');
+    };
+
+    toggle.addEventListener('click', function () {
+        const isOpen = sidebar.classList.contains('is-open');
+        if (isOpen) {
+            closeSidebar();
+        } else {
+            openSidebar();
+        }
+    });
+
+    backdrop.addEventListener('click', closeSidebar);
+    closeButton.addEventListener('click', closeSidebar);
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') closeSidebar();
+    });
+});
+</script>
 {% block scripts %}{% endblock %}
 
 {% if user.is_authenticated %}
