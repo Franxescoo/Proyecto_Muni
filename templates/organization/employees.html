@@ -62,6 +62,8 @@
                 <tr>
                     <th scope="col"><span class="visually-hidden">Foto de perfil</span></th>
                     <th>Empleado</th>
+                    <th>RUT</th>
+                    <th>Dirección</th>
                     <th>Delegación</th>
                     <th>Cargo</th>
                     <th>Funciones</th>
@@ -83,6 +85,8 @@
                             {% endif %}
                         </td>
                         <td class="fw-semibold">{{ employee.name }}</td>
+                        <td>{{ employee.rut|default:"—" }}</td>
+                        <td>{{ employee.address|default:"—" }}</td>
                         <td>{{ employee.delegation.name }}</td>
                         <td>{{ employee.position.position_name }}</td>
                         <td>{{ employee.roles|truncatewords:18 }}</td>
@@ -121,7 +125,7 @@
                     </tr>
                 {% empty %}
                     <tr>
-                        <td colspan="8" class="text-center py-5">
+                        <td colspan="10" class="text-center py-5">
                             <i class="bi bi-people fs-2 text-muted d-block mb-2"></i>
                             <span class="text-muted">No hay empleados para mostrar.</span>
                         </td>

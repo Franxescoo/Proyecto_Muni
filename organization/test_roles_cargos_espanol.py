@@ -63,7 +63,7 @@ class PruebasRolesYCatalogoSinSuperusuario(TestCase):
         self.assertNotContains(r, "Eliminar</button>")
         r2 = self.client.get(reverse("organization:role_list"), {"modal": "view", "id": self.group.pk})
         self.assertEqual(r2.status_code, 200)
-        self.assertContains(r2, "Organización | Cargos y funciones | Puede consultar cargos y funciones")
+        self.assertContains(r2, "Puede consultar cargos y funciones")
 
     def test_rol_creacion_exige_permiso_explicito(self):
         self.grant("view_organizationrole")
@@ -114,11 +114,17 @@ class PruebasRolesYCatalogoSinSuperusuario(TestCase):
     def test_etiqueta_permiso_espanol_no_cambia_codename(self):
         permission = Permission.objects.get(content_type__app_label="organization", codename="view_delegationresponsibilitylog")
         before = (permission.codename, permission.name)
-        self.assertIn("Historial de responsables de delegación", permission_label(permission))
+        self.assertEqual(
+            permission_label(permission),
+            "Puede consultar historial de responsables de delegación",
+        )
         self.assertIn("Puede consultar", permission_label(permission))
         self.assertEqual((permission.codename, permission.name), before)
         field = OrganizationRoleForm().fields["permissions"]
-        self.assertIn("Organización", field.label_from_instance(permission))
+        self.assertEqual(
+            "Puede consultar historial de responsables de delegación",
+            field.label_from_instance(permission),
+        )
 
     def test_usuario_solo_lectura_no_puede_modificar_cuentas(self):
         self.grant("view_userprofile")

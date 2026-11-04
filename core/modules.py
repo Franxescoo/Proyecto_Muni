@@ -48,12 +48,6 @@ MODULES = [
                 "perm": "organization.view_employee",
             },
             {
-                "title": "Usuarios",
-                "icon": "bi-person-gear",
-                "url": "organization:user_list",
-                "perm": "accounts.view_userprofile",
-            },
-            {
                 "title": "Delegaciones",
                 "icon": "bi-building",
                 "url": "organization:delegation_list",

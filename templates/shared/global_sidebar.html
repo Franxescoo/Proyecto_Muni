@@ -262,7 +262,6 @@
                         <a class="global-sidebar-link{% if request.resolver_match.url_name == 'employee_list' %} active{% endif %}" href="{% url 'organization:employee_list' %}"><i class="bi bi-person-lines-fill"></i> Empleados</a>
                     {% endif %}
                     {% if perms.accounts.view_userprofile %}
-                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'user_list' %} active{% endif %}" href="{% url 'organization:user_list' %}"><i class="bi bi-person-gear"></i> Usuarios</a>
                     {% endif %}
                     {% if perms.organization.view_delegation %}
                         <a class="global-sidebar-link{% if request.resolver_match.url_name == 'delegation_list' %} active{% endif %}" href="{% url 'organization:delegation_list' %}"><i class="bi bi-building"></i> Delegaciones</a>

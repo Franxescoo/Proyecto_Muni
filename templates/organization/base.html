@@ -23,6 +23,26 @@
     .organization-form-dialog textarea.form-control { max-height: 14rem; min-height: 5rem; overflow-y: auto; resize: vertical; }
     .organization-choice-list { max-height: 16rem; overflow-y: auto; border: 1px solid #dee2e6; border-radius: .4rem; padding: .75rem; }
     .organization-choice-list input[type="checkbox"] { accent-color: #138d56; margin-right: .45rem; }
+    .organization-permissions { border: 1px solid #d9dce5; border-radius: .65rem; padding: .75rem; background: #fbfbfd; }
+    .organization-permissions-toolbar { align-items: center; display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: .75rem; }
+    .organization-permissions-toolbar input { flex: 1 1 220px; }
+    .organization-permission-total { color: #5b6170; font-size: .8rem; font-weight: 600; margin-left: auto; }
+    .organization-permission-group { background: #fff; border: 1px solid #d9dce5; border-radius: .55rem; margin-bottom: .55rem; overflow: hidden; }
+    .organization-permission-group:last-child { margin-bottom: 0; }
+    .organization-permission-group[open] { border-color: #9c8bd5; box-shadow: 0 3px 10px rgba(90, 72, 145, .08); }
+    .organization-permission-group-header { align-items: center; background: #f2effa; color: #3d315f; cursor: pointer; display: flex; justify-content: space-between; list-style: none; padding: .7rem .8rem; }
+    .organization-permission-group-header::-webkit-details-marker { display: none; }
+    .organization-permission-group-title { align-items: center; display: flex; flex-wrap: wrap; gap: .65rem; }
+    .organization-permission-group-title small { color: #747987; font-size: .75rem; font-weight: 500; }
+    .organization-permission-group-actions { align-items: center; display: flex; gap: .65rem; }
+    .organization-permission-group-header button { color: #5b4596; text-decoration: none; }
+    .organization-permission-chevron { color: #5b4596; font-size: 1.15rem; line-height: 1; transition: transform .2s ease; }
+    .organization-permission-group[open] .organization-permission-chevron { transform: rotate(180deg); }
+    .organization-permission-options { display: grid; gap: .35rem; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); padding: .65rem .75rem; }
+    .organization-permission-option { align-items: flex-start; border: 1px solid transparent; border-radius: .35rem; cursor: pointer; display: flex; gap: .5rem; padding: .45rem; }
+    .organization-permission-option:hover { background: #f7f5fc; border-color: #d7cdf2; }
+    .organization-permission-option input { accent-color: #6b50b5; flex: 0 0 auto; margin-top: .2rem; }
+    .organization-permission-option.is-hidden { display: none; }
     .organization-role { background: #edf5f0; border-radius: .35rem; color: #176b43; display: inline-block; font-size: .78rem; font-weight: 600; margin: .1rem .15rem .1rem 0; padding: .25rem .5rem; }
     .organization-photo-preview { align-items: center; background: #f1f3f5; border: 1px dashed #b8c0c8; border-radius: 50%; color: #7a858f; display: flex; height: 88px; justify-content: center; overflow: hidden; width: 88px; }
     .organization-photo-preview i { font-size: 3rem; }
@@ -30,6 +50,9 @@
     .employee-photo-cell { width: 3.5rem; }
     .employee-photo, .employee-photo-placeholder { align-items: center; border-radius: 50%; display: inline-flex; height: 2.65rem; justify-content: center; object-fit: cover; width: 2.65rem; }
     .employee-photo-placeholder { background: #eef0f2; color: #7a858f; font-size: 1.4rem; }
+    .organization-error-card { background: #fff; border: 1px solid #e5e7eb; border-radius: .9rem; box-shadow: 0 8px 26px rgba(24, 33, 44, .08); max-width: 620px; padding: 3rem 2rem; }
+    .organization-error-code { color: #a60a17; font-size: clamp(4rem, 12vw, 7rem); font-weight: 800; letter-spacing: -.08em; line-height: .9; }
+    .organization-error-icon { color: #a60a17; font-size: 2rem; margin: 1rem 0; }
     @media (max-width: 767.98px) { .organization-hero { padding: 1.25rem; } .organization-hero h1 { font-size: 1.5rem; } }
 </style>
 {% endblock %}
@@ -99,6 +122,64 @@ document.addEventListener("DOMContentLoaded", function () {
         updateAssignedRoles();
     }
 
+    document.querySelectorAll("[data-permission-picker]").forEach(function (picker) {
+            const search = picker.querySelector("[data-permission-search]");
+            const options = Array.from(picker.querySelectorAll("[data-permission-option]"));
+            const groups = Array.from(picker.querySelectorAll("[data-permission-group]"));
+            const checkboxes = () => options.map(option => option.querySelector("input"));
+            const visibleCheckboxes = () => options
+                .filter(option => !option.classList.contains("is-hidden"))
+                .map(option => option.querySelector("input"));
+            const total = picker.querySelector("[data-permission-total]");
+
+            function updateCounts() {
+                let selected = 0;
+                groups.forEach(function (group) {
+                    const groupCheckboxes = Array.from(group.querySelectorAll("input[type='checkbox']"));
+                    const groupSelected = groupCheckboxes.filter(checkbox => checkbox.checked).length;
+                    selected += groupSelected;
+                    group.querySelector("[data-group-selected]").textContent = groupSelected;
+                });
+                total.textContent = `${selected} permiso${selected === 1 ? "" : "s"} seleccionado${selected === 1 ? "" : "s"}`;
+            }
+
+            function filterPermissions() {
+                const query = search.value.trim().toLowerCase();
+                groups.forEach(function (group) {
+                    let visible = 0;
+                    group.querySelectorAll("[data-permission-option]").forEach(function (option) {
+                        const matches = !query || option.textContent.toLowerCase().includes(query);
+                        option.classList.toggle("is-hidden", !matches);
+                        if (matches) visible += 1;
+                    });
+                    group.hidden = visible === 0;
+                    if (visible > 0 && query) group.open = true;
+                });
+            }
+
+            search.addEventListener("input", filterPermissions);
+            picker.querySelector("[data-permission-select-all]").addEventListener("click", function () {
+                visibleCheckboxes().forEach(checkbox => checkbox.checked = true);
+                updateCounts();
+            });
+            picker.querySelector("[data-permission-clear]").addEventListener("click", function () {
+                visibleCheckboxes().forEach(checkbox => checkbox.checked = false);
+                updateCounts();
+            });
+            picker.querySelectorAll("[data-permission-group-toggle]").forEach(function (button) {
+                button.addEventListener("click", function (event) {
+                    event.preventDefault();
+                    const group = button.closest("[data-permission-group]");
+                    group.querySelectorAll("input[type='checkbox']").forEach(checkbox => checkbox.checked = true);
+                    updateCounts();
+                });
+            });
+            options.forEach(function (option) {
+                option.querySelector("input").addEventListener("change", updateCounts);
+            });
+            updateCounts();
+        });
+
 
     if (modalState && modal && JSON.parse(modalState.textContent)) {
         bootstrap.Modal.getOrCreateInstance(modal).show();
@@ -112,6 +193,23 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     }
 
+    document.querySelectorAll('input[name="rut"]').forEach(function (input) {
+        function formatRut() {
+            const compact = input.value.replace(/[^0-9]/g, "");
+            if (compact.length < 2) {
+                input.value = compact;
+                return;
+            }
+            const body = compact.slice(0, -1);
+            const verifier = compact.slice(-1);
+            const grouped = body.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+            input.value = `${grouped}-${verifier}`;
+        }
+
+        input.addEventListener("input", formatRut);
+        input.addEventListener("blur", formatRut);
+    });
+
     const profilePhotoInput = document.querySelector("[data-profile-photo-input]");
     const profilePhotoPreview = document.querySelector("#employee-photo-preview img");
     const profilePhotoPlaceholder = document.querySelector("#employee-photo-preview i");
@@ -124,6 +222,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 profilePhotoPlaceholder.hidden = false;
                 return;
             }
+
             if (!file.type.startsWith("image/")) {
                 profilePhotoInput.value = "";
                 showOrganizationAlert({

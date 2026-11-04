@@ -16,6 +16,13 @@ from accounts.forms import (
     UsuarioOCorreoAuthenticationForm,
 )
 from accounts import views as account_views
+from organization import error_views
+
+
+handler400 = "organization.error_views.bad_request"
+handler403 = "organization.error_views.permission_denied"
+handler404 = "organization.error_views.page_not_found"
+handler500 = "organization.error_views.server_error"
 
 
 urlpatterns = [
@@ -124,6 +131,11 @@ urlpatterns = [
         include("core.urls"),
     ),
     path("chat/", include("websocket.urls")),
+    path(
+        "organization/errores/<int:error_code>/",
+        error_views.error_preview,
+        name="organization_error_preview",
+    ),
 ]
 
 

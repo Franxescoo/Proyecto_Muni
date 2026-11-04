@@ -160,7 +160,6 @@ class OrganizationListTests(TestCase):
 
         self.assertEqual(
             labels["derivar_solicitud"],
-            "Solicitudes ciudadanas | Solicitudes ciudadanas | "
             "Puede derivar solicitudes ciudadanas",
         )
         self.assertIn("crear tipos de actividad", labels["add_activitytype"].lower())
@@ -352,7 +351,6 @@ class OrganizationListTests(TestCase):
     def test_organization_cards_open_list_pages(self):
         route_names = (
             "organization:employee_list",
-            "organization:user_list",
             "organization:delegation_list",
             "organization:position_list",
         )
@@ -367,6 +365,7 @@ class OrganizationListTests(TestCase):
         home = self.client.get(reverse("home"))
         for route_name in route_names:
             self.assertContains(home, reverse(route_name))
+        self.assertNotContains(home, reverse("organization:user_list"))
 
     def test_all_organization_lists_show_crud_controls(self):
         for route_name in (
@@ -1062,14 +1061,14 @@ class OrganizationUserMaintenanceTests(TestCase):
             username="cuenta_prueba"
         )
 
-    def test_users_card_is_visible_only_for_admin(self):
+    def test_users_card_is_removed_for_all_users(self):
         sections = build_sections(self.admin)
         organization = next(
             section
             for section in sections
             if section["title"] == "Organización"
         )
-        self.assertIn(
+        self.assertNotIn(
             "Usuarios",
             [card["title"] for card in organization["cards"]],
         )

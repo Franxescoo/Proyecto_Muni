@@ -151,7 +151,6 @@ def catalog_permission_queryset(queryset):
 
 
 def permission_label(permission):
-    app = APP_NAMES.get(permission.content_type.app_label, permission.content_type.app_label)
     model = MODEL_NAMES.get(permission.content_type.model)
     if model is None:
         model = permission.content_type.name.capitalize()
@@ -163,7 +162,7 @@ def permission_label(permission):
                 break
     if action is None:
         action = permission.name
-    return f"{app} | {model} | {action}"
+    return action
 
 
 class SpanishPermissionMultipleChoiceField(forms.ModelMultipleChoiceField):

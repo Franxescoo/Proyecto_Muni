@@ -267,6 +267,8 @@ class EmployeeForm(BootstrapMixin, forms.ModelForm):
         model = Employee
         fields = [
             "name",
+            "rut",
+            "address",
             "delegation",
             "position",
             "roles",
@@ -274,6 +276,8 @@ class EmployeeForm(BootstrapMixin, forms.ModelForm):
         ]
         labels = {
             "name": "Nombre",
+            "rut": "RUT",
+            "address": "Dirección",
             "delegation": "Delegación",
             "position": "Cargo",
             "roles": "Descripción de funciones",

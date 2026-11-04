@@ -41,6 +41,13 @@ def allowed_delegation_ids(user, permission=None, *, active_only=True):
     scopes = set()
     for group in groups:
         role = group.organization_role
-        role_delegations = set(role.application_delegations.values_list("pk", flat=True))
-        scopes.update(role_delegations or {role.delegation_id})
+        role_delegations = set(
+            role.application_delegations.values_list("pk", flat=True)
+        )
+        if role_delegations:
+            scopes.update(role_delegations)
+        elif role.delegation_id:
+            scopes.add(role.delegation_id)
+        else:
+            scopes.update(authorized)
     return authorized.intersection(scopes)

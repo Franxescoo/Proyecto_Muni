@@ -18,7 +18,6 @@ class ChatConsumer(JsonWebsocketConsumer):
         if delegation_id is None:
             self.close()
             return
-            return
         # 3. Crear nombre del grupo
         self.group_name = f"chat_delegation_{delegation_id}"
         # 4. Unirse al grupo
