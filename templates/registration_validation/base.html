@@ -1,4 +1,3 @@
-
 {% extends "base.html" %}
 
 {% block titulo %}Registro y validación{% endblock %}
@@ -29,12 +28,26 @@
         align-items: center;
         justify-content: space-between;
         gap: .75rem;
+        width: 100%;
         padding: .875rem;
+        border: 0;
         background: linear-gradient(135deg, #a60a17, #760710);
         color: #fff;
+        font-family: inherit;
         font-weight: 700;
         font-size: .875rem;
+        line-height: inherit;
+        text-align: left;
         white-space: nowrap;
+        cursor: pointer;
+    }
+
+    .registration-sidebar-heading > .bi-chevron-down {
+        transition: transform .2s ease;
+    }
+
+    .registration-sidebar-heading[aria-expanded="false"] > .bi-chevron-down {
+        transform: rotate(-90deg);
     }
 
     .registration-sidebar-heading span {
@@ -48,6 +61,11 @@
         display: grid;
         gap: .25rem;
         padding: .6rem;
+    }
+
+    /* Mantiene la distribución original cuando el menú está expandido. */
+    .registration-sidebar nav.collapse.show {
+        display: grid;
     }
 
     .registration-sidebar .nav-link {
@@ -323,7 +341,15 @@
 
 <aside class="registration-sidebar workspace-sidebar">
 
-    <div class="registration-sidebar-heading">
+    <button
+        type="button"
+        class="registration-sidebar-heading"
+        data-bs-toggle="collapse"
+        data-bs-target="#registrationSidebarMenu"
+        aria-expanded="true"
+        aria-controls="registrationSidebarMenu"
+        aria-label="Contraer o expandir el menú de Registro y validación"
+    >
 
         <span>
             <i class="bi bi-list me-2"
@@ -334,9 +360,13 @@
         <i class="bi bi-chevron-down"
            aria-hidden="true"></i>
 
-    </div>
+    </button>
 
-    <nav aria-label="Navegación de Registro y validación">
+    <nav
+        id="registrationSidebarMenu"
+        class="collapse show"
+        aria-label="Navegación de Registro y validación"
+    >
 
         <!-- Inicio -->
 
@@ -401,7 +431,7 @@
 
         {% endif %}
 
-        
+
         <!-- Servicios -->
 
         {% if perms.registration_validation.view_service %}
@@ -530,7 +560,7 @@
 
         const serviceEditPattern =
             /^\/registration\/services\/\d+\/edit\/?$/;
-        
+
         const activityTypeEditPattern =
             /^\/registration\/activity-types\/\d+\/edit\/?$/;
 
