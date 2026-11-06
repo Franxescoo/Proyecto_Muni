@@ -73,6 +73,10 @@
                             <input id="attentionReadonlyStatus" class="form-control" readonly>
                         </div>
                         <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold">Estado de seguimiento ciudadano</label>
+                            <input id="attentionReadonlyTrackingStatus" class="form-control" readonly>
+                        </div>
+                        <div class="col-12 col-md-6">
                             <label class="form-label fw-semibold">Fecha de registro</label>
                             <input id="attentionReadonlyDate" class="form-control" readonly>
                         </div>
@@ -120,13 +124,14 @@ document.addEventListener("DOMContentLoaded", function () {
         document.getElementById("attentionReadonlyPhone").value = text(attention.requester_phone);
         document.getElementById("attentionReadonlyAddress").value = text(attention.address);
         document.getElementById("attentionReadonlySubject").value = text(attention.subject);
-        document.getElementById("attentionReadonlyTracking").value = text(attention.tracking_code);
+        document.getElementById("attentionReadonlyTracking").value = text(attention.request_tracking_code || attention.tracking_code);
         setSelect("attentionReadonlyType", attention.attention_type);
         setSelect("attentionReadonlySubattention", attention.sub_attention);
         document.getElementById("attentionReadonlyDescription").value = text(attention.description);
         setSelect("attentionReadonlyDelegation", attention.delegation);
         setSelect("attentionReadonlyEmployee", attention.responsible_employee);
         document.getElementById("attentionReadonlyStatus").value = text(attention.status);
+        document.getElementById("attentionReadonlyTrackingStatus").value = text(attention.tracking_status);
         document.getElementById("attentionReadonlyDate").value = attention.registration_date
             ? new Date(attention.registration_date).toLocaleString()
             : "No registrado";

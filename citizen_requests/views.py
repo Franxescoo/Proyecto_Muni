@@ -1,4 +1,6 @@
 import logging
+import hashlib
+import secrets
 import re
 import smtplib
 import time
@@ -8,11 +10,15 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.core.mail import send_mail
+from django.core.cache import cache
+from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import CharField, Q
 from django.db.models.functions import Cast
 from django.http import JsonResponse
+from django.utils.crypto import constant_time_compare, salted_hmac
+from django.views.decorators.cache import never_cache
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
@@ -20,8 +26,9 @@ from accounts.permissions import allowed_delegation_ids
 from organization.models import Delegation
 from registration_validation.models import AttentionEntry
 
-from .forms import CitizenRequestForm, PublicTrackingCodeForm
+from .forms import CitizenRequestForm, PublicVerifiedRequestForm, PublicTrackingCodeForm
 from .models import CitizenRequest, RequestEvent
+from .tracking import tracking_stages
 from .notifications import (
     LOCAL_PUBLIC_PORTAL_URL,
     portal_link_text,
@@ -76,6 +83,179 @@ def _send_derivation_notification(
         )
 
 
+# Sesiones distintas de la consulta del historial. Nunca se muestra información
+# personal simplemente por conocer el RUT de otro ciudadano.
+PUBLIC_RUT_PENDING = "sgr_public_rut_pending_v1"
+PUBLIC_RUT_VERIFIED = "sgr_public_rut_verified_v1"
+RUT_CODE_TTL = 600               # 10 minutos
+RUT_AUTH_TTL = 1800             # 30 minutos
+RUT_CODE_ATTEMPTS = 5
+RUT_SEND_WINDOW = 900           # 15 minutos
+
+
+def _rut_code_digest(rut, code):
+    return salted_hmac("sgr.public-rut-otp.v1", f"{rut}|{code}").hexdigest()
+
+
+def _rut_limit(key, limit):
+    """Cache compartida recomendada en producción (Redis u otra backend común)."""
+    if cache.get(key, 0) >= limit:
+        return True
+    if not cache.add(key, 1, RUT_SEND_WINDOW):
+        try:
+            cache.incr(key)
+        except ValueError:
+            cache.set(key, 1, RUT_SEND_WINDOW)
+    return False
+
+
+def _rut_limit_key(kind, value):
+    return "sgr-public-rut-v1:" + kind + ":" + hashlib.sha256(
+        value.encode("utf-8")
+    ).hexdigest()
+
+
+def _verified_public_citizen(request):
+    """Siempre comprueba estado, RUT y correo actuales, no datos del navegador."""
+    from citizen_registry.models import Citizen
+
+    data = request.session.get(PUBLIC_RUT_VERIFIED) or {}
+    now = int(time.time())
+    if not data or now - data.get("verified_at", 0) > RUT_AUTH_TTL:
+        request.session.pop(PUBLIC_RUT_VERIFIED, None)
+        return None
+    citizen = Citizen.objects.filter(
+        pk=data.get("id"), rut=data.get("rut"), is_active=True,
+        email__iexact=data.get("email", ""),
+    ).first()
+    if citizen is None or not citizen.email:
+        request.session.pop(PUBLIC_RUT_VERIFIED, None)
+    return citizen
+
+
+def _public_request_context(request, *, error=None, notice=None, form=None):
+    pending = request.session.get(PUBLIC_RUT_PENDING)
+    if pending and (int(time.time()) - pending.get("issued_at", 0) > RUT_CODE_TTL):
+        request.session.pop(PUBLIC_RUT_PENDING, None)
+        pending = None
+    return {
+        "verified_citizen": _verified_public_citizen(request),
+        "pending_verification": bool(pending),
+        "error": error,
+        "notice": notice,
+        "form": form if form is not None else PublicVerifiedRequestForm(),
+    }
+
+
+@never_cache
+def public_request_form(request):
+    """Ingreso público: búsqueda por RUT + propiedad del correo + formulario."""
+    from citizen_registry.models import Citizen
+    from citizen_registry.rut import normalize_rut, validate_rut
+
+    error = notice = None
+    if request.method == "POST":
+        action = request.POST.get("action", "")
+        if action == "restart":
+            request.session.pop(PUBLIC_RUT_PENDING, None)
+            request.session.pop(PUBLIC_RUT_VERIFIED, None)
+            return redirect("citizen_requests:public_request_form")
+
+        if action == "identify":
+            # No se confirma públicamente si un RUT existe o no.
+            request.session.pop(PUBLIC_RUT_VERIFIED, None)
+            request.session.pop(PUBLIC_RUT_PENDING, None)
+            rut = normalize_rut(request.POST.get("rut", ""))
+            ip = request.META.get("REMOTE_ADDR") or "unknown"
+            limited = (
+                _rut_limit(_rut_limit_key("ip", ip), 10)
+                or _rut_limit(_rut_limit_key("rut", rut), 3)
+            )
+            if limited:
+                error = "Demasiados intentos. Intenta nuevamente en 15 minutos."
+            else:
+                try:
+                    validate_rut(rut)
+                except ValidationError:
+                    pass
+                else:
+                    citizen = Citizen.objects.filter(rut=rut, is_active=True).first()
+                    if citizen and citizen.email:
+                        code = f"{secrets.randbelow(1000000):06d}"
+                        try:
+                            send_mail(
+                                subject="Código de verificación — Solicitud ciudadana SGR",
+                                message=(
+                                    "Para ingresar una solicitud al Portal Ciudadano, "
+                                    f"tu código es: {code}\n\n"
+                                    "Caduca en 10 minutos. Si no lo solicitaste, ignora este mensaje."
+                                ),
+                                from_email=settings.DEFAULT_FROM_EMAIL,
+                                recipient_list=[citizen.email],
+                                fail_silently=False,
+                            )
+                        except (OSError, smtplib.SMTPException):
+                            logger.exception("Falló el envío del código de validación pública.")
+                        else:
+                            request.session[PUBLIC_RUT_PENDING] = {
+                                "id": citizen.pk,
+                                "rut": citizen.rut,
+                                "email": citizen.email.strip().lower(),
+                                "digest": _rut_code_digest(citizen.rut, code),
+                                "issued_at": int(time.time()),
+                                "attempts": 0,
+                            }
+            if not error:
+                notice = (
+                    "Si el RUT está registrado, activo y tiene correo asociado, "
+                    "recibirás un código de verificación. Si no lo recibes, "
+                    "solicita la actualización de tus datos a la municipalidad."
+                )
+        elif action == "verify":
+            pending = request.session.get(PUBLIC_RUT_PENDING) or {}
+            now = int(time.time())
+            code = request.POST.get("code", "").strip()
+            if not pending or now - pending.get("issued_at", 0) > RUT_CODE_TTL or pending.get("attempts", 0) >= RUT_CODE_ATTEMPTS:
+                request.session.pop(PUBLIC_RUT_PENDING, None)
+                error = "El código expiró o se agotaron los intentos. Solicita uno nuevo."
+            elif not (len(code) == 6 and code.isascii() and code.isdigit()
+                      and constant_time_compare(
+                          _rut_code_digest(pending["rut"], code), pending["digest"]
+                      )):
+                pending["attempts"] += 1
+                if pending["attempts"] >= RUT_CODE_ATTEMPTS:
+                    request.session.pop(PUBLIC_RUT_PENDING, None)
+                    error = "Se agotaron los intentos. Solicita otro código."
+                else:
+                    request.session[PUBLIC_RUT_PENDING] = pending
+                    error = "Código incorrecto. Revisa el mensaje e intenta nuevamente."
+            else:
+                citizen = Citizen.objects.filter(
+                    pk=pending["id"], rut=pending["rut"], is_active=True,
+                    email__iexact=pending["email"],
+                ).first()
+                request.session.pop(PUBLIC_RUT_PENDING, None)
+                if citizen is None:
+                    error = "No fue posible validar el registro. Inicia nuevamente."
+                else:
+                    request.session.cycle_key()
+                    request.session[PUBLIC_RUT_VERIFIED] = {
+                        "id": citizen.pk,
+                        "rut": citizen.rut,
+                        "email": citizen.email.strip().lower(),
+                        "verified_at": now,
+                    }
+                    return redirect("citizen_requests:public_request_form")
+        else:
+            error = "Operación no válida."
+
+    return render(
+        request,
+        "citizen_requests/request_form.html",
+        _public_request_context(request, error=error, notice=notice),
+    )
+
+
 def public_portal(request):
     tracking_form = PublicTrackingCodeForm()
     tracking_result = None
@@ -92,7 +272,11 @@ def public_portal(request):
                 CitizenRequest.objects.select_related("attention_entry")
                 .filter(
                     tracking_code=tracking_form.cleaned_data["tracking_code"],
-                    origin="CITIZEN",
+                )
+                .filter(
+                    Q(origin="CITIZEN") |
+                    Q(origin="INTERNAL", attention_entry__isnull=False) &
+                    (Q(requester_email__gt="") | Q(verified_followup_email__gt=""))
                 )
                 .first()
             )
@@ -134,24 +318,23 @@ def _tracking_attempt_allowed(request):
 
 
 def _public_tracking_data(citizen_request):
-    stages = [
-        {"label": "Solicitud recibida", "complete": True},
-    ]
-    if citizen_request.delegation_id:
-        stages.append({"label": "Derivada para revisión", "complete": True})
-    if citizen_request.attention_entry_id:
-        stages.append({"label": "En gestión", "complete": True})
-
+    stages = tracking_stages(citizen_request)
+    attention_status = (
+        citizen_request.attention_entry.status
+        if citizen_request.attention_entry_id else None
+    )
     if citizen_request.status == "CLOSED":
         public_status = "Cerrada"
-        stages.append({"label": "Cerrada", "complete": True})
+    elif attention_status == "RESOLVED":
+        public_status = "Resuelta"
+    elif attention_status == "REJECTED":
+        public_status = "No procede"
     elif citizen_request.attention_entry_id:
         public_status = "En gestión"
     elif citizen_request.delegation_id:
         public_status = "Derivada para revisión"
     else:
         public_status = "Solicitud recibida"
-
     return {
         "tracking_code": str(citizen_request.tracking_code),
         "created_at": citizen_request.created_at,
@@ -265,18 +448,48 @@ def _serialize_request(citizen_request, request=None):
             "registration_validation.view_attentionentry",
         )
     )
+    attention = citizen_request.attention_entry if citizen_request.attention_entry_id else None
+    # Los datos actuales se leen siempre del CRUD de Ciudadanos. El original
+    # guardado en CitizenRequest no cambia por ediciones posteriores.
+    current_citizen = (attention.citizen if attention and attention.citizen_id
+                       else citizen_request.citizen if citizen_request.citizen_id else None)
     return {
         "id": citizen_request.pk,
         "tracking_code": str(citizen_request.tracking_code),
-        "subject": citizen_request.subject,
+        "subject": attention.subject if attention else citizen_request.subject,
+        "description": attention.description if attention else citizen_request.description,
+        "original_subject": citizen_request.subject,
+        "original_description": citizen_request.description,
+        "requester_name": current_citizen.full_name if current_citizen else (
+            attention.requester if attention else citizen_request.requester_name),
+        "requester_email": current_citizen.email if current_citizen else (
+            attention.requester_email if attention else citizen_request.requester_email),
+        "requester_phone": current_citizen.phone if current_citizen else (
+            attention.requester_phone if attention else citizen_request.requester_phone),
+        "original_requester_name": citizen_request.requester_name,
+        "original_requester_email": citizen_request.requester_email,
+        "original_requester_phone": citizen_request.requester_phone,
+        "original_address": citizen_request.address,
+        "original_delegation": (
+            citizen_request.delegation.name if citizen_request.delegation_id else "Sin derivar"
+        ),
+        "original_responsible": (
+            citizen_request.assigned_to.name if citizen_request.assigned_to_id else ""
+        ),
+        "attention_type": attention.attention_type.name if attention else "",
+        "sub_attention": attention.sub_attention.name if attention else "",
+        "responsible_employee": (
+            attention.responsible_employee.name if attention and attention.responsible_employee_id
+            else (citizen_request.assigned_to.name if citizen_request.assigned_to_id else "")
+        ),
         "created_at": citizen_request.created_at.isoformat(),
         "status": citizen_request.get_status_display(),
         "status_code": citizen_request.status,
-        "address": citizen_request.address,
+        "address": current_citizen.address if current_citizen else (
+            attention.address if attention else citizen_request.address),
         "delegation": (
-            citizen_request.delegation.name
-            if citizen_request.delegation_id
-            else "Sin derivar"
+            attention.delegation.name if attention else
+            citizen_request.delegation.name if citizen_request.delegation_id else "Sin derivar"
         ),
         "has_attention": citizen_request.attention_entry_id is not None,
         "attention_entry_id": citizen_request.attention_entry_id,
@@ -293,6 +506,7 @@ def _serialize_event(event):
     previous_delegation = None
     new_delegation = None
     status_labels = dict(CitizenRequest.STATUS_CHOICES)
+    status_labels["IN_PROGRESS"] = "En gestión"
 
     derivation_match = re.match(
         r"^(Derivación|Cambio de derivación):\s*(.*?)\s*->\s*(.*?)\s*"
@@ -346,6 +560,7 @@ def _filtered_requests(queryset, request):
         )
         queryset = queryset.filter(
             Q(subject__icontains=search)
+            | Q(attention_entry__subject__icontains=search)
             | Q(
                 tracking_code_text__icontains=search,
             )
@@ -367,45 +582,46 @@ def _page_data(queryset, page_number, request=None):
         }
 
 
+@never_cache
 def register_public_request(request):
-    """
-    Recibe el POST del formulario del mismo sitio protegido por CSRF.
-
-    La interfaz debe incluir {% csrf_token %} en un formulario Django o
-    enviar el token en la cabecera X-CSRFToken al hacer una petición AJAX.
-    """
+    """Crea solo solicitudes de ciudadanos con identidad verificada por correo."""
     if request.method != "POST":
-        return JsonResponse(
-            {"result": "error", "message": "Método no permitido."},
-            status=405,
-        )
+        return JsonResponse({"result": "error", "message": "Método no permitido."}, status=405)
 
     portal_form = request.POST.get("portal_form") == "1"
-    form = CitizenRequestForm(request.POST)
+    citizen = _verified_public_citizen(request)
+    if citizen is None:
+        message = "Debes verificar tu RUT y el código enviado al correo antes de continuar."
+        if portal_form:
+            return render(request, "citizen_requests/request_form.html",
+                          _public_request_context(request, error=message), status=403)
+        return JsonResponse({"result": "error", "message": message}, status=403)
+
+    form = PublicVerifiedRequestForm(request.POST)
     if not form.is_valid():
         if portal_form:
-            return render(
-                request,
-                "citizen_requests/portal.html",
-                {"form": form},
-                status=400,
-            )
-        return JsonResponse(
-            {
-                "result": "error",
-                "message": "Revisa los datos ingresados.",
-                "errors": form.errors.get_json_data(),
-            },
-            status=400,
-        )
+            return render(request, "citizen_requests/request_form.html",
+                          _public_request_context(request, form=form), status=400)
+        return JsonResponse({"result": "error", "message": "Revisa los datos ingresados.",
+                             "errors": form.errors.get_json_data()}, status=400)
 
-    citizen_request = form.save(commit=False)
-    citizen_request.origin = "CITIZEN"
-    citizen_request.status = "NEW"
-    citizen_request.delegation = None
-    citizen_request.assigned_to = None
-    citizen_request.attention_entry = None
+    # NUNCA usar rut, nombre, correo, teléfono ni dirección enviados en POST.
+    # Se reconstruyen desde la fila actual de Citizen. No mostrar el RSH en público.
+    citizen_request = CitizenRequest(
+        citizen=citizen,
+        requester_name=citizen.full_name,
+        requester_email=citizen.email,
+        requester_phone=citizen.phone,
+        address=citizen.address,
+        subject=form.cleaned_data["subject"],
+        description=form.cleaned_data["description"],
+        origin="CITIZEN", status="NEW", delegation=None,
+        assigned_to=None, attention_entry=None,
+    )
+    citizen_request.full_clean()
     citizen_request.save()
+    # Conservar la verificación hasta su vencimiento original (máximo 30 minutos).
+    request.session.pop(PUBLIC_RUT_PENDING, None)
 
     tracking_code = str(citizen_request.tracking_code)
     email_sent = True
@@ -416,8 +632,7 @@ def register_public_request(request):
                 f"Hola {citizen_request.requester_name},\n\n"
                 "Hemos recibido tu solicitud correctamente.\n"
                 f"Tu código de seguimiento es: {tracking_code}\n\n"
-                "Conserva este código para consultar posteriormente "
-                "el estado de tu solicitud.\n\n"
+                "Conserva este código para consultar posteriormente el estado.\n\n"
                 f"{_portal_link_text()}\n"
             ),
             from_email=settings.DEFAULT_FROM_EMAIL,
@@ -426,45 +641,29 @@ def register_public_request(request):
         )
     except (OSError, smtplib.SMTPException):
         email_sent = False
-        logger.exception(
-            "No se pudo enviar el correo de confirmación de CitizenRequest %s.",
-            citizen_request.pk,
-        )
+        logger.exception("Falló el correo de confirmación para CitizenRequest %s", citizen_request.pk)
 
-    if email_sent:
-        message = "Solicitud registrada correctamente."
-    else:
-        message = (
-            "La solicitud fue registrada, pero no se pudo enviar "
-            "el correo de confirmación."
-        )
-
+    message = (
+        "Solicitud registrada correctamente." if email_sent else
+        "La solicitud fue registrada, pero no se pudo enviar el correo de confirmación."
+    )
     if portal_form:
         request.session[PUBLIC_CONFIRMATION_SESSION_KEY] = {
-            "tracking_code": tracking_code,
-            "email_sent": email_sent,
+            "tracking_code": tracking_code, "email_sent": email_sent,
         }
         request.session.modified = True
-        return redirect(
-            "citizen_requests:public_request_confirmation",
-            tracking_code=tracking_code,
-        )
+        return redirect("citizen_requests:public_request_confirmation", tracking_code=tracking_code)
 
-    return JsonResponse(
-        {
-            "result": "success",
-            "message": message,
-            "tracking_code": tracking_code,
-            "email_sent": email_sent,
-        },
-        status=201,
-    )
+    return JsonResponse({"result": "success", "message": message,
+                         "tracking_code": tracking_code, "email_sent": email_sent}, status=201)
 
 
 @login_required
 def request_inbox(request):
     queryset = _request_queryset_for_user(request).select_related(
-        "delegation",
+        "delegation", "assigned_to", "citizen", "attention_entry",
+        "attention_entry__delegation", "attention_entry__responsible_employee",
+        "attention_entry__attention_type", "attention_entry__sub_attention",
     )
     pending_count = queryset.filter(delegation__isnull=True).count()
     pending = _filtered_requests(
@@ -566,11 +765,11 @@ def assign_request(request, request_id):
             new_status=citizen_request.status,
         )
         portal_url = _public_portal_url()
-        if citizen_request.origin == "CITIZEN" and citizen_request.requester_email:
+        if citizen_request.origin == "CITIZEN" and citizen_request.followup_recipient:
             transaction.on_commit(
                 lambda request_id=citizen_request.pk,
                 requester_name=citizen_request.requester_name,
-                requester_email=citizen_request.requester_email,
+                requester_email=citizen_request.followup_recipient,
                 tracking_code=str(citizen_request.tracking_code),
                 portal_url=(
                     portal_url
@@ -677,8 +876,10 @@ def change_request_delegation(request, request_id):
 def request_detail(request, request_id):
     citizen_request = get_object_or_404(
         _request_queryset_for_user(request).select_related(
-            "delegation",
-            "attention_entry",
+            "delegation", "assigned_to", "citizen",
+            "attention_entry__citizen", "attention_entry__delegation",
+            "attention_entry__responsible_employee", "attention_entry__attention_type",
+            "attention_entry__sub_attention",
         ),
         pk=request_id,
     )
@@ -689,10 +890,33 @@ def request_detail(request, request_id):
     data = _serialize_request(citizen_request)
     data.update(
         {
-            "requester_name": citizen_request.requester_name,
-            "requester_email": citizen_request.requester_email,
-            "requester_phone": citizen_request.requester_phone,
-            "description": citizen_request.description,
+            "can_view_rut": request.user.has_perm("citizen_registry.view_citizen"),
+            "citizen_rut": (
+                citizen_request.attention_entry.citizen.rut
+                if citizen_request.attention_entry_id and citizen_request.attention_entry.citizen_id
+                and request.user.has_perm("citizen_registry.view_citizen") else
+                citizen_request.citizen.rut
+                if citizen_request.citizen_id and request.user.has_perm("citizen_registry.view_citizen") else ""
+            ),
+            "citizen_name": (
+                citizen_request.attention_entry.citizen.full_name
+                if citizen_request.attention_entry_id and citizen_request.attention_entry.citizen_id
+                and request.user.has_perm("citizen_registry.view_citizen") else
+                citizen_request.citizen.full_name
+                if citizen_request.citizen_id and request.user.has_perm("citizen_registry.view_citizen") else ""
+            ),
+            "current_rut": (
+                citizen_request.attention_entry.citizen.rut
+                if citizen_request.attention_entry_id and citizen_request.attention_entry.citizen_id
+                and request.user.has_perm("citizen_registry.view_citizen") else
+                citizen_request.citizen.rut
+                if citizen_request.citizen_id and request.user.has_perm("citizen_registry.view_citizen") else ""
+            ),
+            "original_rut": (
+                citizen_request.original_citizen.rut if citizen_request.original_citizen_id and request.user.has_perm("citizen_registry.view_citizen") else
+                citizen_request.citizen.rut if citizen_request.citizen_id and request.user.has_perm("citizen_registry.view_citizen") else ""
+            ),
+            "followup_email_pending": citizen_request.followup_email_paused,
             "attention_entry_id": citizen_request.attention_entry_id,
             "events": [_serialize_event(event) for event in events],
         }
@@ -786,10 +1010,10 @@ def view_attention_from_request(request, request_id):
                     "request_tracking_code": str(
                         citizen_request.tracking_code
                     ),
-                    "requester": attention_entry.requester,
-                    "requester_email": attention_entry.requester_email,
-                    "requester_phone": attention_entry.requester_phone,
-                    "address": attention_entry.address,
+                    "requester": attention_entry.citizen.full_name if attention_entry.citizen_id else attention_entry.requester,
+                    "requester_email": attention_entry.citizen.email if attention_entry.citizen_id else attention_entry.requester_email,
+                    "requester_phone": attention_entry.citizen.phone if attention_entry.citizen_id else attention_entry.requester_phone,
+                    "address": attention_entry.citizen.address if attention_entry.citizen_id else attention_entry.address,
                     "subject": attention_entry.subject,
                     "attention_type": attention_entry.attention_type.name,
                     "sub_attention": attention_entry.sub_attention.name,

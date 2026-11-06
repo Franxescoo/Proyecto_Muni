@@ -1,0 +1,84 @@
+{% load static %}
+{% if user.is_authenticated and user.profile.employee %}
+<link rel="stylesheet" href="{% static 'institutional_mail/mail.css' %}?v=2">
+<div class="modal fade sgr-mail" id="sgrInstitutionalMailModal" tabindex="-1"
+     aria-labelledby="sgrMailTitle" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header sgr-mail-header">
+        <div>
+          <h2 class="modal-title h5 fw-bold" id="sgrMailTitle"><i class="bi bi-envelope-paper-fill me-2"></i>Correo institucional</h2>
+          <small>Mensajes entre funcionarios y notificación a sus correos registrados</small>
+        </div>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar correo"></button>
+      </div>
+      <div class="modal-body sgr-mail-body p-0">
+        <input type="hidden" id="sgr-mail-csrf" value="{{ csrf_token }}">
+        <aside class="sgr-mail-folders" aria-label="Carpetas de correo">
+          <button type="button" class="sgr-mail-compose-btn" id="sgr-mail-new"><i class="bi bi-pencil-square me-1"></i>Redactar</button>
+          <button type="button" class="sgr-mail-folder active" data-mail-folder="inbox"><i class="bi bi-inbox"></i>Recibidos <span id="sgr-mail-inbox-count" class="sgr-mail-count"></span></button>
+          <button type="button" class="sgr-mail-folder" data-mail-folder="sent"><i class="bi bi-send"></i>Enviados</button>
+          <button type="button" class="sgr-mail-folder" data-mail-folder="archive"><i class="bi bi-archive"></i>Archivados</button>
+          <div class="sgr-mail-hint"><i class="bi bi-shield-check me-1"></i>Solo funcionarios del SGR. Los mensajes se guardan internamente; la copia externa se envía al correo registrado.</div>
+        </aside>
+        <section class="sgr-mail-list-panel" aria-label="Lista de mensajes">
+          <div class="sgr-mail-list-head">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <h3 class="h6 fw-bold mb-0" id="sgr-mail-folder-title">Recibidos</h3>
+              <small id="sgr-mail-total" class="text-muted">...</small>
+            </div>
+            <input type="search" class="form-control form-control-sm" id="sgr-mail-search" placeholder="Buscar mensajes" aria-label="Buscar mensajes">
+          </div>
+          <div id="sgr-mail-list" class="sgr-mail-rows" aria-live="polite"></div>
+          <div class="sgr-mail-pagination">
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="sgr-mail-prev">Anterior</button>
+            <span id="sgr-mail-page">Página 1</span>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="sgr-mail-next">Siguiente</button>
+          </div>
+        </section>
+        <section class="sgr-mail-detail-panel" aria-label="Detalle de mensaje">
+          <div class="sgr-mail-view-header" id="sgr-mail-detail-actions" hidden>
+            <strong>Mensaje seleccionado</strong>
+            <div class="d-flex gap-2 flex-wrap">
+              <button type="button" class="btn btn-outline-secondary btn-sm" id="sgr-mail-archive"><i class="bi bi-archive me-1"></i>Archivar</button>
+              <button type="button" class="btn btn-outline-primary btn-sm" id="sgr-mail-reply"><i class="bi bi-reply me-1"></i>Responder</button>
+            </div>
+          </div>
+          <div id="sgr-mail-detail" class="sgr-mail-reading">
+            <div class="sgr-mail-empty"><i class="bi bi-envelope-open"></i><h4>Selecciona un mensaje</h4><p>Elige un correo de la lista para leerlo.</p></div>
+          </div>
+          <form id="sgr-mail-compose" class="sgr-mail-composer" hidden novalidate>
+            <h3 class="h6 fw-bold mb-3" id="sgr-mail-compose-title">Nuevo mensaje</h3>
+            <div class="mb-3 sgr-mail-to-area">
+              <label class="form-label" for="sgr-mail-to-input">Para</label>
+              <div class="sgr-mail-to-wrap" id="sgr-mail-to-wrap">
+                <div class="sgr-mail-chips" id="sgr-mail-chips" aria-label="Destinatarios seleccionados"></div>
+                <input id="sgr-mail-to-input" class="sgr-mail-to-input" type="text"
+                       placeholder="Escribe nombre o correo…" autocomplete="off"
+                       role="combobox" aria-autocomplete="list" aria-expanded="false"
+                       aria-controls="sgr-mail-suggestions" aria-describedby="sgr-mail-to-hint">
+              </div>
+              <div class="sgr-mail-suggestions" id="sgr-mail-suggestions" role="listbox" hidden></div>
+              <div class="form-text" id="sgr-mail-to-hint">Selecciona funcionarios registrados. Puedes añadir varios (máximo 20).</div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="sgr-mail-subject">Asunto</label>
+              <input id="sgr-mail-subject" class="form-control" maxlength="200" required placeholder="Asunto del mensaje">
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="sgr-mail-message">Mensaje</label>
+              <textarea id="sgr-mail-message" class="form-control" rows="8" maxlength="10000" required placeholder="Escribe aquí el mensaje institucional..."></textarea>
+            </div>
+            <div class="d-flex gap-2 align-items-center flex-wrap">
+              <button type="submit" id="sgr-mail-send" class="btn btn-danger"><i class="bi bi-send-fill me-1"></i>Enviar mensaje</button>
+              <button type="button" id="sgr-mail-cancel" class="btn btn-outline-secondary">Cancelar</button>
+            </div>
+          </form>
+          <div class="sgr-mail-feedback" id="sgr-mail-feedback" role="status" aria-live="polite" hidden></div>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>
+<script defer src="{% static 'institutional_mail/mail.js' %}?v=2"></script>
+{% endif %}

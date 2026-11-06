@@ -1,0 +1,58 @@
+{% extends "planning/base.html" %}
+{% block titulo %}Historial de parámetros - Planificación{% endblock %}
+{% block contenido %}
+<div class="container-fluid py-4">
+  <div class="d-flex align-items-center justify-content-between gap-3 flex-wrap mb-3">
+    <div>
+      <h1 class="h3 fw-bold mb-1">Historial del período</h1>
+      <p class="text-muted mb-0">{{ period.start_date|date:"d/m/Y" }} – {{ period.end_date|date:"d/m/Y" }}</p>
+    </div>
+    <a href="{% url 'planning:period_list' %}" class="btn btn-outline-secondary">Volver a períodos</a>
+  </div>
+  <section id="sgr-period-history-fragment" aria-label="Revisiones del período">
+  <div class="alert alert-info border-0" role="note">
+    Cada revisión conserva una copia de la configuración registrada en ese momento. Las revisiones anteriores a la instalación de esta funcionalidad no pueden reconstruirse automáticamente.
+    Los indicadores existentes se guardan como fotografía si estaban calculados; no se recalculan desde esta pantalla.
+  </div>
+  {% for version in versions %}
+  <div class="card shadow-sm mb-3">
+    <div class="card-header bg-white d-flex gap-2 align-items-center flex-wrap">
+      <span class="badge text-bg-secondary">Revisión {{ version.revision }}</span>
+      <strong>{{ version.get_event_display }}</strong>
+      <span class="text-muted small">{{ version.saved_at|date:"d/m/Y H:i" }}</span>
+      <span class="ms-auto small">Por: {{ version.actor.get_username|default:"Registro automático" }}</span>
+    </div>
+    <div class="card-body">
+      <dl class="row mb-2">
+        <dt class="col-sm-3">Versión declarada</dt><dd class="col-sm-9">{{ version.content.parameters_version }}</dd>
+        <dt class="col-sm-3">Estado</dt><dd class="col-sm-9">{{ version.content.status }}</dd>
+        <dt class="col-sm-3">Umbrales</dt><dd class="col-sm-9">{{ version.content.thresholds }}</dd>
+        <dt class="col-sm-3">Tope de cumplimiento</dt><dd class="col-sm-9">{{ version.content.compliance_cap }} %</dd>
+        <dt class="col-sm-3">Días computables</dt><dd class="col-sm-9">{{ version.content.computable_days }}</dd>
+        <dt class="col-sm-3">Metas en la revisión</dt><dd class="col-sm-9">{{ version.content.goals|length }}</dd>
+      </dl>
+      {% if can_view_goals %}
+      <details>
+        <summary class="fw-semibold" style="cursor:pointer">Ver metas y ponderadores de esta revisión</summary>
+        <div class="table-responsive mt-3">
+          <table class="table table-sm table-striped align-middle">
+            <thead><tr><th>Funcionario</th><th>Cargo</th><th>Ítem</th><th>Objetivo</th><th>Ponderador</th><th>Último cumplimiento disponible</th></tr></thead>
+            <tbody>
+              {% for goal in version.content.goals %}
+                <tr><td>{{ goal.employee }}</td><td>{{ goal.position }}</td><td>{{ goal.item }}</td><td>{{ goal.objective_value }}</td><td>{{ goal.weight }} %</td><td>{{ goal.last_indicator.compliance|default:"Sin cálculo" }}</td></tr>
+              {% empty %}<tr><td colspan="6" class="text-muted">Sin metas en esta revisión.</td></tr>{% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </details>
+      {% else %}
+        <p class="text-muted small mb-0">El detalle de las metas requiere el permiso de consulta correspondiente.</p>
+      {% endif %}
+    </div>
+  </div>
+  {% empty %}
+  <div class="alert alert-secondary">Este período todavía no tiene revisiones registradas. El historial comienza con los cambios realizados después de instalar esta actualización.</div>
+  {% endfor %}
+  </section>
+</div>
+{% endblock %}

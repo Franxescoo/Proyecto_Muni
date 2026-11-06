@@ -104,3 +104,36 @@ def send_attention_notification(
             "No se pudo enviar el aviso de atención para CitizenRequest %s.",
             request_id,
         )
+
+
+def send_request_state_notification(request_id, requester_name, requester_email, tracking_code, state_label, *, initial=False, stages=()):
+    """Un correo por transición efectiva; sin impedir guardar si SMTP falla."""
+    if not requester_email:
+        return
+    subject = ("Solicitud registrada" if initial else "Actualización de su solicitud") + " — SGR Municipalidad de La Serena"
+    if initial:
+        detail = ("Su solicitud se registró por un funcionario municipal. "
+                  "Al ingresar la atención, quedó recibida, derivada y en gestión.\n")
+    else:
+        detail = f"El estado de su solicitud cambió a: {state_label}.\n"
+    stage_summary = ""
+    if stages:
+        stage_summary = "Etapas registradas:\n" + "\n".join(f"- {stage}" for stage in stages) + "\n\n"
+    try:
+        send_mail(
+            subject=subject,
+            message=(
+                f"Estimado/a {requester_name}:\n\n"
+                f"{detail}\n"
+                f"Estado actual: {state_label}.\n"
+                f"Código de seguimiento: {tracking_code}\n\n"
+                f"{stage_summary}"
+                f"{portal_link_text()}\n\n"
+                "Conserve este código para futuras consultas."
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[requester_email],
+            fail_silently=False,
+        )
+    except (OSError, smtplib.SMTPException):
+        logger.exception("No se pudo enviar aviso de estado para CitizenRequest %s.", request_id)

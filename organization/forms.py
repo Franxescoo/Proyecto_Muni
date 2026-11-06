@@ -96,40 +96,23 @@ class OrganizationRoleForm(BootstrapMixin, forms.Form):
         kwargs["initial"] = initial
         super().__init__(*args, **kwargs)
 
+        # CATALOGO_COMPLETO_ROLES_SGR_V1: el catálogo NO depende de los permisos del administrador.
+        # Las vistas ya exigen organization.add/change_organizationrole.
+        # Conservar los permisos técnicos/ajenos al catálogo al editar un rol:
+        # no se presentan ni se eliminan por accidente al guardar.
         self._preserved_permission_ids = set()
-
-        if self.actor is not None and not self.actor.is_superuser:
-            owned = self.actor.get_all_permissions()
-
-            if self.group:
-                self._preserved_permission_ids = {
-                    p.pk
-                    for p in self.group.permissions.select_related("content_type")
-                    if f"{p.content_type.app_label}.{p.codename}" not in owned
-                }
-
-            permitted = [
-                (name.split(".", 1)[0], name.split(".", 1)[1])
-                for name in owned
-            ]
-
-            from django.db.models import Q
-            from functools import reduce
-            from operator import or_
-
-            lookup = [
-                Q(content_type__app_label=app, codename=code)
-                for app, code in permitted
-            ]
-
-            self.fields["permissions"].queryset = (
-                self.fields["permissions"].queryset.filter(
-                    reduce(or_, lookup)
+        if self.group is not None:
+            catalog_ids = self.fields["permissions"].queryset.values_list(
+                "pk", flat=True
+            )
+            self._preserved_permission_ids = set(
+                self.group.permissions.exclude(pk__in=catalog_ids).values_list(
+                    "pk", flat=True
                 )
-                if lookup
-                else self.fields["permissions"].queryset.none()
             )
 
+        # Conservar el alcance territorial del administrador funcional.
+        if self.actor is not None and not self.actor.is_superuser:
             scopes = allowed_delegation_ids(
                 self.actor,
                 "organization.change_organizationrole"
@@ -137,22 +120,15 @@ class OrganizationRoleForm(BootstrapMixin, forms.Form):
                 else "organization.add_organizationrole",
                 active_only=False,
             )
-
             self.fields["delegations"].queryset = (
                 self.fields["delegations"].queryset.filter(pk__in=scopes)
             )
-
             if self._preserved_permission_ids:
+                # Evitar alterar el ámbito de permisos técnicos no editables.
                 self.fields["delegations"].disabled = True
-
                 self.fields["delegations"].help_text = (
-                    "Las delegaciones quedan bloqueadas porque este rol "
-                    "tiene permisos que no puedes administrar."
-                )
-
-                self.fields["permissions"].help_text = (
-                    "Puedes modificar los permisos que posees. "
-                    "Los demás se conservarán sin cambios."
+                    "El alcance de este rol está protegido porque incluye "
+                    "permisos técnicos que no se gestionan en el catálogo."
                 )
 
         self.apply_bootstrap()

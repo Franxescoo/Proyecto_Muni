@@ -17,15 +17,15 @@
                 <dd class="col-sm-9">{{ citizen_request.tracking_code|default:"No registrado" }}</dd>
                 {% endif %}
                 <dt class="col-sm-3">Solicitante</dt>
-                <dd class="col-sm-9">{{ attention_entry.requester|default:"No registrado" }}</dd>
+                <dd class="col-sm-9">{% if attention_entry.citizen_id %}{{ attention_entry.citizen.full_name|default:"No registrado" }}{% else %}{{ attention_entry.requester|default:"No registrado" }}{% endif %}</dd>
                 <dt class="col-sm-3">Correo</dt>
-                <dd class="col-sm-9">{{ attention_entry.requester_email|default:"No registrado" }}</dd>
+                <dd class="col-sm-9">{% if attention_entry.citizen_id %}{{ attention_entry.citizen.email|default:"No registrado" }}{% else %}{{ attention_entry.requester_email|default:"No registrado" }}{% endif %}</dd>
                 <dt class="col-sm-3">Teléfono</dt>
-                <dd class="col-sm-9">{{ attention_entry.requester_phone|default:"No registrado" }}</dd>
+                <dd class="col-sm-9">{% if attention_entry.citizen_id %}{{ attention_entry.citizen.phone|default:"No registrado" }}{% else %}{{ attention_entry.requester_phone|default:"No registrado" }}{% endif %}</dd>
                 <dt class="col-sm-3">Asunto</dt>
                 <dd class="col-sm-9">{{ attention_entry.subject|default:"No registrado" }}</dd>
                 <dt class="col-sm-3">Dirección</dt>
-                <dd class="col-sm-9">{{ attention_entry.address|default:"No registrado" }}</dd>
+                <dd class="col-sm-9">{% if attention_entry.citizen_id %}{{ attention_entry.citizen.address|default:"No registrado" }}{% else %}{{ attention_entry.address|default:"No registrado" }}{% endif %}</dd>
                 <dt class="col-sm-3">Tipo</dt>
                 <dd class="col-sm-9">{{ attention_entry.attention_type.name|default:"No registrado" }}</dd>
                 <dt class="col-sm-3">Subatención</dt>

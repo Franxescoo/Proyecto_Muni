@@ -1,9 +1,11 @@
 from datetime import date
+import re
 import smtplib
 from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.core import mail
+from django.core.cache import cache
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
 from django.db import IntegrityError
@@ -223,7 +225,18 @@ class PublicCitizenRequestViewTests(TestCase):
         )
 
     def setUp(self):
+        from citizen_registry.models import Citizen
+        from .views import PUBLIC_RUT_VERIFIED
+        import time
+
+        cache.clear()
+        self.citizen = Citizen.objects.create(
+            rut="111111111", full_name="Vecino Portal",
+            email="vecino@example.com", phone="+56 9 1234 5678",
+            address="Calle 1",
+        )
         self.url = reverse("citizen_requests:register_public_request")
+        self.identify_url = reverse("citizen_requests:public_request_form")
         self.data = {
             "requester_name": "Vecino Portal",
             "requester_email": "vecino@example.com",
@@ -232,6 +245,22 @@ class PublicCitizenRequestViewTests(TestCase):
             "subject": "Consulta",
             "description": "Descripción desde el portal.",
         }
+        # Los tests históricos del envío presuponen la fase previa de verificación.
+        session = self.client.session
+        session[PUBLIC_RUT_VERIFIED] = {
+            "id": self.citizen.pk,
+            "rut": self.citizen.rut,
+            "email": self.citizen.email,
+            "verified_at": int(time.time()),
+        }
+        session.save()
+
+    def clear_public_verification(self):
+        from .views import PUBLIC_RUT_PENDING, PUBLIC_RUT_VERIFIED
+        session = self.client.session
+        session.pop(PUBLIC_RUT_VERIFIED, None)
+        session.pop(PUBLIC_RUT_PENDING, None)
+        session.save()
 
     def test_public_request_can_be_created_without_login(self):
         response = self.client.post(self.url, self.data)
@@ -437,44 +466,26 @@ class PublicCitizenRequestViewTests(TestCase):
         self.assertEqual(response.status_code, 405)
 
     def test_empty_email_is_rejected(self):
-        data = {**self.data, "requester_email": "   "}
-
-        response = self.client.post(self.url, data)
-
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("requester_email", response.json()["errors"])
-        self.assertEqual(CitizenRequest.objects.count(), 0)
+        response = self.client.post(self.url, {**self.data, "requester_email": "   "})
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(CitizenRequest.objects.get().requester_email, self.citizen.email)
 
     def test_invalid_email_is_rejected(self):
-        data = {**self.data, "requester_email": "no-es-correo"}
-
-        response = self.client.post(self.url, data)
-
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("requester_email", response.json()["errors"])
-        self.assertEqual(CitizenRequest.objects.count(), 0)
+        response = self.client.post(self.url, {**self.data, "requester_email": "otro@ejemplo.cl"})
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(CitizenRequest.objects.get().requester_email, self.citizen.email)
 
     def test_required_fields_are_rejected_when_empty(self):
-        data = {field: "" for field in self.data}
-        data["delegation"] = ""
-
-        response = self.client.post(self.url, data)
-
+        response = self.client.post(self.url, {"subject": "", "description": ""})
         self.assertEqual(response.status_code, 400)
         errors = response.json()["errors"]
-        for field in (
-            "requester_name",
-            "requester_email",
-            "address",
-            "subject",
-            "description",
-        ):
-            self.assertIn(field, errors)
+        self.assertIn("subject", errors)
+        self.assertIn("description", errors)
+        self.assertEqual(CitizenRequest.objects.count(), 0)
 
     def test_public_form_does_not_expose_delegation(self):
-        from .forms import CitizenRequestForm
-
-        self.assertNotIn("delegation", CitizenRequestForm().fields)
+        from .forms import PublicVerifiedRequestForm
+        self.assertEqual(set(PublicVerifiedRequestForm().fields), {"subject", "description"})
 
     def test_public_delegation_is_ignored(self):
         data = {
@@ -559,11 +570,7 @@ class PublicCitizenRequestViewTests(TestCase):
         self.assertIsNone(_public_portal_url())
 
     def test_invalid_form_does_not_send_email(self):
-        response = self.client.post(
-            self.url,
-            {**self.data, "requester_email": "invalido"},
-        )
-
+        response = self.client.post(self.url, {**self.data, "subject": "  "})
         self.assertEqual(response.status_code, 400)
         self.assertEqual(len(mail.outbox), 0)
 
@@ -586,6 +593,102 @@ class PublicCitizenRequestViewTests(TestCase):
 
         self.assertEqual(response.status_code, 403)
 
+
+    def test_cannot_create_public_request_without_verified_rut(self):
+        self.clear_public_verification()
+        response = self.client.post(self.url, self.data)
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(CitizenRequest.objects.exists())
+
+    def test_unknown_rut_does_not_send_code_or_reveal_identity(self):
+        self.clear_public_verification()
+        response = self.client.post(self.identify_url, {"action": "identify", "rut": "123456785"})
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, self.citizen.full_name)
+        self.assertFalse(response.context["pending_verification"])
+        self.assertEqual(len(mail.outbox), 0)
+        self.assertEqual(CitizenRequest.objects.count(), 0)
+
+    def test_inactive_citizen_cannot_request_code(self):
+        self.clear_public_verification()
+        self.citizen.is_active = False
+        self.citizen.save()
+        response = self.client.post(self.identify_url, {"action": "identify", "rut": self.citizen.rut})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(mail.outbox), 0)
+        self.assertFalse(response.context["pending_verification"])
+
+    def test_valid_code_unlocks_read_only_identity_and_creates_request(self):
+        self.clear_public_verification()
+        response = self.client.post(self.identify_url, {"action": "identify", "rut": "11.111.111-1"})
+        self.assertTrue(response.context["pending_verification"])
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertNotContains(response, self.citizen.address)
+        code = re.search(r"código es: (\d{6})", mail.outbox[0].body).group(1)
+        bad = self.client.post(self.identify_url, {"action": "verify", "code": "xxxxxx"})
+        self.assertEqual(bad.status_code, 200)
+        self.assertNotContains(bad, self.citizen.address)
+        good = self.client.post(self.identify_url, {"action": "verify", "code": code})
+        self.assertEqual(good.status_code, 302)
+        form_response = self.client.get(self.identify_url)
+        self.assertContains(form_response, self.citizen.full_name)
+        self.assertContains(form_response, "Solo lectura")
+        response = self.client.post(self.url, {
+            "portal_form": "1", "subject": "Luz dañada", "description": "Solicito reparación",
+            "requester_name": "Nombre falso", "requester_email": "atacante@example.com",
+            "address": "Calle falsa", "origin": "INTERNAL", "delegation": 8888,
+        })
+        self.assertEqual(response.status_code, 302)
+        created = CitizenRequest.objects.get()
+        self.assertEqual(created.citizen_id, self.citizen.pk)
+        self.assertEqual(created.requester_name, self.citizen.full_name)
+        self.assertEqual(created.requester_email, self.citizen.email)
+        self.assertEqual(created.address, self.citizen.address)
+        self.assertIsNone(created.delegation_id)
+        self.assertEqual(created.origin, "CITIZEN")
+        # La identidad verificada permite una segunda solicitud dentro de los 30 minutos.
+        second = self.client.post(self.url, self.data)
+        self.assertEqual(second.status_code, 201)
+        self.assertEqual(CitizenRequest.objects.count(), 2)
+
+    def test_verified_identity_expires_after_thirty_minutes(self):
+        from .views import PUBLIC_RUT_VERIFIED, RUT_AUTH_TTL
+        import time
+
+        session = self.client.session
+        data = dict(session[PUBLIC_RUT_VERIFIED])
+        data["verified_at"] = int(time.time()) - RUT_AUTH_TTL - 1
+        session[PUBLIC_RUT_VERIFIED] = data
+        session.save()
+
+        response = self.client.post(self.url, self.data)
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(CitizenRequest.objects.exists())
+        self.assertNotIn(PUBLIC_RUT_VERIFIED, self.client.session)
+
+    def test_confirmation_another_request_returns_to_verified_form(self):
+        from .views import PUBLIC_RUT_VERIFIED
+        response = self.client.post(self.url, {**self.data, "portal_form": "1"})
+        self.assertEqual(response.status_code, 302)
+        confirmation = self.client.get(response.url)
+        self.assertEqual(confirmation.status_code, 200)
+        self.assertContains(confirmation, reverse("citizen_requests:public_request_form"))
+        self.assertIn(PUBLIC_RUT_VERIFIED, self.client.session)
+        form_page = self.client.get(reverse("citizen_requests:public_request_form"))
+        self.assertContains(form_page, self.citizen.full_name)
+        self.assertContains(form_page, 'name="portal_form" value="1"')
+
+    def test_identity_validation_is_revoked_after_deactivation(self):
+        self.citizen.is_active = False
+        self.citizen.save()
+        response = self.client.post(self.url, self.data)
+        self.assertEqual(response.status_code, 403)
+
+    def test_cannot_see_public_data_just_by_entering_rut(self):
+        self.clear_public_verification()
+        response = self.client.post(self.identify_url, {"action": "identify", "rut": self.citizen.rut})
+        self.assertNotContains(response, self.citizen.address)
+        self.assertNotContains(response, self.citizen.full_name)
 
 class FailingEmailBackend:
     def send_messages(self, email_messages):

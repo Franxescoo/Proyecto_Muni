@@ -59,6 +59,7 @@ CSRF_TRUSTED_ORIGINS = [
 # Application definition
 
 INSTALLED_APPS = [
+    "institutional_mail",
     "daphne",
     "channels",
     "websocket",
@@ -75,6 +76,7 @@ INSTALLED_APPS = [
     'core',
     'accounts',
     'citizen_requests',
+    'citizen_registry',
     'municipal_events',
 ]
 

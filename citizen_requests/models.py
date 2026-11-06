@@ -7,6 +7,24 @@ from django.db import models
 
 
 class CitizenRequest(models.Model):
+    citizen = models.ForeignKey("citizen_registry.Citizen", on_delete=models.PROTECT, null=True, blank=True, related_name="requests")
+    # Identidad histórica: se asigna al corregir por primera vez una vinculación.
+    original_citizen = models.ForeignKey(
+        "citizen_registry.Citizen", on_delete=models.PROTECT, null=True,
+        blank=True, related_name="requests_originally_linked",
+    )
+    # No enviar datos del caso al correo anterior tras cambiar de ciudadano.
+    followup_email_paused = models.BooleanField(default=False)
+    verified_followup_email = models.EmailField(blank=True)
+    pending_followup_email = models.EmailField(blank=True)
+    followup_verification_nonce = models.UUIDField(null=True, blank=True)
+
+    @property
+    def followup_recipient(self):
+        if self.followup_email_paused:
+            return ""
+        return self.verified_followup_email or self.requester_email
+
 
     STATUS_CHOICES = [
         ("NEW", "Nueva"),
@@ -128,6 +146,10 @@ class CitizenRequest(models.Model):
             kwargs["update_fields"].add("requester_email")
 
         super().save(*args, **kwargs)
+
+    def get_status_display(self):
+        # Mismo nombre visible de estado que Ingreso de Atención.
+        return "En gestión" if self.status == "IN_PROGRESS" else self._get_FIELD_display(self._meta.get_field("status"))
 
     class Meta:
         ordering = ["-created_at"]

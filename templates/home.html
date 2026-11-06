@@ -1,137 +1,214 @@
 {% extends "base.html" %}
+{% load static %}
 
-{% block titulo %}Inicio · Proyecto Muni{% endblock %}
+{% block titulo %}Inicio · Sistema de Gestión de Resultados{% endblock %}
 
 {% block estilos %}
 <style>
-    /* Colores institucionales */
-    :root {
-        --color-rojo-brand: #a60a17;
-        --color-verde-btn: #138d56;
-    }
+  /*
+   * Portada SGR — cambios exclusivos de Inicio.
+   * No modifica permisos, enlaces, ni el JS del menú de tres rayitas.
+   */
+  /* Fondo de la landing del Portal Ciudadano: radial rosa + círculos suaves.
+     Se aplica solo a Inicio, sin modificar la base de los demás módulos. */
+  body { background: #f4f5f9; }
+  body > .topbar { margin-bottom:0 !important; }
+  .global-page-content {
+      flex:1 0 auto;
+      min-height:calc(100vh - 140px);
+      background-color:#f4f5f9;
+      background-image:
+        radial-gradient(circle 350px at 110% 8%, transparent 69%, rgba(171,16,39,.075) 69.3%, rgba(171,16,39,.075) 69.8%, transparent 70.2%),
+        radial-gradient(circle 340px at -12% 94%, transparent 68%, rgba(171,16,39,.075) 68.3%, rgba(171,16,39,.075) 68.8%, transparent 69.2%),
+        radial-gradient(ellipse 58% 50% at 0% 10%, rgba(171,16,39,.17), transparent 75%),
+        radial-gradient(ellipse 52% 59% at 100% 95%, rgba(130,24,43,.16), transparent 75%),
+        linear-gradient(155deg, #fdfbfc 0%, #f4f5f9 52%, #eef0f6 100%);
+      background-attachment: scroll;
+      padding:18px 0 46px;
+  }
+  /* Evita que la capa oscura del menú oculte casi por completo el fondo. */
+  .global-sidebar-backdrop {background:rgba(16,21,29,.13);}
+  @media (max-width:767.98px) {
+      .global-page-content {background-image:
+          radial-gradient(ellipse 70% 42% at 0% 12%, rgba(171,16,39,.15), transparent 78%),
+          radial-gradient(ellipse 65% 50% at 100% 85%, rgba(130,24,43,.15), transparent 75%),
+          linear-gradient(155deg,#fdfbfc,#f4f5f9 55%,#eef0f6);}
+  }
+  .sgr-inicio { width:100%; max-width:1630px; margin:0 auto; color:#1b2b3e; }
+  .sgr-inicio * { box-sizing:border-box; }
+  .sgr-inicio-bienvenida {
+      --foto-bienvenida:url("{% static 'img/sgr_inicio/bienvenida_manana.webp' %}");
+      isolation:isolate;
+      position:relative; display:flex; align-items:center;
+      min-height:176px; overflow:hidden;
+      margin:0 0 18px; padding:25px clamp(22px,3.3vw,44px);
+      background:#fcecf1; border:1px solid #e9dce3; border-radius:19px;
+      box-shadow:0 5px 18px rgba(37,48,64,.10);
+  }
+  .sgr-inicio-bienvenida::before {
+      content:"";position:absolute;z-index:-2;
+      inset:0 0 0 auto;width:67%;
+      background-image:var(--foto-bienvenida);background-repeat:no-repeat;
+      background-position:center right;background-size:cover;
+  }
+  .sgr-inicio-bienvenida::after {
+      content:"";position:absolute;z-index:-1;inset:0;
+      background:linear-gradient(90deg,#fff0f4 0%,rgba(255,240,245,.98) 31%,
+          rgba(255,240,246,.88) 47%,rgba(255,244,247,.36) 72%,transparent 100%);
+  }
+  .sgr-inicio-bienvenida-texto { max-width:750px; }
+  .sgr-inicio-saludo {font-size:clamp(1.8rem,2.8vw,2.85rem);font-weight:850;letter-spacing:-.045em;
+      color:#a40c20;margin:0 0 .22rem;line-height:1.12;}
+  .sgr-inicio-bajada {font-size:clamp(.99rem,1.4vw,1.24rem);font-weight:800;margin:0 0 .3rem;line-height:1.34;color:#17243a;}
+  .sgr-inicio-detalle {font-size:clamp(.85rem,1.1vw,.97rem);margin:0;color:#334457;line-height:1.52;}
 
-    /* Banner de bienvenida Institucional */
-    .welcome { 
-        background: linear-gradient(135deg, var(--color-rojo-brand) 0%, #6a040d 100%); 
-        color: #fff; 
-        border-radius: 0.5rem; 
-        box-shadow: 0 4px 15px rgba(166, 10, 23, 0.25);
-        border-left: 8px solid #ffb3b3; 
-    }
+  /* Secciones con idéntica altura y ancho por columna. */
+  .sgr-inicio-rejilla {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:stretch;}
+  .sgr-inicio-tarjeta {
+      --sgr-acento:#bd1231;
+      --sgr-boton-inicio:#d61435;
+      --sgr-boton-final:#a40b27;
+      --sgr-cabecera-inicio:#ffe6eb;
+      --sgr-cabecera-final:#fff8fa;
+      display:flex;flex-direction:column;min-width:0;
+      height:292px;max-height:292px;
+      overflow:hidden;
+      background:#fff;border:1px solid #e3e7ee;border-radius:17px;
+      box-shadow:0 7px 16px rgba(22,35,54,.11);
+  }
+  .sgr-inicio-tarjeta--organizacion {--sgr-acento:#a86e00;--sgr-boton-inicio:#e6a80d;--sgr-boton-final:#ac6d00;--sgr-cabecera-inicio:#fff4da;--sgr-cabecera-final:#fffcf4;}
+  .sgr-inicio-tarjeta--registro {--sgr-acento:#ae4209;--sgr-boton-inicio:#fd8207;--sgr-boton-final:#d55300;--sgr-cabecera-inicio:#ffebdf;--sgr-cabecera-final:#fffaf7;}
+  .sgr-inicio-tarjeta--eventos {--sgr-acento:#6625a3;--sgr-boton-inicio:#9040d0;--sgr-boton-final:#5a1d9a;--sgr-cabecera-inicio:#f2e8ff;--sgr-cabecera-final:#fcfaff;}
+  .sgr-inicio-tarjeta--monitoreo {--sgr-acento:#066c43;--sgr-boton-inicio:#079a5c;--sgr-boton-final:#006c3d;--sgr-cabecera-inicio:#e6f8ee;--sgr-cabecera-final:#fafffb;}
+  .sgr-inicio-tarjeta-cabecera {
+      flex:0 0 76px; min-height:76px;
+      display:flex; align-items:center;gap:12px;padding:10px 15px;
+      background:linear-gradient(108deg,var(--sgr-cabecera-inicio),var(--sgr-cabecera-final));
+      border-bottom:1px solid #efe5ea;
+  }
+  .sgr-inicio-tarjeta-icono {display:grid;place-items:center;flex:0 0 42px;width:42px;height:42px;
+      border-radius:11px;background:var(--sgr-acento);color:#fff;font-size:1.3rem;
+      box-shadow:0 3px 8px rgba(30,30,30,.15);}
+  .sgr-inicio-tarjeta-titulo {min-width:0;}
+  .sgr-inicio-tarjeta-titulo h2 {font-size:clamp(.96rem,1.25vw,1.17rem);font-weight:850;
+      margin:0 0 2px;color:var(--sgr-acento);line-height:1.18;}
+  .sgr-inicio-tarjeta-titulo p {font-size:.73rem;line-height:1.23;margin:0;color:#43546a;}
+  .sgr-inicio-tarjeta-lista {
+      display:flex;flex-direction:column;gap:6px;
+      min-height:0;flex:1 1 auto;
+      overflow-y:auto;overflow-x:hidden;
+      padding:10px 11px 12px;
+      scrollbar-gutter:stable;
+      scrollbar-width:thin;scrollbar-color:#9da7b6 #f3f4f8;
+      overscroll-behavior:contain;
+  }
+  .sgr-inicio-tarjeta-lista::-webkit-scrollbar{width:8px;}
+  .sgr-inicio-tarjeta-lista::-webkit-scrollbar-track{background:#f1f3f7;border-radius:8px;}
+  .sgr-inicio-tarjeta-lista::-webkit-scrollbar-thumb{background:#9ca6b4;border:2px solid #f1f3f7;border-radius:8px;}
+  .sgr-inicio-acceso {
+      color:#fff;text-decoration:none;display:flex;align-items:center;gap:9px;
+      flex:0 0 auto;min-width:0;min-height:36px;
+      padding:6px 10px;border-radius:8px;
+      background:linear-gradient(115deg,var(--sgr-boton-inicio),var(--sgr-boton-final));
+      box-shadow:0 2px 5px rgba(11,20,28,.08);
+      font-size:.86rem;font-weight:750;
+      transition:filter .15s ease,transform .15s ease;
+  }
+  a.sgr-inicio-acceso:hover,a.sgr-inicio-acceso:focus{color:#fff;filter:brightness(1.09);transform:translateY(-1px);}
+  a.sgr-inicio-acceso:focus-visible{outline:3px solid #183b75;outline-offset:2px;}
+  .sgr-inicio-acceso > i:first-child{flex:0 0 22px;font-size:1.02rem;text-align:center;}
+  .sgr-inicio-acceso-titulo{flex:1 1 auto;min-width:0;overflow-wrap:anywhere;line-height:1.2;}
+  .sgr-inicio-acceso > i:last-child{margin-left:auto;flex:0 0 auto;font-size:.79rem;}
+  .sgr-inicio-acceso--inactivo{opacity:.63;cursor:default;}
+  .sgr-inicio-acceso-estado{font-size:.62rem;font-weight:600;}
 
-    /* Títulos de sección estilo institucional */
-    .titulo-seccion {
-        color: #000;
-        font-weight: bold;
-        border-left: 5px solid var(--color-rojo-brand);
-        padding-left: 12px;
-        margin-bottom: 1.5rem;
-        font-size: 1.4rem;
-    }
+  /* La imagen del lateral y el reloj son globales (shared/global_sidebar.html).
+     En Inicio solo cambia la fotografía del saludo según el horario. */
+  body[data-sgr-time="tarde"] .sgr-inicio-bienvenida {
+      --foto-bienvenida:url("{% static 'img/sgr_inicio/bienvenida_tarde.webp' %}");
+  }
+  body[data-sgr-time="noche"] .sgr-inicio-bienvenida {
+      --foto-bienvenida:url("{% static 'img/sgr_inicio/bienvenida_noche.webp' %}");
+  }
 
-    /* Tarjetas (Tiles) - Diseño Limpio y Corporativo */
-    .tile { 
-        display: block; 
-        border-radius: 0.5rem; 
-        padding: 1.5rem; 
-        height: 100%;
-        text-decoration: none; 
-        background: #ffffff; 
-        border: 1px solid #e5e7eb;
-        position: relative; 
-        transition: all 0.2s ease-in-out; 
-    }
-    a.tile:hover { 
-        transform: translateY(-4px); 
-        box-shadow: 0 10px 25px rgba(0,0,0,0.08); 
-        border-color: #d1d5db; 
-    }
-    
-    .tile .circle { 
-        width: 3.5rem; 
-        height: 3.5rem; 
-        border-radius: 10px; 
-        display: flex; 
-        align-items: center;
-        justify-content: center; 
-        font-size: 1.6rem; 
-        margin-bottom: 1.2rem; 
-        color: #ffffff; 
-        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-    }
-    
-    .tile .open { 
-        position: absolute; 
-        top: 1.2rem; 
-        right: 1.2rem; 
-        font-size: 1.2rem; 
-        color: #adb5bd; 
-        transition: color 0.2s;
-    }
-    a.tile:hover .open { color: var(--color-rojo-brand); }
-    
-    .tile .name { font-size: 1.1rem; font-weight: 600; color: #2b2f32; line-height: 1.3; }
-    .tile.disabled { opacity: 0.65; cursor: not-allowed; background: #f8f9fa; }
-    
-    /* Ajuste del badge para módulos "Próximamente" */
-    .tile .badge { position: absolute; top: 1.2rem; right: 1.2rem; font-size: 0.75rem; font-weight: 500; }
+  @media (max-width:1199.98px){
+      .sgr-inicio-rejilla{grid-template-columns:repeat(2,minmax(0,1fr));}
+  }
+  @media (max-width:767.98px){
+      .global-page-content{padding-top:14px;}
+      .sgr-inicio-rejilla{grid-template-columns:1fr;gap:13px;}
+      .sgr-inicio-tarjeta{height:292px;max-height:292px;}
+      .sgr-inicio-bienvenida{min-height:205px;padding:21px;}
+      .sgr-inicio-bienvenida::before{width:100%;opacity:.9;}
+      .sgr-inicio-bienvenida::after{background:linear-gradient(90deg,rgba(255,244,247,.99) 0%,rgba(255,244,247,.95) 57%,rgba(255,244,247,.54) 100%);}
+  }
+  @media(prefers-reduced-motion:reduce){.sgr-inicio-acceso{transition:none;}}
 
-    /* Mapeo de colores dinámicos: Ahora los colores se aplican al ÍCONO con un degradado moderno */
-    .tile-pink   .circle { background: linear-gradient(135deg, #e0457b, #c2295d); }
-    .tile-orange .circle { background: linear-gradient(135deg, #fd7e14, #e06000); }
-    .tile-salmon .circle { background: linear-gradient(135deg, #ff6b6b, #d84545); }
-    .tile-yellow .circle { background: linear-gradient(135deg, #f5c211, #d4a500); }
-    .tile-green  .circle { background: linear-gradient(135deg, #138d56, #0c693f); } /* Verde institucional */
-    .tile-blue   .circle { background: linear-gradient(135deg, #0d6efd, #0653c4); }
-    .tile-indigo .circle { background: linear-gradient(135deg, #6610f2, #4c07b8); }
+  /* Al quedar fijo el menú en escritorio, las tarjetas se REACOMODAN sin crecer. */
+  @media (min-width: 992px) and (max-width: 1519.98px) {
+    .sgr-inicio-rejilla { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (min-width: 1520px) {
+    .sgr-inicio-rejilla { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
 </style>
 {% endblock %}
 
 {% block contenido %}
-<!-- Banner de Bienvenida -->
-<div class="welcome p-4 mb-4">
-    <div class="h3 mb-2 fw-bold text-uppercase">{{ user.get_full_name|default:user.username }}</div>
-    <div class="small opacity-75">
-        {% if delegation %}
-            <i class="bi bi-geo-alt-fill"></i> Delegación: {{ delegation }}
-        {% else %}
-            <i class="bi bi-globe"></i> Acceso global
-        {% endif %}
-        &nbsp;|&nbsp; 
-        <i class="bi bi-person-check-fill"></i> Visitas en esta sesión: {{ visits }}
+<div class="sgr-inicio">
+  <section class="sgr-inicio-bienvenida" aria-labelledby="sgrInicioSaludo">
+    <div class="sgr-inicio-bienvenida-texto">
+      <h1 class="sgr-inicio-saludo" id="sgrInicioSaludo">¡Hola, {{ user.first_name|default:user.username }}!</h1>
+      <p class="sgr-inicio-bajada">Bienvenido al Sistema de Gestión de Resultados (SGR)</p>
+      <p class="sgr-inicio-detalle">Gestiona la planificación, organización, registro, validación y monitoreo del desempeño municipal.</p>
     </div>
-</div>
+  </section>
 
-<!-- Secciones y Módulos -->
-{% for section in sections %}
-<div class="bg-white rounded p-4 mb-4 shadow-sm border">
-    <h2 class="titulo-seccion">{{ section.title }}</h2>
-    
-    <div class="row g-3">
-        {% for card in section.cards %}
-        <div class="col-12 col-md-6 col-xl-3">
+  {% if sections %}
+  <div class="sgr-inicio-rejilla" aria-label="Módulos habilitados">
+    {% for section in sections %}
+      <section class="sgr-inicio-tarjeta{% if section.title == 'Planificación' %} sgr-inicio-tarjeta--planificacion{% elif section.title == 'Organización' %} sgr-inicio-tarjeta--organizacion{% elif section.title == 'Registro y validación' %} sgr-inicio-tarjeta--registro{% elif section.title == 'Eventos y Campañas' %} sgr-inicio-tarjeta--eventos{% elif section.title == 'Monitoreo y trazabilidad' %} sgr-inicio-tarjeta--monitoreo{% endif %}" aria-labelledby="sgrTarjeta{{ forloop.counter }}">
+        <div class="sgr-inicio-tarjeta-cabecera">
+          <div class="sgr-inicio-tarjeta-icono" aria-hidden="true">
+            {% if section.title == 'Planificación' %}<i class="bi bi-calendar-check"></i>
+            {% elif section.title == 'Organización' %}<i class="bi bi-people"></i>
+            {% elif section.title == 'Registro y validación' %}<i class="bi bi-clipboard-check"></i>
+            {% elif section.title == 'Eventos y Campañas' %}<i class="bi bi-megaphone"></i>
+            {% elif section.title == 'Monitoreo y trazabilidad' %}<i class="bi bi-bar-chart-line"></i>
+            {% else %}<i class="bi bi-grid"></i>{% endif %}
+          </div>
+          <div class="sgr-inicio-tarjeta-titulo">
+            <h2 id="sgrTarjeta{{ forloop.counter }}">{{ section.title }}</h2>
+            <p>{% if section.title == 'Planificación' %}Define y organiza la gestión municipal.
+            {% elif section.title == 'Organización' %}Administra personas, unidades y funciones.
+            {% elif section.title == 'Registro y validación' %}Registra y verifica la información de gestión.
+            {% elif section.title == 'Eventos y Campañas' %}Coordina actividades y campañas municipales.
+            {% elif section.title == 'Monitoreo y trazabilidad' %}Consulta indicadores y seguimiento.
+            {% else %}Accesos disponibles para tu cuenta.{% endif %}</p>
+          </div>
+        </div>
+        <div class="sgr-inicio-tarjeta-lista" tabindex="0" aria-label="Accesos de {{ section.title }} (desplazable)">
+          {% for card in section.cards %}
             {% if card.href %}
-            <a class="tile tile-{{ card.color }}" href="{{ card.href }}">
-                <i class="bi bi-box-arrow-up-right open"></i>
-                <div class="circle"><i class="bi {{ card.icon }}"></i></div>
-                <div class="name">{{ card.title }}</div>
+            <a class="sgr-inicio-acceso" href="{{ card.href }}">
+              <i class="bi {{ card.icon }}" aria-hidden="true"></i>
+              <span class="sgr-inicio-acceso-titulo">{{ card.title }}</span>
+              <i class="bi bi-chevron-right" aria-hidden="true"></i>
             </a>
             {% else %}
-            <div class="tile tile-{{ card.color }} disabled" title="Módulo en construcción">
-                <span class="badge text-bg-secondary">Próximamente</span>
-                <div class="circle"><i class="bi {{ card.icon }}"></i></div>
-                <div class="name">{{ card.title }}</div>
+            <div class="sgr-inicio-acceso sgr-inicio-acceso--inactivo" title="Módulo en construcción">
+              <i class="bi {{ card.icon }}" aria-hidden="true"></i>
+              <span class="sgr-inicio-acceso-titulo">{{ card.title }}</span>
+              <span class="sgr-inicio-acceso-estado">Próximamente</span>
             </div>
             {% endif %}
+          {% endfor %}
         </div>
-        {% endfor %}
-    </div>
+      </section>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="alert alert-info" role="status">No tienes módulos habilitados. Consulta con el administrador del sistema.</div>
+  {% endif %}
 </div>
-
-{% empty %}
-<div class="alert alert-info shadow-sm border-0 d-flex align-items-center">
-    <i class="bi bi-info-circle-fill fs-4 me-3"></i> 
-    <div>Su cuenta no tiene módulos habilitados todavía. Comuníquese con el administrador.</div>
-</div>
-{% endfor %}
 {% endblock %}

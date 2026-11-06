@@ -21,6 +21,11 @@ from django.views.generic import (
     UpdateView,
 )
 from citizen_requests.models import CitizenRequest, RequestEvent
+from citizen_requests.notifications import send_request_state_notification
+from citizen_requests.tracking import tracking_stages
+from citizen_requests.email_verification import reset_followup_email, schedule_verification
+from citizen_registry.models import Citizen
+from citizen_registry.forms import CitizenForm
 from organization.exports import workbook_response
 from accounts.permissions import allowed_delegation_ids
 from organization.models import Delegation
@@ -2420,6 +2425,7 @@ def scoped_attention_entries(user, permission="registration_validation.view_atte
             "responsible_employee__delegation",
             "registered_by",
             "citizen_request",
+            "citizen",
         )
     )
 
@@ -2438,6 +2444,11 @@ def filtered_attention_entries(request):
     query = request.GET.get("q", "").strip()
     selected_type = request.GET.get("attention_type", "").strip()
     selected_delegation = request.GET.get("delegation", "").strip()
+    selected_status = request.GET.get("status", "active").strip()
+    if selected_status == "closed":
+        entries = entries.filter(status="CLOSED")
+    elif selected_status != "all":
+        entries = entries.exclude(status="CLOSED")
 
     if query:
         entries = entries.filter(
@@ -2496,6 +2507,7 @@ def attention_entry_filter_context(request):
         "selected_delegation": request.GET.get(
             "delegation", ""
         ).strip(),
+        "selected_status": request.GET.get("status", "active").strip(),
         "attention_type_options": (
             AttentionType.objects.filter(pk__in=type_ids)
             .order_by("name", "attention_type_id")
@@ -2532,10 +2544,10 @@ def attention_entry_detail(request, attention_entry_id):
                     if citizen_request is not None
                     else ""
                 ),
-                "requester": attention_entry.requester,
-                "requester_email": attention_entry.requester_email,
-                "requester_phone": attention_entry.requester_phone,
-                "address": attention_entry.address,
+                "requester": (attention_entry.citizen.full_name if attention_entry.citizen_id else attention_entry.requester),
+                "requester_email": (attention_entry.citizen.email if attention_entry.citizen_id else attention_entry.requester_email),
+                "requester_phone": (attention_entry.citizen.phone if attention_entry.citizen_id else attention_entry.requester_phone),
+                "address": (attention_entry.citizen.address if attention_entry.citizen_id else attention_entry.address),
                 "subject": attention_entry.subject,
                 "attention_type": attention_entry.attention_type.name,
                 "sub_attention": attention_entry.sub_attention.name,
@@ -2547,6 +2559,11 @@ def attention_entry_detail(request, attention_entry_id):
                     else ""
                 ),
                 "status": attention_entry.get_status_display(),
+                "tracking_status": (
+                    "Cerrada" if attention_entry.status == "CLOSED" else
+                    "Resuelta" if attention_entry.status == "RESOLVED" else
+                    "En gestión" if citizen_request else attention_entry.get_status_display()
+                ),
                 "registration_date": (
                     attention_entry.registration_date.isoformat()
                     if attention_entry.registration_date
@@ -2560,6 +2577,93 @@ def attention_entry_detail(request, attention_entry_id):
             }
         }
     )
+
+
+def _create_internal_request(attention, actor):
+    """Vincular el ingreso manual al mismo seguimiento público, sin doble captura."""
+    citizen_request = CitizenRequest.objects.create(
+        citizen=attention.citizen,
+        origin="INTERNAL",
+        tracking_code=attention.tracking_code,
+        requester_name=attention.requester,
+        requester_email=attention.requester_email,
+        requester_phone=attention.requester_phone,
+        address=attention.address,
+        subject=attention.subject,
+        description=attention.description,
+        delegation=attention.delegation,
+        assigned_to=attention.responsible_employee,
+        attention_entry=attention,
+        status="CLOSED" if attention.status == "CLOSED" else "IN_PROGRESS",
+    )
+    for previous_status, new_status, observation in (
+        ("", "NEW", "Solicitud ingresada manualmente por funcionario."),
+        ("NEW", "NEW", f"Derivada a {attention.delegation.name}."),
+        ("NEW", citizen_request.status, "Atención registrada; caso en gestión."),
+    ):
+        RequestEvent.objects.create(
+            request=citizen_request, actor=actor, observation=observation,
+            previous_status=previous_status, new_status=new_status,
+        )
+    return citizen_request
+
+
+def _notify_attention_state(citizen_request, state_label, *, initial=False):
+    # Captura de valores escalares: no se envían correos si se revierte la transacción.
+    if not citizen_request.followup_recipient:
+        return
+    visible_stages = tuple(stage["label"] for stage in tracking_stages(citizen_request))
+    transaction.on_commit(
+        lambda request_id=citizen_request.pk,
+        name=(citizen_request.citizen.full_name if citizen_request.citizen_id
+              else citizen_request.requester_name),
+        email=citizen_request.followup_recipient,
+        code=str(citizen_request.tracking_code),
+        label=state_label, is_initial=initial,
+        stages=visible_stages: send_request_state_notification(
+            request_id, name, email, code, label, initial=is_initial, stages=stages,
+        )
+    )
+
+
+def _sync_request_status(attention, actor, previous_status, observation):
+    """Propaga al seguimiento el cambio real, con evento y aviso por correo."""
+    citizen_request = CitizenRequest.objects.select_for_update().filter(
+        attention_entry=attention,
+    ).first()
+    if citizen_request is None:
+        citizen_request = _create_internal_request(attention, actor)
+        _notify_attention_state(citizen_request, "En gestión" if attention.status == "IN_PROGRESS" else attention.get_status_display(), initial=True)
+        return
+    old_request_status = citizen_request.status
+    # No reemplazar los datos originales, tampoco en solicitudes manuales.
+    # En particular, el correo original sigue siendo el destinatario verificado
+    # hasta que exista un proceso autorizado de cambio de correo.
+    citizen_request.status = "CLOSED" if attention.status == "CLOSED" else "IN_PROGRESS"
+    citizen_request.save()
+
+    transition_from = old_request_status
+    # Cerrar desde "En gestión" significa confirmar la solución; si fue
+    # "No procede", el cierre NO se marca falsamente como resuelto.
+    if attention.status == "CLOSED" and previous_status not in ("Resuelta", "No procede"):
+        RequestEvent.objects.create(
+            request=citizen_request, actor=actor,
+            observation=f"Resolución confirmada al cerrar la atención. {observation}",
+            previous_status=transition_from, new_status="RESOLVED",
+        )
+        transition_from = "RESOLVED"
+
+    RequestEvent.objects.create(
+        request=citizen_request, actor=actor,
+        observation=f"Estado de atención: {previous_status} → {attention.get_status_display()}. {observation}",
+        previous_status=transition_from,
+        new_status=(attention.status if attention.status in ("RESOLVED", "REJECTED", "CLOSED") else "IN_PROGRESS"),
+    )
+    label = "En gestión (reabierta)" if old_request_status == "CLOSED" and attention.status == "IN_PROGRESS" else (
+        "En gestión" if attention.status == "IN_PROGRESS" else attention.get_status_display()
+    )
+    _notify_attention_state(citizen_request, label)
+
 
 
 class AttentionEntryPermissionMixin(
@@ -2688,6 +2792,7 @@ class AttentionEntryCreateView(
         citizen_request = self.get_citizen_request()
         if citizen_request is not None:
             kwargs["instance"] = AttentionEntry(
+                citizen=citizen_request.citizen,
                 requester=citizen_request.requester_name,
                 requester_email=citizen_request.requester_email,
                 requester_phone=citizen_request.requester_phone,
@@ -2696,23 +2801,51 @@ class AttentionEntryCreateView(
                 description=citizen_request.description,
                 delegation=citizen_request.delegation,
             )
+        if citizen_request is not None and citizen_request.citizen_id:
+            kwargs.setdefault("initial", {})["citizen_rut"] = citizen_request.citizen.rut
         return kwargs
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["citizen_request"] = self.get_citizen_request()
+        context["citizen_form"] = CitizenForm()
+        context["groups"] = Citizen.objects.exclude(neighborhood_group="").values_list("neighborhood_group", flat=True).distinct()
         return context
 
     def form_valid(self, form):
         citizen_request = self.get_citizen_request()
+        rut = form.cleaned_data.get("citizen_rut")
+        linked_citizen = Citizen.objects.filter(rut=rut, is_active=True).first() if rut else None
+        if rut and linked_citizen is None:
+            form.add_error("citizen_rut", "El RUT no está registrado como ciudadano activo.")
+            return self.form_invalid(form)
+        if linked_citizen and not self.request.user.has_perm("citizen_registry.view_citizen"):
+            raise PermissionDenied("No tienes permiso para consultar ciudadanos.")
+        if citizen_request is not None and citizen_request.citizen_id:
+            if linked_citizen and citizen_request.citizen_id != linked_citizen.pk:
+                form.add_error("citizen_rut", "La solicitud ya tiene otro ciudadano asociado.")
+                return self.form_invalid(form)
+            linked_citizen = citizen_request.citizen
+        if linked_citizen:
+            form.instance.citizen = linked_citizen
+            form.instance.requester = linked_citizen.full_name
+            form.instance.requester_email = linked_citizen.email
+            form.instance.requester_phone = linked_citizen.phone
+            form.instance.address = linked_citizen.address
         if citizen_request is None:
-            form.instance.registered_by = self.request.user
-            response = super().form_valid(form)
+            with transaction.atomic():
+                form.instance.origin = "INTERNAL"
+                form.instance.status = "IN_PROGRESS"
+                form.instance.registered_by = self.request.user
+                self.object = form.save()
+                citizen_request = _create_internal_request(self.object, self.request.user)
+                _notify_attention_state(citizen_request, "En gestión", initial=True)
             messages.success(
                 self.request,
-                "Ingreso de atención registrado correctamente.",
+                "Atención registrada. Se generó un código de seguimiento y "
+                "se notificará al ciudadano si tiene correo electrónico.",
             )
-            return response
+            return HttpResponseRedirect(self.get_success_url())
 
         with transaction.atomic():
             citizen_request = get_object_or_404(
@@ -2745,28 +2878,63 @@ class AttentionEntryCreateView(
                 raise PermissionDenied(
                     "La solicitud ya no pertenece a tu delegación activa."
                 )
-            form.instance.requester = citizen_request.requester_name
-            form.instance.description = citizen_request.description
-            form.instance.requester_email = citizen_request.requester_email
-            form.instance.requester_phone = citizen_request.requester_phone
-            form.instance.subject = citizen_request.subject
-            form.instance.address = citizen_request.address
+            # Solicitud: conservar datos originales. Atención: usar siempre el
+            # ciudadano elegido desde el CRUD, no los datos personales del POST.
+            # El asunto y la descripción sí pueden corregirse en la atención.
+            for field in ("subject", "description"):
+                if field not in self.request.POST:
+                    setattr(form.instance, field, getattr(citizen_request, field))
+            if linked_citizen:
+                form.instance.citizen = linked_citizen
+                form.instance.requester = linked_citizen.full_name
+                form.instance.requester_email = linked_citizen.email or citizen_request.requester_email
+                form.instance.requester_phone = linked_citizen.phone
+                form.instance.address = linked_citizen.address
+            else:
+                form.instance.requester = citizen_request.requester_name
+                form.instance.requester_email = citizen_request.requester_email
+                form.instance.requester_phone = citizen_request.requester_phone
+                form.instance.address = citizen_request.address
             form.instance.origin = "CITIZEN"
             form.instance.delegation = citizen_request.delegation
+            form.instance.tracking_code = citizen_request.tracking_code
+            form.instance.status = "IN_PROGRESS"
             form.instance.registered_by = self.request.user
             self.object = form.save()
             citizen_request.attention_entry = self.object
+            if linked_citizen:
+                citizen_request.citizen = linked_citizen
+            previous_request_status = citizen_request.status
+            citizen_request.status = "IN_PROGRESS"
             citizen_request.save(
-                update_fields=("attention_entry", "updated_at"),
+                update_fields=("attention_entry", "citizen", "status", "updated_at"),
+            )
+            corrected_fields = [
+                name for name, original, updated in (
+                    ("solicitante", citizen_request.requester_name, self.object.requester),
+                    ("correo", citizen_request.requester_email, self.object.requester_email),
+                    ("teléfono", citizen_request.requester_phone, self.object.requester_phone),
+                    ("dirección", citizen_request.address, self.object.address),
+                    ("asunto", citizen_request.subject, self.object.subject),
+                    ("descripción", citizen_request.description, self.object.description),
+                    ("RUT vinculado", citizen_request.citizen_id, self.object.citizen_id),
+                    ("delegación", citizen_request.delegation_id, self.object.delegation_id),
+                    ("responsable", citizen_request.assigned_to_id, self.object.responsible_employee_id),
+                ) if original != updated
+            ]
+            detail = (
+                " Se ajustaron los datos de la atención: "
+                + ", ".join(corrected_fields) + ". La solicitud original se conserva."
+                if corrected_fields else ""
             )
             RequestEvent.objects.create(
                 request=citizen_request,
                 actor=self.request.user,
                 observation=(
                     "Atención creada desde solicitud. "
-                    f"Identificador de atención: {self.object.pk}."
+                    f"Identificador de atención: {self.object.pk}." + detail
                 ),
-                previous_status=citizen_request.status,
+                previous_status=previous_request_status,
                 new_status=citizen_request.status,
             )
         messages.success(
@@ -2790,13 +2958,151 @@ class AttentionEntryUpdateView(
     pk_url_kwarg = "attention_entry_id"
     success_url = reverse_lazy("registration:attention_entry_list")
 
+    def get(self, request, *args, **kwargs):
+        if self.get_object().status == "CLOSED":
+            raise PermissionDenied("La atención está cerrada: solo puedes consultarla o reabrirla.")
+        return super().get(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        if request.POST.get("action") == "resend_email_verification":
+            with transaction.atomic():
+                attention = get_object_or_404(
+                    scoped_attention_entries(request.user, self.permission_required).select_for_update(),
+                    pk=self.kwargs["attention_entry_id"],
+                )
+                linked = CitizenRequest.objects.select_for_update().filter(attention_entry=attention).first()
+                if linked is None or not linked.followup_email_paused or not linked.citizen_id:
+                    raise PermissionDenied("La atención no tiene una verificación de correo pendiente.")
+                linked.citizen.refresh_from_db()
+                reset_followup_email(linked, linked.citizen)
+                linked.save(update_fields=["pending_followup_email","followup_email_paused","verified_followup_email","followup_verification_nonce","updated_at"])
+                schedule_verification(linked)
+            messages.success(request,"Verificación solicitada al correo actual del ciudadano, si está registrado.")
+            return HttpResponseRedirect(reverse("registration:attention_entry_list"))
+        if request.POST.get("action") == "reopen":
+            with transaction.atomic():
+                attention = get_object_or_404(
+                    scoped_attention_entries(request.user, self.permission_required).select_for_update(),
+                    pk=self.kwargs["attention_entry_id"],
+                )
+                if attention.status != "CLOSED":
+                    raise PermissionDenied("Solo pueden reabrirse las atenciones cerradas.")
+                previous = attention.get_status_display()
+                attention.status = "IN_PROGRESS"
+                attention.closed_at = None
+                attention.save(update_fields=["status", "closed_at", "updated_at"])
+                _sync_request_status(attention, request.user, previous, "Reapertura autorizada.")
+            messages.success(request, "Atención reabierta y ciudadano notificado si tiene correo.")
+            return HttpResponseRedirect(reverse("registration:attention_entry_list"))
+        if self.get_object().status == "CLOSED":
+            raise PermissionDenied("La atención cerrada no admite modificaciones.")
+        return super().post(request, *args, **kwargs)
+
     def form_valid(self, form):
-        response = super().form_valid(form)
-        messages.success(
-            self.request,
-            "Ingreso de atención actualizado correctamente.",
-        )
-        return response
+        with transaction.atomic():
+            previous = get_object_or_404(
+                scoped_attention_entries(self.request.user, self.permission_required).select_for_update(),
+                pk=self.object.pk,
+            )
+            if previous.status == "CLOSED":
+                raise PermissionDenied("La atención ya fue cerrada.")
+            old_status = previous.status
+            if old_status != form.initial.get("status", old_status):
+                raise PermissionDenied("El estado cambió mientras se editaba. Vuelve a abrir la atención.")
+            self.object = form.save(commit=False)
+            # El RUT es una vinculación, no un campo de texto. Solo puede
+            # cambiarse a un ciudadano activo y existente con permiso de consulta.
+            rut = form.cleaned_data.get("citizen_rut")
+            citizen_changed = False
+            linked_request = CitizenRequest.objects.select_for_update().filter(attention_entry=previous).first()
+            if rut and (previous.citizen is None or rut != previous.citizen.rut):
+                if not self.request.user.has_perm("citizen_registry.view_citizen"):
+                    raise PermissionDenied("No tienes permiso para consultar ciudadanos.")
+                citizen = Citizen.objects.filter(rut=rut, is_active=True).first()
+                if citizen is None:
+                    form.add_error("citizen_rut", "El RUT no está registrado como ciudadano activo.")
+                    return self.form_invalid(form)
+                if linked_request is None:
+                    form.add_error("citizen_rut", "La atención debe tener una solicitud vinculada para corregir el ciudadano.")
+                    return self.form_invalid(form)
+                if not form.cleaned_data.get("confirm_citizen_change"):
+                    form.add_error("citizen_rut", "Confirma el cambio de ciudadano antes de guardar.")
+                    return self.form_invalid(form)
+                citizen_changed = True
+                self.object.citizen = citizen
+            current_citizen = self.object.citizen if self.object.citizen_id else None
+            if current_citizen is not None:
+                self.object.requester = current_citizen.full_name
+                self.object.requester_email = (
+                    current_citizen.email or previous.requester_email
+                    if previous.origin == "CITIZEN" else current_citizen.email
+                )
+                self.object.requester_phone = current_citizen.phone
+                self.object.address = current_citizen.address
+            else:
+                for field in ("requester", "requester_email", "requester_phone", "address"):
+                    setattr(self.object, field, getattr(previous, field))
+            changed_details = [
+                label for label, before, after in (
+                    ("solicitante", previous.requester, self.object.requester),
+                    ("correo", previous.requester_email, self.object.requester_email),
+                    ("teléfono", previous.requester_phone, self.object.requester_phone),
+                    ("dirección", previous.address, self.object.address),
+                    ("asunto", previous.subject, self.object.subject),
+                    ("descripción", previous.description, self.object.description),
+                    ("RUT vinculado", previous.citizen_id, self.object.citizen_id),
+                    ("tipo de atención", previous.attention_type_id, self.object.attention_type_id),
+                    ("subatención", previous.sub_attention_id, self.object.sub_attention_id),
+                    ("delegación", previous.delegation_id, self.object.delegation_id),
+                    ("responsable", previous.responsible_employee_id, self.object.responsible_employee_id),
+                ) if before != after
+            ]
+            if self.object.status != old_status:
+                self.object.closed_at = timezone.now() if self.object.status == "CLOSED" else None
+            self.object.save()
+            form.save_m2m()
+            if citizen_changed:
+                # Corregir EL MISMO CASO: solicitud y atención apuntan al nuevo
+                # ciudadano; la ficha original queda en sus snapshots y auditoría.
+                old_citizen = previous.citizen or linked_request.citizen
+                if linked_request.original_citizen_id is None and linked_request.citizen_id:
+                    linked_request.original_citizen_id = linked_request.citizen_id
+                linked_request.citizen = self.object.citizen
+                reset_followup_email(linked_request, self.object.citizen)
+                linked_request.save(update_fields=["citizen","original_citizen","pending_followup_email","verified_followup_email","followup_verification_nonce","followup_email_paused","updated_at"])
+                RequestEvent.objects.create(
+                    request=linked_request, actor=self.request.user,
+                    observation=(
+                        "Corrección de RUT confirmada por funcionario. "
+                        f"Anterior: {old_citizen.rut if old_citizen else 'Sin RUT'} "
+                        f"({old_citizen.full_name if old_citizen else 'Sin ciudadano'}). "
+                        f"Nuevo: {self.object.citizen.rut} ({self.object.citizen.full_name}). "
+                        "Notificaciones suspendidas hasta verificar el nuevo correo."
+                    ),
+                    previous_status=linked_request.status,new_status=linked_request.status,
+                )
+                schedule_verification(linked_request)
+            if changed_details:
+                linked_request = CitizenRequest.objects.select_for_update().filter(
+                    attention_entry=self.object,
+                ).first()
+                if linked_request is not None:
+                    RequestEvent.objects.create(
+                        request=linked_request,
+                        actor=self.request.user,
+                        observation=(
+                            "Datos de atención actualizados: "
+                            + ", ".join(changed_details) + "."
+                        ),
+                        previous_status=linked_request.status,
+                        new_status=linked_request.status,
+                    )
+            if self.object.status != old_status:
+                old_label = previous.get_status_display()
+                observation = (form.cleaned_data.get("closing_observation") or "").strip()
+                _sync_request_status(self.object, self.request.user, old_label, observation)
+        messages.success(self.request, "Ingreso de atención actualizado correctamente.")
+        return HttpResponseRedirect(self.get_success_url())
 
 
 class AttentionEntryDeleteView(
@@ -2811,10 +3117,17 @@ class AttentionEntryDeleteView(
     http_method_names = ["post"]
 
     def form_valid(self, form):
-        # La eliminación es lógica: se conserva el historial y
-        # las relaciones con el catálogo de tipos y subatenciones.
-        self.object.deleted_at = timezone.now()
-        self.object.save(update_fields=["deleted_at", "updated_at"])
+        # La comprobación también se realiza en el servidor y sobre el estado
+        # más reciente, para impedir borrar una atención reabierta.
+        with transaction.atomic():
+            attention = get_object_or_404(
+                self.get_queryset().select_for_update(), pk=self.object.pk,
+            )
+            if attention.status != "CLOSED":
+                raise PermissionDenied("Primero debes cerrar la atención para poder eliminarla.")
+            # Archivo lógico: no se borra la solicitud ni su historial.
+            attention.deleted_at = timezone.now()
+            attention.save(update_fields=["deleted_at", "updated_at"])
         messages.success(
             self.request,
             "Ingreso de atención eliminado correctamente.",

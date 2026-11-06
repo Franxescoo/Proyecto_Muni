@@ -82,6 +82,48 @@
       const form = event.target.closest('form[data-mec-ajax-form]');
       if (!form || loading) return;
       event.preventDefault();
+      const lifecycle = form.dataset.mecConfirmRecord;
+      if (lifecycle) {
+        if (!form.reportValidity()) return;
+        const restoring = lifecycle === 'reactivate' || lifecycle === 'reactivate_participation';
+        const isParticipant = lifecycle === 'withdraw' || lifecycle === 'reactivate_participation';
+        const question = isParticipant
+          ? (restoring ? '¿Reactivar participante?' : '¿Retirar participante?')
+          : (restoring ? '¿Reactivar el registro?' : '¿Desactivar el registro?');
+        const response = window.Swal
+          ? await Swal.fire({
+              title: question,
+              text: isParticipant ? 'La participación y su historial se conservarán; se comprobarán los cupos al reactivar.' : 'El registro y su historial se conservarán. Esta acción quedará auditada.',
+              icon: restoring ? 'question' : 'warning', showCancelButton: true,
+              confirmButtonText: restoring ? 'Sí, reactivar' : (isParticipant ? 'Sí, retirar' : 'Sí, desactivar'),
+              cancelButtonText: 'Cancelar', confirmButtonColor: restoring ? '#138d56' : '#a60a17',
+              cancelButtonColor: '#6c757d', reverseButtons: true, focusCancel: true
+            })
+          : {isConfirmed: window.confirm(question)};
+        if (!response.isConfirmed) return;
+      }
+      // Solo Inscripciones: reutiliza la confirmación SweetAlert2 institucional
+      // que emplean Organización y Planificación. Conserva el motivo y el POST existente.
+      const enrollmentAction = form.dataset.mecConfirmEnrollment;
+      if (enrollmentAction) {
+        if (!form.reportValidity()) return;
+        const deactivate = enrollmentAction === 'desactivar';
+        const question = deactivate ? '¿Desactivar inscripción?' : '¿Reactivar inscripción?';
+        const detail = deactivate
+          ? 'Se archivará la inscripción. El niño y su historial seguirán registrados.'
+          : 'Se recuperará la inscripción original y su historial, sin duplicar el RUT.';
+        const decision = window.Swal
+          ? await Swal.fire({
+              title: question, text: detail, icon: deactivate ? 'warning' : 'question',
+              showCancelButton: true,
+              confirmButtonText: deactivate ? 'Sí, desactivar' : 'Sí, reactivar',
+              cancelButtonText: 'Cancelar',
+              confirmButtonColor: deactivate ? '#a60a17' : '#138d56',
+              cancelButtonColor: '#6c757d', reverseButtons: true, focusCancel: true
+            })
+          : {isConfirmed: window.confirm(question + '\n' + detail)};
+        if (!decision.isConfirmed) return;
+      }
       busy(true);
       try {
         const response = await fetch(form.action, {

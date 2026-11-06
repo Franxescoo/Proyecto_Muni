@@ -29,4 +29,5 @@ def can_register_from_attention(user, attention, campaign):
 def campaign_active_queryset():
     from .models import Campaign
     today = timezone.localdate()
-    return Campaign.objects.filter(status="OPEN", opens_on__lte=today, closes_on__gte=today)
+    return Campaign.objects.filter(status="OPEN", deleted_at__isnull=True,
+                                   opens_on__lte=today, closes_on__gte=today)

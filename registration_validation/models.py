@@ -448,6 +448,7 @@ class SubAttention(BaseModel):
 
 
 class AttentionEntry(BaseModel):
+    citizen = models.ForeignKey("citizen_registry.Citizen", on_delete=models.PROTECT, null=True, blank=True, related_name="attention_entries")
     ORIGIN_CHOICES = [
         ("LEGACY", "Sin clasificar"),
         ("CITIZEN", "Vecinal"),
@@ -570,6 +571,10 @@ class AttentionEntry(BaseModel):
         blank=True,
         verbose_name="Closed at",
     )
+
+    def get_status_display(self):
+        # El seguimiento público e interno usan la misma etiqueta.
+        return "En gestión" if self.status == "IN_PROGRESS" else self._get_FIELD_display(self._meta.get_field("status"))
 
     class Meta:
         verbose_name = "Attention Entry"

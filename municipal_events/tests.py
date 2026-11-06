@@ -1,3 +1,4 @@
+# SGR_PERMISOS_EVENTOS_V2
 """Pruebas del flujo sin usar cuentas superusuario."""
 from datetime import timedelta
 from django.contrib.auth.models import Group, Permission, User
@@ -15,6 +16,31 @@ from .services import can_register_from_attention
 
 
 class CampaignWorkflowTests(TestCase):
+    def test_inscripcion_confirmada_no_duplica_registro(self):
+        """SGR_CONFIRMACION_INSCRIPCION_UNICA_V1: guardar, mostrar y rechazar un reenvío."""
+        self.client.force_login(self.user1)
+        url = reverse("municipal_events:enrollment_create", args=[self.campaign.pk])
+        data = {"attention": self.a1.pk, "name": "Niño Confirmación",
+                "rut": "123456785", "birth_date": "2017-03-01",
+                "observation": "Comprobación de confirmación"}
+        if "sex" in EnrollmentForm.base_fields:
+            data["sex"] = "M"
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Enrollment.objects.filter(campaign=self.campaign).count(), 1)
+        self.assertEqual(CampaignAudit.objects.filter(action="INSCRITA").count(), 1)
+        detail = self.client.get(response["Location"])
+        self.assertContains(detail, "Inscripción registrada correctamente")
+        self.assertContains(detail, "Niño Confirmación")
+        self.assertContains(detail, "Recién inscrito")
+        # La marca visual no persiste tras consultar de nuevo.
+        self.assertNotContains(self.client.get(response["Location"]), "Recién inscrito")
+        repeated = self.client.post(url, data)
+        self.assertEqual(repeated.status_code, 200)
+        self.assertContains(repeated, "ya está inscrito")
+        self.assertEqual(Enrollment.objects.filter(campaign=self.campaign).count(), 1)
+        self.assertEqual(CampaignAudit.objects.filter(action="INSCRITA").count(), 1)
+
     @classmethod
     def setUpTestData(cls):
         cls.d1 = Delegation.objects.create(code="N1", name="Norte", status="Activa", scope="Norte")
@@ -45,7 +71,7 @@ class CampaignWorkflowTests(TestCase):
     def test_normal_user_can_enroll_from_matching_attention(self):
         self.client.force_login(self.user1)
         url = reverse("municipal_events:enrollment_create", args=[self.campaign.pk])
-        res = self.client.post(url, {"attention":self.a1.pk,"name":"Niño Demo","rut":"123456785","birth_date":"2017-03-01","observation":"Prueba"})
+        res = self.client.post(url, {"attention":self.a1.pk,"name":"Niño Demo","rut":"123456785","birth_date":"2017-03-01","sex": "M","observation":"Prueba"})
         self.assertEqual(res.status_code, 302)
         item = Enrollment.objects.get()
         self.assertEqual(item.attention, self.a1)
@@ -56,7 +82,7 @@ class CampaignWorkflowTests(TestCase):
     def test_second_delegation_cannot_duplicate_same_child(self):
         self.client.force_login(self.user1)
         url = reverse("municipal_events:enrollment_create", args=[self.campaign.pk])
-        data = {"attention":self.a1.pk,"name":"Niño Demo","rut":"12.345.678-5","birth_date":"2017-03-01"}
+        data = {"attention":self.a1.pk,"name":"Niño Demo","rut":"12.345.678-5","birth_date":"2017-03-01","sex":"M"}
         self.assertEqual(self.client.post(url, data).status_code,302)
         self.client.force_login(self.user2)
         data["attention"] = self.a2.pk
@@ -273,26 +299,28 @@ class CampaignWorkflowTests(TestCase):
         self.assertContains(self.client.get(reverse("municipal_events:delivery_detail", args=[enrollment.pk]), **headers), "Constancia")
         self.assertEqual(self.client.post(deliver, {"notes": "Duplicación"}, **headers).status_code, 403)
 
-    def test_ajax_delete_is_restricted_and_protects_related_records(self):
+    def test_ajax_deactivation_requires_deactivate_permission_and_protects_related_records(self):
         headers = {"HTTP_X_REQUESTED_WITH": "XMLHttpRequest"}
         event = MunicipalEvent.objects.create(name="Evento protegible", created_by=self.user1)
         self.client.force_login(self.user1)
         url = reverse("municipal_events:event_delete", args=[event.pk])
         self.assertEqual(self.client.get(url, **headers).status_code, 403)
         self.group.permissions.add(Permission.objects.get(content_type__app_label="municipal_events", codename="delete_municipalevent"))
-        # Reiniciar permisos cacheados
         from django.contrib.auth import get_user_model
         self.client.force_login(get_user_model().objects.get(pk=self.user1.pk))
-        self.assertContains(self.client.get(url, **headers), "Eliminar evento municipal")
-        self.assertTrue(self.client.post(url, **headers).json()["ok"])
-        self.assertFalse(MunicipalEvent.objects.filter(pk=event.pk).exists())
+        self.assertContains(self.client.get(url, **headers), "Desactivar evento municipal")
+        self.assertTrue(self.client.post(url, {"reason": "Desactivación de prueba"}, **headers).json()["ok"])
+        event.refresh_from_db()
+        self.assertIsNotNone(event.deleted_at)
+        self.assertTrue(MunicipalEvent.objects.filter(pk=event.pk).exists())
         protected = MunicipalEvent.objects.create(name="Evento con edición", created_by=self.user1)
         EventEdition.objects.create(event=protected, year=timezone.localdate().year,
             date=timezone.localdate(), place="Sede", delegation=self.d1, responsible=self.user1)
         protected_url = reverse("municipal_events:event_delete", args=[protected.pk])
-        self.assertContains(self.client.get(protected_url, **headers), "no se puede eliminar")
-        self.assertEqual(self.client.post(protected_url, **headers).status_code, 409)
-        self.assertTrue(MunicipalEvent.objects.filter(pk=protected.pk).exists())
+        self.assertContains(self.client.get(protected_url, **headers), "Desactiva primero las ediciones")
+        self.assertEqual(self.client.post(protected_url, {"reason":"Prueba"}, **headers).status_code, 409)
+        protected.refresh_from_db()
+        self.assertIsNone(protected.deleted_at)
 
     def test_modal_detail_respects_delegation_scope(self):
         other = Beneficiary.objects.create(name="Niño Sur", rut="123456785", birth_date="2017-03-01")
