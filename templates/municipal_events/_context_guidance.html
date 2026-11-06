@@ -1,0 +1,28 @@
+{# Guía de funcionamiento; no sustituye ni repite las validaciones de los formularios. #}
+{% if section == 'events' or section == 'campaigns' or section == 'enrollments' or section == 'deliveries' or section == 'history' %}
+<section class="sgr-guide-card" role="note" aria-label="Guía rápida de Eventos y Campañas">
+  <div class="sgr-guide-card-heading">
+    <span class="sgr-guide-icon"><i class="bi bi-lightbulb" aria-hidden="true"></i></span>
+    <div class="sgr-guide-card-text small lh-base">
+      <div class="fw-bold text-dark mb-1">Guía rápida ·
+        {% if section == 'events' %}Eventos{% elif section == 'campaigns' %}Campañas{% elif section == 'enrollments' %}Inscripciones{% elif section == 'deliveries' %}Entregas{% else %}Historial{% endif %}
+      </div>
+      {% if section == 'events' %}
+        <p class="mb-1 text-secondary">Registra un evento municipal y administra sus ediciones por año. Desde cada evento puedes consultar las ediciones existentes y registrar una nueva cuando corresponda.</p>
+        <p class="mb-0 text-secondary"><strong class="text-dark">Antes de agregar una edición:</strong> primero debe existir el evento municipal. La edición identifica el año, fecha, lugar, delegación y responsable de esa realización.</p>
+      {% elif section == 'campaigns' %}
+        <p class="mb-1 text-secondary">Crea campañas, define sus fechas de inscripción y consulta su estado. Puedes vincular una campaña con una edición de evento, pero esa vinculación es opcional.</p>
+        <p class="mb-0 text-secondary"><strong class="text-dark">Para crear una campaña:</strong> necesita un tipo de atención activo del catálogo. Para recibir inscripciones, debe estar en estado «Inscripciones abiertas» y encontrarse dentro de sus fechas de apertura y cierre.</p>
+      {% elif section == 'enrollments' %}
+        <p class="mb-1 text-secondary">Aquí puedes consultar las inscripciones registradas y evaluar las pendientes, indicando una decisión y su motivo. Las inscripciones no se crean directamente desde este listado.</p>
+        <p class="mb-0 text-secondary"><strong class="text-dark">Para inscribir a un beneficiario:</strong> debe existir una atención del tipo vinculado a una campaña abierta. Ve a <strong>Registro y Validación → Ingreso de Atención</strong> y utiliza «Inscribir en campaña». El sistema comprueba los duplicados a nivel municipal.</p>
+      {% elif section == 'deliveries' %}
+        <p class="mb-1 text-secondary">Consulta los beneficiarios aprobados, distingue entregas pendientes de las realizadas y registra la constancia al efectuar una entrega.</p>
+        <p class="mb-0 text-secondary"><strong class="text-dark">Para registrar una entrega:</strong> la inscripción debe estar aprobada y no tener una entrega anterior. Se registra la fecha y el funcionario responsable, según los permisos disponibles.</p>
+      {% elif section == 'history' %}
+        <p class="mb-0 text-secondary">Revisa los movimientos de una campaña o beneficiario para seguir el proceso de inscripción, evaluación y entrega. Este historial se genera desde las operaciones realizadas; no necesitas registrar los movimientos manualmente.</p>
+      {% endif %}
+    </div>
+  </div>
+</section>
+{% endif %}

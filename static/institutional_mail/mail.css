@@ -1,0 +1,88 @@
+/* Correo institucional SGR — estilos acotados al modal, sin tocar otras pantallas. */
+.sgr-mail { --mail-red:#a60a17; --mail-ink:#1b2434; --mail-border:#e1e5ed; --mail-bg:#f6f7fb; }
+.sgr-mail .modal-dialog { max-width:min(1380px,96vw); }
+.sgr-mail .modal-content { height:min(735px,94vh); border:0; border-radius:15px; overflow:hidden; box-shadow:0 25px 90px #10172a50; }
+.sgr-mail .modal-header.sgr-mail-header { background:linear-gradient(115deg,#790516,#ac0b1c); color:#fff; border:0; padding:18px 24px; flex-shrink:0; }
+.sgr-mail .modal-header.sgr-mail-header small { color:#ffe9eb; font-size:12px; }
+.sgr-mail .modal-body.sgr-mail-body { display:grid; grid-template-columns:205px 320px minmax(0,1fr); min-height:0; height:100%; padding:0!important; background:#fff!important; overflow:hidden; }
+.sgr-mail .sgr-mail-folders { display:flex; flex-direction:column; gap:5px; min-height:0; padding:18px 12px; background:#f7f8fb; border-right:1px solid var(--mail-border); }
+.sgr-mail .sgr-mail-compose-btn { border:0; border-radius:9px; padding:11px 10px; margin-bottom:12px; background:#ab0b1b; color:#fff; text-align:center; font-weight:700; }
+.sgr-mail .sgr-mail-compose-btn:hover { background:#850517; }
+.sgr-mail .sgr-mail-folder { border:0; border-radius:9px; background:transparent; color:#344057; padding:11px 10px; display:flex; align-items:center; gap:9px; font-weight:600; text-align:left; }
+.sgr-mail .sgr-mail-folder.active { color:#8d0719; background:#f9e7eb; }
+.sgr-mail .sgr-mail-folder:hover { background:#f2e8ea; }
+.sgr-mail .sgr-mail-count { margin-left:auto; border-radius:12px; background:#a60a17; color:#fff; font-size:11px; font-weight:700; padding:2px 7px; }
+.sgr-mail .sgr-mail-count:empty { display:none; }
+.sgr-mail .sgr-mail-hint { margin-top:auto; border-top:1px solid var(--mail-border); color:#667286; padding:12px 5px 0; font-size:12px; line-height:1.45; }
+.sgr-mail .sgr-mail-list-panel { display:flex; flex-direction:column; min-width:0; border-right:1px solid var(--mail-border); min-height:0; }
+.sgr-mail .sgr-mail-list-head { flex-shrink:0; padding:20px 14px 14px; border-bottom:1px solid var(--mail-border); }
+.sgr-mail .sgr-mail-rows { flex:1; overflow:auto; min-height:0; }
+.sgr-mail .sgr-mail-row { display:block; width:100%; background:white; color:var(--mail-ink); border:0; border-bottom:1px solid var(--mail-border); padding:14px; text-align:left; }
+.sgr-mail .sgr-mail-row.selected { background:#fff1f3; border-left:3px solid #b00921; padding-left:11px; }
+.sgr-mail .sgr-mail-row.unread { font-weight:750; background:#fafcff; }
+.sgr-mail .sgr-mail-row.selected.unread { background:#fff1f3; }
+.sgr-mail .sgr-mail-row:hover { background:#faf0f2; }
+.sgr-mail .sgr-mail-row .row-title { display:flex; align-items:center; justify-content:space-between; gap:6px; }
+.sgr-mail .sgr-mail-row .row-subject { display:block; margin-top:5px; color:#39475b; font-size:13px; }
+.sgr-mail .sgr-mail-row .row-preview { display:block; margin-top:3px; font-size:12px; color:#7d8695; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sgr-mail .sgr-mail-row time { color:#8a92a0; font-size:11px; white-space:nowrap; }
+.sgr-mail .sgr-mail-dot { display:inline-block; width:8px; height:8px; margin-right:5px; background:#0d6efd; border-radius:50%; }
+.sgr-mail .sgr-mail-pagination { display:flex; align-items:center; justify-content:space-between; gap:5px; padding:9px 10px; border-top:1px solid var(--mail-border); font-size:12px; }
+.sgr-mail .sgr-mail-detail-panel { display:flex; flex-direction:column; min-height:0; min-width:0; overflow:auto; background:#fff; }
+.sgr-mail .sgr-mail-view-header { padding:15px 20px; border-bottom:1px solid var(--mail-border); display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+.sgr-mail .sgr-mail-reading { flex:1; overflow:auto; padding:26px 24px; min-height:0; }
+.sgr-mail .sgr-mail-subject { font-size:20px; font-weight:750; margin:0 0 20px; color:var(--mail-ink); overflow-wrap:anywhere; }
+.sgr-mail .sgr-mail-party { display:flex; justify-content:space-between; gap:12px; margin:10px 0 18px; border-bottom:1px solid var(--mail-border); padding-bottom:16px; flex-wrap:wrap; }
+.sgr-mail .sgr-mail-letter { white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.68; color:#344055; font-size:14px; }
+.sgr-mail .sgr-mail-empty { color:#8491a3; text-align:center; margin:auto; padding:60px 10px; }
+.sgr-mail .sgr-mail-empty i { font-size:48px; color:#c0c9d6; }
+.sgr-mail .sgr-mail-empty h4 { font-size:17px; color:#56657b; margin-top:18px; }
+.sgr-mail .sgr-mail-empty p { font-size:13px; }
+.sgr-mail .sgr-mail-composer { padding:24px; overflow:auto; min-height:0; }
+.sgr-mail .sgr-mail-composer .form-label { font-weight:650; font-size:13px; color:#39465a; }
+.sgr-mail .sgr-mail-composer .form-control, .sgr-mail .sgr-mail-composer .form-select { background:#fff!important; color:#1b2434!important; }
+.sgr-mail .sgr-mail-feedback { padding:12px 18px; background:#eaf5ef; color:#186043; font-weight:600; font-size:13px; }
+.sgr-mail .sgr-mail-feedback.error { background:#fff1f1; color:#951424; }
+.sgr-mail [hidden] { display:none!important; }
+@media (max-width:1050px) { .sgr-mail .modal-body.sgr-mail-body { grid-template-columns:165px 265px minmax(0,1fr); } }
+@media (max-width:770px) {
+ .sgr-mail .modal-content { height:95vh; }
+ .sgr-mail .modal-body.sgr-mail-body { grid-template-columns:125px minmax(0,1fr); grid-template-rows:minmax(0,1fr) minmax(0,1fr); }
+ .sgr-mail .sgr-mail-folders { grid-row:1 / 3; padding:12px 5px; }
+ .sgr-mail .sgr-mail-list-panel { grid-column:2; }
+ .sgr-mail .sgr-mail-detail-panel { grid-column:2; border-top:1px solid var(--mail-border); }
+ .sgr-mail .sgr-mail-hint { display:none; }
+ .sgr-mail .sgr-mail-folder { font-size:12px; gap:5px; }
+ .sgr-mail .sgr-mail-view-header { padding:8px 10px; }
+ .sgr-mail .sgr-mail-reading, .sgr-mail .sgr-mail-composer { padding:12px; }
+}
+
+/* Campo Para con sugerencias estilo correo y varios destinatarios. */
+.sgr-mail .sgr-mail-to-area { position:relative; }
+.sgr-mail .sgr-mail-to-wrap { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:7px 9px; min-height:47px; border:1px solid #cbd3df; border-radius:7px; background:#fff; }
+.sgr-mail .sgr-mail-to-wrap:focus-within { border-color:#ac0b1c; box-shadow:0 0 0 3px #ac0b1c20; }
+.sgr-mail .sgr-mail-chips { display:contents; }
+.sgr-mail .sgr-mail-chip { display:inline-flex; align-items:center; max-width:100%; padding:3px 7px 3px 9px; border:1px solid #e7bec5; border-radius:15px; background:#fbe9ed; color:#76091b; font-size:12px; font-weight:600; gap:6px; }
+.sgr-mail .sgr-mail-chip span { overflow-wrap:anywhere; }
+.sgr-mail .sgr-mail-chip button { border:0; background:transparent; color:#76091b; padding:0 2px; font-size:17px; line-height:1; }
+.sgr-mail .sgr-mail-to-input { flex:1 1 190px; min-width:130px; border:0; outline:0; min-height:28px; color:#182436!important; background:#fff!important; font-size:14px; caret-color:#182436; }
+.sgr-mail .sgr-mail-to-input::placeholder { color:#6b7280!important; opacity:1; }
+.sgr-mail .sgr-mail-to-input:disabled { background:#fff!important; }
+.sgr-mail .sgr-mail-suggestions { position:absolute; left:0; right:0; top:calc(100% - 20px); background:#fff; border:1px solid #cbd3df; box-shadow:0 12px 28px #17223b25; border-radius:8px; z-index:30; max-height:208px; overflow:auto; padding:3px; }
+.sgr-mail .sgr-mail-suggestion { display:flex; flex-direction:column; width:100%; text-align:left; padding:9px 12px; border:0; border-radius:6px; background:white; color:#17223b; }
+.sgr-mail .sgr-mail-suggestion small { color:#596577; font-size:12px; overflow-wrap:anywhere; }
+.sgr-mail .sgr-mail-suggestion:hover, .sgr-mail .sgr-mail-suggestion.active { background:#fbedef; }
+.sgr-mail .sgr-mail-no-match { padding:9px 12px; color:#566070; font-size:13px; }
+/* Autocompletado de Chrome: texto oscuro y superficie blanca, sin fondo azul ni letras invisibles. */
+.sgr-mail .sgr-mail-composer input:-webkit-autofill,
+.sgr-mail .sgr-mail-composer input:-webkit-autofill:hover,
+.sgr-mail .sgr-mail-composer input:-webkit-autofill:focus,
+.sgr-mail .sgr-mail-composer textarea:-webkit-autofill {
+  -webkit-text-fill-color:#182436!important;
+  -webkit-box-shadow:0 0 0 1000px #fff inset!important;
+  box-shadow:0 0 0 1000px #fff inset!important;
+  caret-color:#182436!important;
+  transition:background-color 9999s ease-out 0s;
+}
+.sgr-mail .sgr-mail-composer input, .sgr-mail .sgr-mail-composer textarea { color:#182436!important; }
+.sgr-mail .sgr-mail-composer input::placeholder, .sgr-mail .sgr-mail-composer textarea::placeholder { color:#657387!important; opacity:1; }

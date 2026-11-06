@@ -206,8 +206,8 @@ class Entrega2SecurityTests(TestCase):
         self.assertEqual(update_response.status_code, 302)
         attention.refresh_from_db()
         self.assertEqual(attention.tracking_code, tracking_code)
-        self.assertEqual(attention.requester_email, "actualizado@example.com")
-        self.assertEqual(attention.address, "Nueva dirección")
+        self.assertEqual(attention.requester_email, "vecino@example.com")
+        self.assertEqual(attention.address, "Dirección Norte")
 
     def test_attention_edit_modal_shows_contact_fields_and_read_only_code(self):
         attention = AttentionEntry.objects.create(

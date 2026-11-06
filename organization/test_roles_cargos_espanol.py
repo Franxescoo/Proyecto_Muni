@@ -88,17 +88,52 @@ class PruebasRolesYCatalogoSinSuperusuario(TestCase):
         self.assertFalse(self.actor.is_superuser)
         self.assertEqual(list(created.permissions.values_list("pk", flat=True)), [permission.pk])
 
-    def test_admin_normal_no_puede_otorgar_un_permiso_ajeno(self):
-        self.grant("view_organizationrole", "add_organizationrole")
+    def test_admin_normal_puede_otorgar_un_permiso_ajeno(self):
+        self.grant(
+            "view_organizationrole",
+            "add_organizationrole",
+            "change_organizationrole",
+        )
         self.client.force_login(self.actor)
-        permission = Permission.objects.get(content_type__app_label="organization", codename="delete_employee")
-        r = self.client.post(reverse("organization:role_list"), {
-            "action": "create", "name": "Intento de escalamiento", "description": "Prueba",
-            "delegations": [self.delegation.pk], "permissions": [permission.pk],
-        })
-        self.assertEqual(r.status_code, 200)
-        self.assertIn("permissions", r.context["form"].errors)
-        self.assertFalse(Group.objects.filter(name="Intento de escalamiento").exists())
+
+        permission = Permission.objects.get(
+            content_type__app_label="organization",
+            codename="delete_employee",
+        )
+
+        # El administrador no posee personalmente este permiso.
+        self.assertFalse(
+            self.actor.has_perm("organization.delete_employee")
+        )
+
+        # Crea un rol asignando un permiso que no posee.
+        r = self.client.post(
+            reverse("organization:role_list"),
+            {
+                "action": "create",
+                "name": "Rol con permiso ajeno",
+                "description": "Prueba de catálogo completo",
+                "delegations": [self.delegation.pk],
+                "permissions": [permission.pk],
+            },
+        )
+
+        # El rol debe crearse correctamente.
+        self.assertEqual(r.status_code, 302)
+
+        created = Group.objects.get(
+            name="Rol con permiso ajeno"
+        )
+
+        # El permiso debe quedar asignado al nuevo rol.
+        self.assertTrue(
+            created.permissions.filter(pk=permission.pk).exists()
+        )
+
+        # El administrador sigue sin recibir ese permiso.
+        self.assertFalse(
+            self.actor.has_perm("organization.delete_employee")
+        )
 
     def test_role_ajeno_no_visible_ni_editable(self):
         foreign = Group.objects.create(name="Rol de otra delegación")

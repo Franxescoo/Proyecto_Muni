@@ -83,9 +83,52 @@
         .profile-menu-details { color: #596572; font-size: .78rem; line-height: 1.45; padding: .75rem 1rem; }
         .profile-menu-details div + div { margin-top: .2rem; }
         .profile-menu-details i { color: #a60a17; margin-right: .35rem; width: 1rem; }
-        .profile-menu-delegation-form { align-items: center; display: flex; gap: .35rem; margin-top: .35rem; }
-        .profile-menu-delegation-form i { flex: 0 0 auto; }
-        .profile-menu-delegation-form select { border-color: #d7dce2; font-size: .76rem; min-width: 0; }
+        /* Selector de delegacion: misma identidad institucional, sin controles nativos de confirmacion. */
+        .sgr-delegation-card {
+            margin-top: .7rem;
+            padding: .8rem .85rem;
+            background: #fffafa;
+            border: 1px solid rgba(166, 10, 23, .22);
+            border-radius: .75rem;
+        }
+        .sgr-delegation-title {
+            display: flex;
+            align-items: center;
+            gap: .4rem;
+            color: #921024;
+            font-size: .78rem;
+            font-weight: 700;
+            margin-bottom: .4rem;
+        }
+        .sgr-delegation-title i { color: #a60a17; margin: 0; font-size: .94rem; }
+        .profile-menu-delegation-form { margin: 0; }
+        .profile-menu-delegation-form .form-select {
+            width: 100%;
+            min-width: 0;
+            min-height: 40px;
+            border: 1px solid #dfc5c9;
+            border-radius: .55rem;
+            background-color: #fff;
+            color: #27303b;
+            font-size: .82rem;
+            font-weight: 600;
+            padding: .48rem 2rem .48rem .65rem;
+        }
+        .profile-menu-delegation-form .form-select:focus {
+            border-color: #aa1429;
+            box-shadow: 0 0 0 .2rem rgba(166, 10, 23, .12);
+        }
+        .sgr-delegation-help { color: #717780; font-size: .72rem; line-height: 1.4; margin: .5rem 0 0; }
+        .sgr-delegation-current { display: inline-flex; gap: .4rem; align-items: center; color: #374151; font-weight: 600; }
+        .sgr-delegation-current i { color: #a60a17; }
+        .sgr-delegation-modal .modal-content { border: 0; border-radius: 1rem; overflow: hidden; box-shadow: 0 20px 55px rgba(22, 29, 40, .22); }
+        .sgr-delegation-modal .modal-header { background: #a60a17; color: #fff; border: 0; padding: 1.05rem 1.25rem; }
+        .sgr-delegation-modal .modal-title { font-size: 1.04rem; font-weight: 700; }
+        .sgr-delegation-modal .modal-body { padding: 1.35rem; }
+        .sgr-delegation-modal .sgr-delegation-destination { background: #fdf4f5; border: 1px solid #f2dce0; border-radius: .7rem; padding: .85rem 1rem; color: #7f1120; font-weight: 700; overflow-wrap: anywhere; }
+        .sgr-delegation-modal .modal-footer { padding: .9rem 1.25rem 1.2rem; border: 0; }
+        .sgr-delegation-modal .btn-sgr-confirm { background: #a60a17; border-color: #a60a17; color: #fff; }
+        .sgr-delegation-modal .btn-sgr-confirm:hover, .sgr-delegation-modal .btn-sgr-confirm:focus { background: #870816; border-color: #870816; color: #fff; }
         .profile-menu-chat { border-top: 1px solid #edf0f2; padding: .55rem; }
         .profile-menu-chat .btn { color: #a60a17; font-weight: 600; width: 100%; }
         .profile-menu-chat .btn:hover { background: #fbe2e5; color: #800711; }
@@ -357,8 +400,56 @@
             background: #146c43;
             border-color: #146c43;
         }
+        /* Mensajes del chat: alineación y estados visibles. */
+        .sgr-chat-messages .sgr-chat-item {
+            width: fit-content;
+            max-width: min(86%, 560px);
+            padding: .55rem .8rem;
+            margin-bottom: .65rem;
+            box-shadow: 0 2px 7px rgba(0,0,0,.06);
+        }
+        .sgr-chat-messages .sgr-chat-other {
+            margin-right: auto;
+            background: #fff;
+            border-color: #dee2e6;
+            color: #212529;
+        }
+        .sgr-chat-messages .sgr-chat-own {
+            margin-left: auto;
+            background: #d1e7dd;
+            border-color: #a3cfbb;
+            color: #0f5132;
+        }
+        .sgr-chat-messages .sgr-chat-failed {
+            background: #f8d7da;
+            border-color: #f1aeb5;
+            color: #842029;
+        }
+        .sgr-chat-messages .sgr-chat-pending { opacity: .65; }
+        .sgr-chat-author {font-size: .78rem; font-weight: 700; margin-bottom: .2rem;}
+        .sgr-chat-text {white-space: pre-wrap; overflow-wrap: anywhere;}
+        .sgr-chat-meta {font-size: .68rem; opacity: .76; text-align: right; margin-top: .25rem;}
+        /* SGR: corregir texto invisible en autocompletado de Chrome */
+        input.form-control:-webkit-autofill,
+        input.form-control:-webkit-autofill:hover,
+        input.form-control:-webkit-autofill:focus,
+        textarea.form-control:-webkit-autofill {
+            -webkit-text-fill-color: #1f2937 !important;
+            -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+            box-shadow: 0 0 0 1000px #ffffff inset !important;
+            caret-color: #1f2937 !important;
+        }
 
+        /* Campos de solo lectura */
+        input.form-control[readonly],
+        input.form-control:disabled,
+        textarea.form-control[readonly] {
+            color: #1f2937 !important;
+            -webkit-text-fill-color: #1f2937 !important;
+            opacity: 1 !important;
+        }
     </style>
+    <link rel="stylesheet" href="{% static 'css/chat_flotante.css' %}">
     {% block estilos %}{% endblock %}
 </head>
 <body>
@@ -395,10 +486,10 @@
                 <li class="nav-item">
                     <button type="button"
                             class="nav-link border-0 bg-transparent"
-                            data-bs-toggle="modal"
-                            data-bs-target="#chatInstitucionalModal">
+                            data-sgr-chat-toggle="1" aria-controls="chatInstitucionalModal" aria-expanded="false">
                         <i class="bi bi-chat-dots-fill me-1"></i>
                         Chat institucional
+                        <span id="chat-unread-badge" class="badge rounded-pill text-bg-danger ms-1 d-none" aria-live="polite"></span>
                     </button>
                 </li>
                 {% endif %}
@@ -414,6 +505,7 @@
                               aria-live="polite"></span>
                     </button>
                 </li>
+                {% include "institutional_mail/topbar_button.html" %}
             </ul>
             <div class="dropdown">
                 <button class="profile-menu-toggle dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
@@ -445,17 +537,29 @@
                     </div>
                     <div class="profile-menu-details">
                         <div><i class="bi bi-person-badge"></i>{% if user.is_superuser %}Administrador global{% elif sgr_display_roles %}{{ sgr_display_roles|join:", " }}{% else %}Sin rol asignado{% endif %}</div>
-                        <div><i class="bi bi-building"></i>{% if user.is_superuser %}Delegaciones: global{% elif sgr_delegation_options|length > 1 %}
-                            <form method="post" action="{% url 'accounts:change_active_delegation' %}" class="profile-menu-delegation-form">
-                                {% csrf_token %}
-                                <select class="form-select form-select-sm" name="delegation" onchange="if(confirm('¿Cambiar delegación? Guarda antes tus formularios pendientes.')) this.form.submit(); else this.value=this.dataset.selected;" data-selected="{{ sgr_active_delegation.pk }}" aria-label="Delegación activa">
-                                    {% for delegation in sgr_delegation_options %}
-                                        <option value="{{ delegation.pk }}" {% if delegation.pk == sgr_active_delegation.pk %}selected{% endif %}>{{ delegation.code }} · {{ delegation.name }}</option>
-                                    {% endfor %}
-                                </select>
-                                <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                            </form>
-                        {% elif sgr_active_delegation %}{{ sgr_active_delegation.name }}{% else %}Sin delegación autorizada{% endif %}</div>
+                        {% if user.is_superuser %}
+                            <div class="sgr-delegation-current"><i class="bi bi-building" aria-hidden="true"></i> Delegaciones: global</div>
+                        {% elif sgr_delegation_options|length > 1 %}
+                            <div class="sgr-delegation-card">
+                                <label for="sgrDelegationSelect" class="sgr-delegation-title">
+                                    <i class="bi bi-buildings" aria-hidden="true"></i> Cambiar delegación
+                                </label>
+                                <form method="post" action="{% url 'accounts:change_active_delegation' %}" class="profile-menu-delegation-form" id="sgrDelegationForm">
+                                    {% csrf_token %}
+                                    <select class="form-select" name="delegation" id="sgrDelegationSelect" data-selected="{% if sgr_active_delegation %}{{ sgr_active_delegation.pk }}{% endif %}" aria-label="Delegación activa" required>
+                                        {% for delegation in sgr_delegation_options %}
+                                            <option value="{{ delegation.pk }}" {% if sgr_active_delegation and delegation.pk == sgr_active_delegation.pk %}selected{% endif %}>{% if delegation.code %}{{ delegation.code }} · {% endif %}{{ delegation.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                </form>
+                                <p class="sgr-delegation-help">La delegación elegida determina qué información puedes consultar.</p>
+                            </div>
+                        {% elif sgr_active_delegation %}
+                            <div class="sgr-delegation-current"><i class="bi bi-building" aria-hidden="true"></i>{{ sgr_active_delegation.name }}</div>
+                        {% else %}
+                            <div class="sgr-delegation-current"><i class="bi bi-building" aria-hidden="true"></i>Sin delegación autorizada</div>
+                        {% endif %}
                     </div>
                     <div class="profile-menu-logout">
                         <form method="post" action="{% url 'logout' %}" class="m-0">
@@ -470,6 +574,28 @@
     </div>
 </nav>
 {% endblock %}
+
+{% if user.is_authenticated and sgr_delegation_options|length > 1 and not user.is_superuser %}
+<div class="modal fade sgr-delegation-modal" id="sgrDelegationConfirmModal" tabindex="-1" aria-labelledby="sgrDelegationConfirmTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="sgrDelegationConfirmTitle"><i class="bi bi-arrow-left-right me-2" aria-hidden="true"></i>Cambiar delegación</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-3">¿Quieres cambiar tu delegación activa a:</p>
+                <div class="sgr-delegation-destination"><i class="bi bi-building me-2" aria-hidden="true"></i><span id="sgrDelegationDestination"></span></div>
+                <p class="small text-secondary mt-3 mb-0"><i class="bi bi-info-circle me-1" aria-hidden="true"></i>Guarda antes los formularios pendientes. Al confirmar, se actualizará la delegación activa de tu sesión.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-sgr-confirm" id="sgrDelegationConfirmButton"><i class="bi bi-check2-circle me-1" aria-hidden="true"></i>Confirmar cambio</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <div class="global-page-content">
 <div class="container-fluid px-4">
@@ -498,7 +624,7 @@
     </div>
 </div>
 </div>
-{% if request.resolver_match.url_name == 'login' or request.resolver_match.url_name == 'home' or request.resolver_match.url_name == 'password_reset' or request.resolver_match.url_name == 'password_reset_verify' or request.resolver_match.url_name == 'password_reset_password' or request.resolver_match.url_name == 'password_reset_done' or request.resolver_match.url_name == 'password_reset_confirm' or request.resolver_match.url_name == 'password_reset_complete' %}
+{% if request.resolver_match.url_name == 'login' or request.resolver_match.url_name == 'home' or request.resolver_match.url_name == 'password_reset' or request.resolver_match.url_name == 'password_reset_verify' or request.resolver_match.url_name == 'password_reset_password' or request.resolver_match.url_name == 'password_reset_done' or request.resolver_match.url_name == 'password_reset_confirm' or request.resolver_match.url_name == 'password_reset_complete' or request.resolver_match.url_name == 'public_portal' or request.resolver_match.url_name == 'public_request_form' or request.resolver_match.url_name == 'public_request_history' or request.resolver_match.url_name == 'public_request_confirmation' %}
 <footer class="site-footer bg-gris-90 pt-3 pb-3">
     <div class="container">
         <div class="row align-items-center">
@@ -594,8 +720,12 @@ document.addEventListener('DOMContentLoaded', function () {
 {% block scripts %}{% endblock %}
 
 {% if user.is_authenticated %}
-<div class="modal fade"
+<div class="sgr-floating-chat"
      id="chatInstitucionalModal"
+     data-chat-enabled="{% if sgr_active_delegation %}1{% else %}0{% endif %}"
+     data-chat-user-id="{{ user.pk }}"
+     data-chat-delegation-id="{{ sgr_active_delegation.pk|default:'' }}"
+     role="dialog"
      tabindex="-1"
      aria-labelledby="chatInstitucionalTitulo"
      aria-hidden="true">
@@ -603,16 +733,16 @@ document.addEventListener('DOMContentLoaded', function () {
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content sgr-chat-modal">
 
-            <div class="modal-header sgr-chat-header">
+            <div class="modal-header sgr-chat-header" tabindex="0" title="Arrastra para mover el chat; Alt + flechas para mover con teclado">
                 <h5 class="modal-title" id="chatInstitucionalTitulo">
                     <i class="bi bi-chat-dots-fill me-2"></i>
                     Chat institucional
                 </h5>
 
-                <button type="button"
-                        class="btn-close btn-close-white"
-                        data-bs-dismiss="modal"
-                        aria-label="Cerrar"></button>
+                <div class="sgr-chat-window-controls">
+                    <button type="button" data-sgr-chat-minimize title="Minimizar" aria-label="Minimizar chat"><i class="bi bi-dash-lg" aria-hidden="true"></i></button>
+                    <button type="button" data-sgr-chat-close title="Cerrar" aria-label="Cerrar chat"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+                </div>
             </div>
 
             <div class="modal-body sgr-chat-body">
@@ -630,6 +760,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 <form id="chat-form"
                       action="{% url 'websocket:send' %}"
+                      data-history-url="{% url 'websocket:history' %}"
+                      data-read-url="{% url 'websocket:read' %}"
                       class="mt-3">
 
                     {% csrf_token %}
@@ -650,8 +782,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
                         <button type="submit"
                                 id="send"
-                                class="btn btn-success"
-                                disabled>
+                                class="btn btn-success">
                             <i class="bi bi-send me-1"></i>
                             Enviar
                         </button>
@@ -994,21 +1125,64 @@ document.addEventListener("DOMContentLoaded", function () {
                             </li>`).join("")}
                     </ol>`
                     : '<p class="text-muted mb-0">No hay movimientos registrados</p>';
+                const comparison = [
+                    ["Solicitante", item.original_requester_name, item.requester_name],
+                    ["Correo", item.original_requester_email, item.requester_email],
+                    ["Teléfono", item.original_requester_phone, item.requester_phone],
+                    ["Dirección", item.original_address, item.address],
+                    ["Asunto", item.original_subject, item.subject],
+                    ["Descripción", item.original_description, item.description],
+                    ["Delegación", item.original_delegation, item.delegation],
+                    ["Responsable", item.original_responsible, item.responsible_employee],
+                    ["Tipo de atención", "", item.attention_type],
+                    ["Subatención", "", item.sub_attention],
+                ];
+                if (item.can_view_rut) {
+                    comparison.unshift(["RUT vinculado", item.original_rut, item.current_rut]);
+                }
+                const comparisonHtml = comparison.map(([label, original, current]) =>
+                    `<tr><th scope="row">${escapeHtml(label)}</th>` +
+                    `<td>${escapeHtml(original || "—")}</td>` +
+                    `<td class="${(original || "") !== (current || "") ? "fw-semibold" : ""}">${escapeHtml(current || "—")}</td></tr>`
+                ).join("");
                 detail.innerHTML = `<div class="card">
                     <div class="card-header fw-semibold">Detalle de solicitud</div>
                     <div class="card-body">
                         <dl class="row mb-0">
                             <dt class="col-sm-3">Código</dt><dd class="col-sm-9">${escapeHtml(item.tracking_code)}</dd>
-                            <dt class="col-sm-3">Solicitante</dt><dd class="col-sm-9">${escapeHtml(item.requester_name)}</dd>
-                            <dt class="col-sm-3">Correo</dt><dd class="col-sm-9">${escapeHtml(item.requester_email)}</dd>
-                            <dt class="col-sm-3">Teléfono</dt><dd class="col-sm-9">${escapeHtml(item.requester_phone || "—")}</dd>
-                            <dt class="col-sm-3">Descripción</dt><dd class="col-sm-9">${escapeHtml(item.description)}</dd>
                             <dt class="col-sm-3">Atención vinculada</dt><dd class="col-sm-9">${item.has_attention ? "Sí" : "No"}</dd>
+                            {% if perms.citizen_registry.view_citizen and perms.registration_validation.add_attentionentry %}
+                            <dt class="col-sm-3">Ciudadano registrado</dt><dd class="col-sm-9">${item.citizen_rut ? escapeHtml(item.citizen_name + " · " + item.citizen_rut) : `
+                              <div class="d-flex gap-2 flex-wrap align-items-center">
+                                <input class="form-control form-control-sm" style="max-width:185px;color:#151515" data-citizen-request-rut placeholder="RUT del vecino">
+                                <button type="button" class="btn btn-sm btn-outline-danger" data-citizen-request-link="${item.id}">Vincular por RUT</button>
+                                {% if perms.citizen_registry.add_citizen %}<a class="btn btn-link btn-sm" target="_blank" rel="noopener" href="{% url 'citizen_registry:list' %}">Agregar ciudadano</a>{% endif %}
+                              </div><span class="small text-muted">Sin alterar los datos originales de la solicitud.</span>`}</dd>
+                            {% endif %}
                         </dl>
+                        <h6 class="border-top pt-3 mt-3">Datos originales y actuales</h6>
+                        <div class="table-responsive"><table class="table table-sm table-bordered">
+                            <thead><tr><th>Campo</th><th>Solicitud original</th><th>Atención actual</th></tr></thead>
+                            <tbody>${comparisonHtml}</tbody>
+                        </table></div>
+                        <p class="small text-muted">Los datos originales no se sobrescriben. Cuando se corrige el ciudadano, los avisos quedan suspendidos hasta verificar el correo nuevo.</p>
+                        ${item.followup_email_pending ? '<div class="alert alert-warning small">Correo de seguimiento pendiente de verificación: no se envían detalles del caso hasta que se confirme.</div>' : ''}
                         <h6 class="border-top pt-3 mt-3">Historial de movimientos</h6>
                         ${history}
                     </div>
                 </div>`;
+                const linkButton = detail.querySelector('[data-citizen-request-link]');
+                if(linkButton){linkButton.addEventListener('click',async()=>{
+                    const rutInput=detail.querySelector('[data-citizen-request-rut]');
+                    if(!rutInput?.value.trim()){showFeedback('Ingresa el RUT del ciudadano.', 'warning');return}
+                    const url="{% url 'citizen_registry:link_request' 0 %}".replace('/0/', '/'+requestId+'/');
+                    const body=new URLSearchParams({rut:rutInput.value.trim()});
+                    const result=await fetch(url,{method:'POST',headers:{'X-CSRFToken':csrfToken(),'X-Requested-With':'XMLHttpRequest'},body});
+                    const data=await result.json().catch(()=>({}));
+                    if(!result.ok){showFeedback(data.error||'No fue posible vincular al ciudadano.','warning');return}
+                    showFeedback('Ciudadano vinculado correctamente.','success');
+                    activeDetailId=null;loadDetail(requestId);
+                })}
             })
             .catch(error => showFeedback(error.message, "danger"));
     }
@@ -1057,109 +1231,79 @@ document.addEventListener("DOMContentLoaded", function () {
     window.setInterval(refreshPendingCount, pendingPollInterval);
 });
 </script>
+{% if user.is_authenticated and sgr_active_delegation %}
+<script defer src="{% static 'js/chat_institucional.js' %}"></script>
+<script defer src="{% static 'js/chat_flotante.js' %}"></script>
+{% endif %}
 <script>
-    
+/* Confirmacion Bootstrap 5 al cambiar delegacion, sin confirm() del navegador. */
 document.addEventListener("DOMContentLoaded", function () {
-    const modal = document.getElementById("chatInstitucionalModal");
-    if (!modal) return;
+    const select = document.getElementById("sgrDelegationSelect");
+    const form = document.getElementById("sgrDelegationForm");
+    const modalElement = document.getElementById("sgrDelegationConfirmModal");
+    const destination = document.getElementById("sgrDelegationDestination");
+    const confirmButton = document.getElementById("sgrDelegationConfirmButton");
+    if (!select || !form || !modalElement || !destination || !confirmButton || !window.bootstrap) return;
 
-    const form = document.getElementById("chat-form");
-    const input = document.getElementById("message");
-    const button = document.getElementById("send");
-    const status = document.getElementById("chat-status");
-    const messages = document.getElementById("messages");
-
-    let chatSocket = null;
-
-    modal.addEventListener("shown.bs.modal", function () {
-        const scheme = location.protocol === "https:" ? "wss" : "ws";
-
-        chatSocket = new WebSocket(
-            scheme + "://" + location.host + "/ws/chat/"
-        );
-
-        status.textContent = "Conectando...";
-        status.className = "badge bg-secondary";
-        button.disabled = true;
-
-        chatSocket.onopen = function () {
-            status.textContent = "Conectado";
-            status.className = "badge bg-success";
-            button.disabled = false;
-        };
-
-        chatSocket.onmessage = function (event) {
-            const data = JSON.parse(event.data);
-
-            if (data.type !== "chat_message") return;
-
-            const item = document.createElement("li");
-            item.textContent = data.username + ": " + data.message;
-
-            messages.appendChild(item);
-            messages.scrollTop = messages.scrollHeight;
-        };
-
-        chatSocket.onclose = function () {
-            status.textContent = "Desconectado";
-            status.className = "badge bg-danger";
-            button.disabled = true;
-        };
-
-        chatSocket.onerror = function () {
-            status.textContent = "Error de conexión";
-            status.className = "badge bg-danger";
-        };
+    const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+    let submitted = false;
+    select.addEventListener("change", function () {
+        if (select.value === select.dataset.selected) return;
+        destination.textContent = select.options[select.selectedIndex]?.textContent.trim() || "Delegación seleccionada";
+        const dropdownToggle = document.querySelector(".profile-menu-toggle");
+        if (dropdownToggle) bootstrap.Dropdown.getInstance(dropdownToggle)?.hide();
+        modal.show();
     });
-
-    form.addEventListener("submit", async function (event) {
-        event.preventDefault();
-
-        const message = input.value.trim();
-
-        if (!message ||
-            !chatSocket ||
-            chatSocket.readyState !== WebSocket.OPEN) {
-            return;
-        }
-
-        button.disabled = true;
-
-        try {
-            const response = await fetch(form.action, {
-                method: "POST",
-                headers: {
-                    "X-CSRFToken": form.querySelector(
-                        "[name=csrfmiddlewaretoken]"
-                    ).value
-                },
-                body: new URLSearchParams({ message })
-            });
-
-            if (!response.ok || response.redirected) {
-                status.textContent = "No se pudo enviar el mensaje";
-                return;
-            }
-
-            input.value = "";
-        } catch (error) {
-            status.textContent = "Error al enviar el mensaje";
-        } finally {
-            if (chatSocket &&
-                chatSocket.readyState === WebSocket.OPEN) {
-                button.disabled = false;
-            }
-        }
+    modalElement.addEventListener("hidden.bs.modal", function () {
+        if (!submitted) select.value = select.dataset.selected;
     });
-
-    modal.addEventListener("hidden.bs.modal", function () {
-        if (chatSocket) {
-            chatSocket.close();
-            chatSocket = null;
-        }
+    confirmButton.addEventListener("click", function () {
+        if (submitted || !select.value || select.value === select.dataset.selected) return;
+        submitted = true;
+        confirmButton.disabled = true;
+        confirmButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span> Cambiando...';
+        form.requestSubmit();
     });
 });
-
 </script>
+{% if user.is_authenticated %}
+{% include "institutional_mail/modal.html" %}
+{% endif %}
+<!-- SGR_MENU_TRES_RAYAS_INICIO -->
+<style id="sgr-sidebar-hamburger-mode">
+/* Solo presentación: recupera la apertura con las tres rayitas, sin tocar
+   los enlaces, los permisos, los submenús o el diseño del faro. */
+@media (min-width: 992px) {
+    /* La barra no debe reservar espacio mientras permanezca oculta. */
+    body:has(.global-sidebar) .global-page-content {
+        padding-left: 0 !important;
+    }
+    body:has(.global-sidebar) .site-footer {
+        margin-left: 0 !important;
+    }
+    /* Restaurar botón y capa de cierre que el modo fijo deshabilitaba. */
+    .topbar button.global-sidebar-toggle {
+        display: inline-flex !important;
+    }
+    .global-sidebar-close {
+        display: flex !important;
+    }
+    .global-sidebar-backdrop {
+        display: block !important;
+    }
+    /* Mantiene intactos los colores, foto, difuminado, dimensiones y scroll. */
+    .global-sidebar {
+        transform: translateX(-110%) !important;
+        z-index: 1040 !important;
+    }
+    .global-sidebar.is-open {
+        transform: translateX(0) !important;
+    }
+    body.sidebar-open {
+        overflow: hidden !important;
+    }
+}
+</style>
+<!-- SGR_MENU_TRES_RAYAS_FIN -->
 </body>
 </html>

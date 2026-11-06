@@ -11,7 +11,7 @@ from django.db import transaction
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from organization.exports import workbook_response
-from organization.models import PositionFunction
+from organization.models import PositionFunction, Employee
 from accounts.permissions import allowed_delegation_ids
 
 from .forms import (
@@ -20,7 +20,8 @@ from .forms import (
     PeriodForm,
     MeasurementItemForm,
 )
-from .models import Goal, Period, MeasurementItem, PeriodArchiveLog
+from .models import Goal, Period, MeasurementItem, PeriodArchiveLog, PeriodParameterSnapshot
+from .parameter_history import capture_period_parameters
 from .calculations import (
     InvalidPeriodWeights,
     validate_period_weights,
@@ -195,6 +196,13 @@ def run_bulk_delete(request, queryset):
             deleted_at=now,
             updated_at=now
         )
+        if queryset.model is Goal and updated:
+            for period_id in sorted({g.period_id for g in selected}):
+                capture_period_parameters(
+                    Period.objects.get(pk=period_id),
+                    actor=request.user,
+                    event=PeriodParameterSnapshot.Event.GOALS_UPDATED,
+                )
         if queryset.model is Period:
             PeriodArchiveLog.objects.bulk_create([
                 PeriodArchiveLog(period=obj, user=request.user,
@@ -701,6 +709,44 @@ def render_period_form(
 
 
 
+@access("planning_measurements.view_period")
+def period_parameter_history(request, period_id):
+    """Solo lectura: revisiones registradas, nunca ajusta períodos cerrados."""
+    period = get_object_or_404(
+        Period, pk=period_id, deleted_at__isnull=True,
+    )
+    # La revisión abarca todo el período, pero el detalle de funcionarios
+    # debe respetar exactamente el alcance de consulta de metas del usuario.
+    can_view_goals = request.user.has_perm("planning_measurements.view_goal")
+    allowed_ids = (
+        set(allowed_delegation_ids(request.user, "planning_measurements.view_goal"))
+        if can_view_goals and not request.user.is_superuser else set()
+    )
+    current_allowed_employees = (
+        set(Employee.objects.filter(
+            delegation_id__in=allowed_ids,
+        ).values_list("pk", flat=True))
+        if not request.user.is_superuser else set()
+    )
+    versions = list(period.parameter_snapshots.select_related("actor").all())
+    for version in versions:
+        content = version.content.copy()
+        if not can_view_goals:
+            content["goals"] = []
+        elif not request.user.is_superuser:
+            content["goals"] = [
+                g for g in content.get("goals", [])
+                if g.get("delegation_id") in allowed_ids
+                and g.get("employee_id") in current_allowed_employees
+            ]
+        version.content = content  # solo copia de presentación, nunca se guarda
+    return render(request, "planning/period_parameter_history.html", {
+        "period": period,
+        "versions": versions,
+        "can_view_goals": can_view_goals,
+    })
+
+
 @access("planning_measurements.add_period")
 def period_create(request):
     can_add_goal = (
@@ -753,6 +799,13 @@ def period_create(request):
 
                 if form.cleaned_data["status"] == Period.Status.CLOSED:
                     validate_period_weights(period)
+
+                capture_period_parameters(
+                    period, actor=request.user,
+                    event=(PeriodParameterSnapshot.Event.CLOSED
+                           if period.status == Period.Status.CLOSED
+                           else PeriodParameterSnapshot.Event.CREATED),
+                )
 
         except InvalidPeriodWeights as exc:
             form.add_error("status", str(exc))
@@ -841,6 +894,9 @@ def period_edit(request, period_id):
                     "editado_por": user.get_username(),
                 },
             )
+            capture_period_parameters(
+                periodo, actor=user, event=PeriodParameterSnapshot.Event.REOPENED,
+            )
 
         messages.success(request, "Período reabierto correctamente.")
         return redirect("planning:period_list")
@@ -922,6 +978,17 @@ def period_edit(request, period_id):
     ):
         try:
             with transaction.atomic():
+                before = Period.objects.select_for_update().get(pk=period.pk)
+                previous = (
+                    before.start_date, before.end_date,
+                    before.computable_days, before.thresholds,
+                    before.parameters_version, before.status,
+                )
+                goals_modified = (
+                    formset.has_changed()
+                    or bool(request.POST.getlist("existing_goal_ids"))
+                    or bool(request.POST.getlist("remove_goal_ids"))
+                )
 
                 # Guardar las metas mientras el período
                 # todavía se encuentra abierto.
@@ -940,6 +1007,19 @@ def period_edit(request, period_id):
 
                 # Guardar los cambios del período.
                 form.save()
+                current = (
+                    period.start_date, period.end_date,
+                    period.computable_days, period.thresholds,
+                    period.parameters_version, period.status,
+                )
+                if current != previous or goals_modified:
+                    capture_period_parameters(
+                        period, actor=request.user,
+                        event=(PeriodParameterSnapshot.Event.CLOSED
+                               if period.status == Period.Status.CLOSED
+                               and previous[-1] != Period.Status.CLOSED
+                               else PeriodParameterSnapshot.Event.CONFIGURED),
+                    )
 
         except InvalidPeriodWeights as exc:
             form.add_error("status", str(exc))
@@ -1155,6 +1235,10 @@ def period_assign_existing_goals(request, period_id):
                     else:
                         for copy in new_goals:
                             copy.save()
+                        capture_period_parameters(
+                            locked_period, actor=request.user,
+                            event=PeriodParameterSnapshot.Event.GOALS_UPDATED,
+                        )
 
                         messages.success(
                             request,
@@ -1337,7 +1421,12 @@ def render_goal_overlay(request, form, title, goal=None, readonly=False):
 def goal_create(request):
     form = GoalForm(request.POST or None, user=request.user)
     if request.method == "POST" and form.is_valid():
-        goal = form.save()
+        with transaction.atomic():
+            goal = form.save()
+            capture_period_parameters(
+                goal.period, actor=request.user,
+                event=PeriodParameterSnapshot.Event.GOALS_UPDATED,
+            )
         messages.success(request, "Meta creada correctamente.")
         return after_save(
             request,
@@ -1418,7 +1507,16 @@ def goal_edit(request, goal_id):
         form.instance._audit_actor = request.user.get_username()
 
         with transaction.atomic():
+            old_period_id = anterior.period_id
             form.save()
+            # Si la meta cambia de período, conservar ambos contextos.
+            affected_period_ids = sorted({old_period_id, form.instance.period_id})
+            for affected_period_id in affected_period_ids:
+                capture_period_parameters(
+                    Period.objects.get(pk=affected_period_id),
+                    actor=request.user,
+                    event=PeriodParameterSnapshot.Event.GOALS_UPDATED,
+                )
 
         messages.success(request, "Meta modificada correctamente.")
 
@@ -1471,8 +1569,13 @@ def goal_delete(request, goal_id):
         return redirect("planning:goal_list")
 
     if request.method == "POST":
-        goal.deleted_at = timezone.now()
-        goal.save(update_fields=["deleted_at", "updated_at"])
+        with transaction.atomic():
+            goal.deleted_at = timezone.now()
+            goal.save(update_fields=["deleted_at", "updated_at"])
+            capture_period_parameters(
+                goal.period, actor=request.user,
+                event=PeriodParameterSnapshot.Event.GOALS_UPDATED,
+            )
 
         messages.success(
             request,
@@ -1691,14 +1794,42 @@ def item_edit(request, item_id):
     )
 
     if request.method == "POST" and form.is_valid():
-        form.save()
-
-        messages.success(
-            request,
-            "Ítem actualizado correctamente."
-        )
-
-        return redirect("planning:item_list")
+        with transaction.atomic():
+            stored = MeasurementItem.objects.select_for_update().get(pk=item.pk)
+            protected_fields = (
+                "code", "name", "item_type", "unit", "formula",
+            )
+            historical_use = Goal.objects.filter(
+                measurement_item=item,
+                period__status=Period.Status.CLOSED,
+                deleted_at__isnull=True,
+            ).exists()
+            if historical_use and any(
+                getattr(stored, key) != form.cleaned_data.get(key)
+                for key in protected_fields
+            ):
+                form.add_error(
+                    None,
+                    "Este ítem pertenece a un período cerrado. No se pueden "
+                    "cambiar su identidad o fórmula; crea un nuevo ítem "
+                    "para futuras mediciones. Sí puedes desactivarlo.",
+                )
+            else:
+                form.save()
+                open_period_ids = Goal.objects.filter(
+                    measurement_item=item,
+                    period__status=Period.Status.ACTIVE,
+                    period__deleted_at__isnull=True,
+                    deleted_at__isnull=True,
+                ).values_list("period_id", flat=True).distinct()
+                for period_id in open_period_ids:
+                    capture_period_parameters(
+                        Period.objects.get(pk=period_id),
+                        actor=request.user,
+                        event=PeriodParameterSnapshot.Event.CATALOG_UPDATED,
+                    )
+                messages.success(request, "Ítem actualizado correctamente.")
+                return redirect("planning:item_list")
 
     context = get_item_list_context(request)
 
@@ -1729,16 +1860,29 @@ def item_delete(request, item_id):
         deleted_at__isnull=True,
     )
 
-    item.is_active = False
-    item.deleted_at = timezone.now()
+    # Guardar el archivado y sus revisiones históricas juntos: si una
+    # captura falla, no se deja el catálogo cambiado sin su historial.
+    with transaction.atomic():
+        item = MeasurementItem.objects.select_for_update().get(pk=item.pk)
+        affected_period_ids = list(
+            Goal.objects.filter(
+                measurement_item=item,
+                period__status=Period.Status.ACTIVE,
+                period__deleted_at__isnull=True,
+                deleted_at__isnull=True,
+            ).values_list("period_id", flat=True).distinct().order_by("period_id")
+        )
 
-    item.save(
-        update_fields=[
-            "is_active",
-            "deleted_at",
-            "updated_at",
-        ]
-    )
+        item.is_active = False
+        item.deleted_at = timezone.now()
+        item.save(update_fields=["is_active", "deleted_at", "updated_at"])
+
+        for period_id in affected_period_ids:
+            capture_period_parameters(
+                Period.objects.get(pk=period_id),
+                actor=request.user,
+                event=PeriodParameterSnapshot.Event.CATALOG_UPDATED,
+            )
 
     messages.success(
         request,

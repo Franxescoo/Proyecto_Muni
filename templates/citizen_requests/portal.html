@@ -1,18 +1,18 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block titulo %}Portal Ciudadano · SGR{% endblock %}
+{% block sidebar %}{% endblock %}
+
+{% block titulo %}Portal Ciudadano · Municipalidad de La Serena{% endblock %}
 
 {% block public_navigation %}
-<nav class="navbar navbar-expand topbar mb-4 shadow-sm">
-    <div class="container-fluid px-4">
+<nav class="navbar navbar-expand topbar mb-4 shadow-sm" aria-label="Navegación del portal ciudadano">
+    <div class="container-fluid px-3 px-md-4">
         <a class="navbar-brand py-0" href="{% url 'citizen_requests:public_portal' %}">
-            <img src="{% static 'img/horizontal-blanco.png' %}"
-                 alt="Logo Municipalidad de La Serena"
-                 height="55">
+            <img src="{% static 'img/horizontal-blanco.png' %}" alt="Logo Municipalidad de La Serena" height="55">
         </a>
         <a class="btn btn-outline-light ms-auto" href="{% url 'login' %}">
-            <i class="bi bi-box-arrow-in-right me-1"></i>Iniciar sesión
+            <i class="bi bi-box-arrow-in-right me-1" aria-hidden="true"></i>Iniciar sesión
         </a>
     </div>
 </nav>
@@ -20,155 +20,253 @@
 
 {% block estilos %}
 <style>
-    .citizen-hero {
-        background: linear-gradient(135deg, #a60a17 0%, #6a040d 100%);
-        border-left: 8px solid #ffb3b3;
-        border-radius: .5rem;
-        box-shadow: 0 4px 15px rgba(166, 10, 23, .25);
-        color: #fff;
-    }
-    .citizen-section-title {
-        border-left: 5px solid #a60a17;
-        color: #000;
-        font-size: 1.35rem;
-        font-weight: 700;
-        padding-left: 12px;
-    }
-    .citizen-card {
-        border: 1px solid #e5e7eb;
-        border-radius: .5rem;
-    }
-    .citizen-card .card-header {
-        background: #a60a17;
-        color: #fff;
-        font-weight: 700;
-    }
-    .citizen-card .form-label {
-        color: #384350;
-        font-size: .86rem;
-        font-weight: 650;
-    }
-    .citizen-card .form-control {
-        border: 1px solid #cfd6df;
-        border-radius: .55rem;
-    }
-    .citizen-card .form-control:focus {
-        border-color: #a60a17;
-        box-shadow: 0 0 0 .22rem rgba(166, 10, 23, .13);
-    }
-    .citizen-card .btn-primary {
-        background: #a60a17;
-        border-color: #a60a17;
-    }
-    .citizen-card .btn-primary:hover {
-        background: #800711;
-        border-color: #800711;
-    }
+/* Modal de seguimiento: siempre visible delante de la capa de fondo. */
+#consultarSolicitudModal { z-index: 1065; }
+#consultarSolicitudModal .modal-dialog { max-width: min(96vw, 700px); }
+#consultarSolicitudModal .modal-content {
+    border: 0; border-radius: .9rem; overflow: hidden;
+    box-shadow: 0 24px 65px rgba(30,20,34,.24);
+}
+#consultarSolicitudModal .modal-header {
+    background: #a60a17; color: #fff; border: 0; padding: 1.3rem 1.8rem;
+}
+#consultarSolicitudModal .modal-header .btn-close { filter: invert(1) grayscale(1); }
+#consultarSolicitudModal .modal-body { padding: clamp(1.3rem, 2.7vw, 2.1rem); background: #fff; }
+#consultarSolicitudModal .form-label { font-size: .88rem; font-weight: 700; color: #334054; }
+#consultarSolicitudModal .form-control {
+    min-height: 43px; background: #fff; color: #1f2937;
+    -webkit-text-fill-color: #1f2937;
+}
+#consultarSolicitudModal .form-control:focus {
+    border-color: #a60a17; box-shadow: 0 0 0 .2rem rgba(166,10,23,.13);
+}
+#consultarSolicitudModal .portal-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    gap: .45rem; min-height: 43px; padding: .68rem 1rem;
+    border-radius: .55rem; font-weight: 700;
+    background: #a60a17; border: 1px solid #a60a17; color: #fff;
+}
+#consultarSolicitudModal .portal-btn:hover { background: #800713; color: #fff; }
+#consultarSolicitudModal .portal-result {
+    background: #f7f8fb; border: 1px solid #e3e7ec; border-radius: .7rem; padding: 1rem;
+}
+#consultarSolicitudModal .portal-result dt { font-weight: 700; color: #516076; }
+#consultarSolicitudModal .portal-result dd { overflow-wrap: anywhere; }
+body.sgr-tracking-modal-open .modal-backdrop { z-index: 1055; }
 </style>
+
+<link rel="stylesheet" href="{% static 'css/portal_publico_moderno.css' %}">
+<link rel="stylesheet" href="{% static 'css/portal_ciudadano_ajustes.css' %}">
+<style>
+/* PORTAL_FARO_ORILLA_V3: Solo fondo EXTERIOR. Fotografía situada
+   a la derecha y degradado inferior integrado en el archivo WebP.
+   No cambia ni superpone la foto en el bloque rojo .portal-hero. */
+#portal-ciudadano-inicio {
+    position: relative !important;
+    isolation: isolate !important;
+    overflow: hidden !important;
+    background: #f7f7fa !important;
+}
+#portal-ciudadano-inicio::before,
+#portal-ciudadano-inicio::after {
+    content: none !important;
+    display: none !important;
+}
+#portal-ciudadano-inicio > .portal-fondo-fotografico {
+    position: absolute !important;
+    inset: 0 !important;
+    z-index: 0 !important;
+    pointer-events: none !important;
+    overflow: hidden !important;
+    background: none !important;
+}
+#portal-ciudadano-inicio > .portal-fondo-fotografico::before {
+    content: "" !important;
+    display: block !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: clamp(680px, 91vh, 900px) !important;
+    background-image: url("{% static 'img/portal_ciudadano/faro_orilla_atardecer.webp' %}") !important;
+    background-repeat: no-repeat !important;
+    background-position: center top !important;
+    background-size: 100% 100% !important;
+    opacity: 1 !important;
+    -webkit-mask-image: none !important;
+    mask-image: none !important;
+    filter: none !important;
+}
+#portal-ciudadano-inicio > .portal-fondo-fotografico::after {
+    content: none !important;
+    display: none !important;
+}
+#portal-ciudadano-inicio > .portal-shell {
+    position: relative !important;
+    z-index: 1 !important;
+}
+/* En móviles priorizar la costa y el faro; las tarjetas siguen apiladas
+   según el diseño responsivo que ya tiene el portal. */
+@media (max-width: 767.98px) {
+    #portal-ciudadano-inicio > .portal-fondo-fotografico::before {
+        height: 860px !important;
+        background-size: auto 860px !important;
+        background-position: 77% top !important;
+    }
+}
+/* Deshacer únicamente la foto superpuesta dentro del cuadro rojo. */
+#portal-ciudadano-inicio .portal-hero {
+    background: radial-gradient(circle at 85% 30%, rgba(255,255,255,.075), transparent 30%),
+                linear-gradient(116deg,#630716 0%,#940d23 52%,#b71b35 100%) !important;
+}
+#portal-ciudadano-inicio .portal-hero::before,
+#portal-ciudadano-inicio .portal-hero::after {
+    content: "" !important;
+    position: absolute !important;
+    inset: auto !important;
+    z-index: -1 !important;
+    border: 1px solid rgba(255,255,255,.1) !important;
+    border-radius: 50% !important;
+    background: none !important;
+    filter: none !important;
+    box-shadow: none !important;
+    opacity: 1 !important;
+    pointer-events: none !important;
+}
+#portal-ciudadano-inicio .portal-hero::before {
+    width: 450px !important;
+    height: 450px !important;
+    top: -350px !important;
+    left: 4% !important;
+}
+#portal-ciudadano-inicio .portal-hero::after {
+    width: 540px !important;
+    height: 540px !important;
+    bottom: -435px !important;
+    right: -80px !important;
+}
+</style>
+
 {% endblock %}
 
 {% block contenido %}
-<div class="container py-2 py-md-4">
-    <section class="citizen-hero p-4 p-md-5 mb-4">
-        <div class="h2 mb-2 fw-bold">Portal Ciudadano</div>
-        <p class="mb-0">
-            Registra solicitudes y comunica situaciones que requieren atención
-            municipal. Recibirás un código para consultar su estado más adelante.
-        </p>
-    </section>
+<div id="portal-ciudadano-inicio" class="public-portal portal-landing">
+    <div class="portal-fondo-fotografico" aria-hidden="true"></div>
+    <div class="portal-shell">
+        <header class="portal-hero">
+            <span class="portal-eyebrow"><i class="bi bi-buildings me-2" aria-hidden="true"></i>Atención ciudadana digital</span>
+            <h1>Estamos aquí para ayudarte.</h1>
+            <p>Ingresa tus solicitudes municipales, consulta su estado y revisa tu historial en un solo lugar, de manera simple y segura.</p>
+        </header>
 
-    <div class="row g-4">
-        <div class="col-12 col-lg-8">
-            <section class="citizen-card card shadow-sm">
-                <div class="card-header py-3">
-                    <h1 class="h5 mb-0">
-                        <i class="bi bi-pencil-square me-2"></i>Ingresar solicitud
-                    </h1>
-                </div>
-                <div class="card-body p-4">
-                    <p class="text-secondary">
-                        Completa los datos para registrar tu solicitud. Los campos
-                        marcados con <span class="text-danger">*</span> son obligatorios.
-                    </p>
-                    {% if form.non_field_errors %}
-                    <div class="alert alert-danger" role="alert">{{ form.non_field_errors }}</div>
-                    {% endif %}
-                    <form method="post" action="{% url 'citizen_requests:register_public_request' %}">
-                        {% csrf_token %}
-                        <input type="hidden" name="portal_form" value="1">
-                        <div class="row g-3">
-                            {% for field in form %}
-                            <div class="{% if field.name == 'description' %}col-12{% else %}col-12 col-md-6{% endif %}">
-                                <label class="form-label" for="{{ field.id_for_label }}">
-                                    {{ field.label }}{% if field.field.required %} <span class="text-danger">*</span>{% endif %}
-                                </label>
-                                {{ field }}
-                                {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
-                                {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
-                            </div>
-                            {% endfor %}
-                        </div>
-                        <button class="btn btn-primary mt-4 px-4" type="submit">
-                            <i class="bi bi-send me-1"></i>Registrar solicitud
-                        </button>
-                    </form>
-                </div>
-            </section>
+        <div class="portal-actions row g-3 g-md-4" aria-label="Servicios del Portal Ciudadano">
+            <div class="col-12 col-md-4">
+                <section class="portal-action-card">
+                    <span class="portal-icon"><i class="bi bi-pencil-square" aria-hidden="true"></i></span>
+                    <div class="portal-kicker">Nueva gestión</div>
+                    <h2>Ingresar solicitud</h2>
+                    <p>Comunica una necesidad o situación que requiera atención de la municipalidad.</p>
+                    <a class="portal-btn" href="{% url 'citizen_requests:public_request_form' %}">Nueva solicitud<i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+                </section>
+            </div>
+
+            <div class="col-12 col-md-4">
+                <section class="portal-action-card">
+                    <span class="portal-icon"><i class="bi bi-search" aria-hidden="true"></i></span>
+                    <div class="portal-kicker">Seguimiento</div>
+                    <h2>Consultar solicitud</h2>
+                    <p>Conoce el avance de una solicitud ingresando su código único de seguimiento.</p>
+                    <button type="button" class="portal-btn portal-btn-secondary" data-bs-toggle="modal" data-bs-target="#consultarSolicitudModal">
+                        Consultar estado<i class="bi bi-arrow-right" aria-hidden="true"></i>
+                    </button>
+                </section>
+            </div>
+
+            <div class="col-12 col-md-4">
+                <section class="portal-action-card">
+                    <span class="portal-icon"><i class="bi bi-clock-history" aria-hidden="true"></i></span>
+                    <div class="portal-kicker">Mis gestiones</div>
+                    <h2>Mis solicitudes</h2>
+                    <p>Verifica tu correo electrónico y consulta el historial de solicitudes que has realizado.</p>
+                    <a class="portal-btn portal-btn-secondary" href="{% url 'citizen_requests:public_request_history' %}">Ver mi historial<i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+                </section>
+            </div>
         </div>
-        <div class="col-12 col-lg-4">
-            <section class="citizen-card card shadow-sm h-100">
-                <div class="card-header py-3">
-                    <h2 class="h5 mb-0">
-                        <i class="bi bi-search me-2"></i>Consultar solicitud
-                    </h2>
+
+        <aside class="portal-info-panel" aria-label="Información de seguimiento">
+            <span class="portal-info-icon"><i class="bi bi-envelope-check" aria-hidden="true"></i></span>
+            <div>
+                <strong>Tu solicitud, siempre identificada.</strong>
+                <p>Al registrarla recibirás un código de seguimiento en pantalla y por correo. Para consultar el historial completo, verificaremos tu correo.</p>
+            </div>
+        </aside>
+    </div>
+
+    <div class="modal fade portal-modal" id="consultarSolicitudModal" tabindex="-1" aria-labelledby="consultarSolicitudTitulo" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title h5 mb-0" id="consultarSolicitudTitulo"><i class="bi bi-search me-2" aria-hidden="true"></i>Consultar solicitud</h2>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
                 </div>
-                <div class="card-body d-flex flex-column">
-                    <p class="text-secondary">
-                        Ingresa tu código de seguimiento para consultar el avance
-                        público de tu solicitud.
-                    </p>
+                <div class="modal-body">
+                    <p class="text-secondary small">Ingresa el código que recibiste cuando registraste tu solicitud.</p>
                     <form method="post" action="{% url 'citizen_requests:public_portal' %}">
                         {% csrf_token %}
                         <input type="hidden" name="tracking_form" value="1">
-                        <label class="form-label" for="{{ tracking_form.tracking_code.id_for_label }}">
-                            {{ tracking_form.tracking_code.label }}
-                        </label>
+                        <label class="form-label" for="{{ tracking_form.tracking_code.id_for_label }}">{{ tracking_form.tracking_code.label }}</label>
                         {{ tracking_form.tracking_code }}
-                        {% if tracking_error %}
-                        <div class="alert alert-warning mt-3 mb-0" role="alert">
-                            {{ tracking_error }}
-                        </div>
-                        {% endif %}
-                        <button class="btn btn-primary w-100 mt-3" type="submit">
-                            <i class="bi bi-search me-1"></i>Consultar estado
-                        </button>
+                        {% for error in tracking_form.tracking_code.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                        {% if tracking_error %}<div class="alert alert-warning mt-3 mb-0" role="alert">{{ tracking_error }}</div>{% endif %}
+                        <button class="portal-btn w-100 mt-3" type="submit"><i class="bi bi-search" aria-hidden="true"></i>Consultar estado</button>
                     </form>
+
                     {% if tracking_result %}
-                    <div class="border rounded p-3 mt-4">
-                        <h3 class="h6 mb-3">Estado de la solicitud</h3>
+                    <section class="portal-result mt-4" aria-label="Resultado de seguimiento">
+                        <h3 class="h6 fw-bold mb-3">Estado de la solicitud</h3>
                         <dl class="row small mb-3">
-                            <dt class="col-5">Código</dt>
-                            <dd class="col-7 text-break">{{ tracking_result.tracking_code }}</dd>
-                            <dt class="col-5">Fecha de ingreso</dt>
-                            <dd class="col-7">{{ tracking_result.created_at|date:"d/m/Y H:i" }}</dd>
-                            <dt class="col-5">Asunto</dt>
-                            <dd class="col-7">{{ tracking_result.subject }}</dd>
-                            <dt class="col-5">Estado</dt>
-                            <dd class="col-7"><span class="badge text-bg-secondary">{{ tracking_result.status }}</span></dd>
+                            <dt class="col-5">Código</dt><dd class="col-7">{{ tracking_result.tracking_code }}</dd>
+                            <dt class="col-5">Fecha de ingreso</dt><dd class="col-7">{{ tracking_result.created_at|date:"d/m/Y H:i" }}</dd>
+                            <dt class="col-5">Asunto</dt><dd class="col-7">{{ tracking_result.subject }}</dd>
+                            <dt class="col-5">Estado</dt><dd class="col-7"><span class="badge text-bg-secondary">{{ tracking_result.status }}</span></dd>
                         </dl>
-                        <h4 class="h6">Etapas públicas</h4>
+                        <h4 class="h6 fw-bold">Etapas públicas</h4>
                         <ul class="list-group list-group-flush">
                             {% for stage in tracking_result.stages %}
-                            <li class="list-group-item px-0">
-                                <i class="bi bi-check-circle-fill text-success me-2"></i>{{ stage.label }}
-                            </li>
+                            <li class="list-group-item bg-transparent px-0"><i class="bi bi-check-circle-fill text-success me-2" aria-hidden="true"></i>{{ stage.label }}</li>
                             {% endfor %}
                         </ul>
-                    </div>
+                    </section>
                     {% endif %}
                 </div>
-            </section>
+            </div>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const modal = document.getElementById('consultarSolicitudModal');
+
+    if (!modal) return;
+
+    // Mover el modal fuera del contenedor del portal.
+    document.body.appendChild(modal);
+});
+</script>
+
+{% if tracking_result or tracking_error or tracking_form.errors %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const modal = document.getElementById('consultarSolicitudModal');
+
+    if (modal && window.bootstrap && bootstrap.Modal) {
+        bootstrap.Modal.getOrCreateInstance(modal).show();
+    }
+});
+</script>
+{% endif %}
+
 {% endblock %}

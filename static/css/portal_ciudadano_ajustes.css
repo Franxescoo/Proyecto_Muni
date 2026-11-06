@@ -1,0 +1,48 @@
+/* Portal Ciudadano: solo interfaz pública; se carga únicamente en cuatro páginas públicas. */
+/* No alterar el sidebar interno ni los enlaces/roles de los funcionarios. */
+body:has(.public-portal) .global-sidebar,
+body:has(.public-portal) .global-sidebar-backdrop,
+body:has(.public-portal) .global-sidebar-toggle {display:none!important;}
+body:has(.public-portal) .workspace-layout {display:block!important;gap:0!important;}
+body:has(.public-portal) .workspace-content,
+body:has(.public-portal) .global-page-content,
+body:has(.public-portal) .workspace-content > main {
+    width:100%!important; max-width:none!important; margin-left:0!important;
+    padding-left:0!important; padding-right:0!important;
+}
+body:has(.public-portal) .global-page-content > .container-fluid {
+    max-width:none!important; padding-left:0!important; padding-right:0!important;
+}
+body:has(.public-portal) .public-portal {margin-left:0!important;margin-right:0!important;}
+body:has(.public-portal) .topbar {margin-bottom:0!important;}
+/* Portada: conservar sus 3 tarjetas y colocar el faro detrás de un velo rojizo suave. */
+.public-portal.portal-landing .portal-hero {position:relative; isolation:isolate;}
+.public-portal.portal-landing .portal-hero::before {
+    content:""; position:absolute; z-index:-2; inset:-10px;
+    width:auto; height:auto; top:-10px; right:-10px; bottom:-10px; left:-10px;
+    border:0; border-radius:0; box-shadow:none;
+    background: url('../img/portal_ciudadano/faro_portada.webp') center 57%/cover no-repeat;
+    filter:blur(3px); opacity:1;
+}
+.public-portal.portal-landing .portal-hero::after {
+    content:""; position:absolute; z-index:-1; inset:0;
+    width:auto; height:auto; top:0; right:0; bottom:0; left:0;
+    border:0; border-radius:0; box-shadow:none;
+    background:linear-gradient(100deg,rgba(95,7,24,.97),rgba(137,10,33,.86) 49%,rgba(121,8,29,.43));
+}
+/* Datos personales accesibles únicamente tras verificación por correo. */
+.public-portal.portal-history-page .citizen-requester-details > div {
+    display:grid; grid-template-columns:minmax(90px,39%) minmax(0,1fr);
+    align-items:start; gap:.6rem; border-bottom:1px solid #e8ebef;
+    padding:.85rem 0;
+}
+.public-portal.portal-history-page .citizen-requester-details dt {font-size:.88rem;color:#87152b;font-weight:700;}
+.public-portal.portal-history-page .citizen-requester-details dd {font-size:.93rem;color:#253044;margin:0;overflow-wrap:anywhere;}
+.public-portal.portal-history-page .citizen-history-layout .citizen-history-card {height:100%;}
+.public-portal.portal-history-page .citizen-history-table {min-width:720px;}
+.public-portal.portal-history-page .citizen-history-table .citizen-history-selected > * {background:#fff1f3;}
+.public-portal.portal-history-page .citizen-history-table td {vertical-align:middle;}
+.public-portal.portal-history-page .citizen-history-table .btn-outline-danger {font-size:.77rem;}
+@media(max-width:575.98px) {
+    .public-portal.portal-history-page .citizen-requester-details > div {grid-template-columns:1fr;gap:.25rem;}
+}

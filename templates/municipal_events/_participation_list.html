@@ -1,0 +1,32 @@
+<!-- SGR_PERMISOS_EVENTOS_V2 -->
+<div class="mec-modal-title"><i class="bi bi-people me-2"></i> Participantes · {{ edition }}</div>
+<p class="small text-secondary">Modalidad: <strong>{{ edition.get_participation_mode_display }}</strong> · Cupos: {{ edition.participation_capacity|default:"Sin límite" }} · Activos: {{ total_active }}</p>
+{% if edition.participation_requirements %}<p><strong>Requisitos:</strong> {{ edition.participation_requirements|linebreaksbr }}</p>{% endif %}
+<div class="d-flex flex-wrap gap-2 mb-3 align-items-center">
+  <span class="small fw-semibold">Mostrar:</span>
+  <a data-mec-modal-url class="btn btn-sm {% if record_state == 'active' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="{% url 'municipal_events:participation_list' edition.pk %}?state=active">Activos</a>
+  <a data-mec-modal-url class="btn btn-sm {% if record_state == 'withdrawn' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="{% url 'municipal_events:participation_list' edition.pk %}?state=withdrawn">Retirados</a>
+  <a data-mec-modal-url class="btn btn-sm {% if record_state == 'all' %}btn-primary{% else %}btn-outline-secondary{% endif %}" href="{% url 'municipal_events:participation_list' edition.pk %}?state=all">Todos</a>
+</div>
+{% if can_register and not edition.deleted_at and not edition.event.deleted_at and edition.status != 'FINISHED' and edition.participation_mode != 'OPEN' %}
+<a data-mec-modal-url href="{% url 'municipal_events:participation_create' edition.pk %}" class="btn btn-success btn-sm mb-3"><i class="bi bi-plus-lg"></i> Agregar participante</a>
+{% endif %}
+<div class="table-responsive"><table class="table table-striped align-middle">
+<thead><tr><th>Participante</th><th>Correo</th><th>Estado</th><th>Fecha</th><th>Acciones</th></tr></thead><tbody>
+{% for p in items %}
+<tr><td><strong>{{ p.full_name }}</strong></td><td>{{ p.email }}</td><td>{% if p.withdrawn_at %}<span class="badge text-bg-secondary">Retirado</span>{% else %}{{ p.get_status_display }}{% endif %}</td><td>{{ p.created_at|date:"d/m/Y H:i" }}</td><td>
+<div class="d-flex flex-wrap gap-1">
+<a href="{% url 'municipal_events:participation_detail' p.pk %}" data-mec-modal-url class="btn btn-sm btn-outline-info"><i class="bi bi-eye"></i> Ver</a>
+{% if not edition.deleted_at and not edition.event.deleted_at and edition.status != 'FINISHED' %}
+{% if p.withdrawn_at %}
+{% if can_reactivate %}<a href="{% url 'municipal_events:participation_reactivate' p.pk %}" data-mec-modal-url class="btn btn-sm btn-outline-success"><i class="bi bi-arrow-counterclockwise"></i> Reactivar</a>{% endif %}
+{% else %}
+{% if can_edit %}<a href="{% url 'municipal_events:participation_edit' p.pk %}" data-mec-modal-url class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil-square"></i> Modificar</a>{% endif %}
+{% if can_evaluate and p.status == 'PENDING' and edition.participation_mode == 'APPLICATION' %}<a href="{% url 'municipal_events:participation_review' p.pk %}" data-mec-modal-url class="btn btn-sm btn-outline-primary">Evaluar</a>{% endif %}
+{% if can_withdraw %}<a href="{% url 'municipal_events:participation_withdraw' p.pk %}" data-mec-modal-url class="btn btn-sm btn-outline-danger"><i class="bi bi-person-dash"></i> Retirar</a>{% endif %}
+{% endif %}
+{% endif %}
+</div></td></tr>
+{% empty %}<tr><td colspan="5" class="text-center text-muted">No hay participantes en este filtro.</td></tr>{% endfor %}
+</tbody></table></div>
+<div class="modal-footer px-0 pb-0"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button></div>

@@ -72,6 +72,12 @@ MODULES = [
         "title": "Registro y validación",
         "cards": [
             {
+                "title": "Ciudadanos",
+                "icon": "bi-people",
+                "url": "citizen_registry:list",
+                "perm": "citizen_registry.view_citizen",
+            },
+            {
                 "title": "Actividades",
                 "icon": "bi-journal-text",
                 "url": "registration:activity_list",
@@ -118,6 +124,12 @@ MODULES = [
                 "icon": "bi-journal-check",
                 "url": "registration:attention_entry_list",
                 "perm": "registration_validation.view_attentionentry",
+            },
+            {
+                "title": "Ciudadanos",
+                "icon": "bi-people-fill",
+                "url": "citizen_registry:list",
+                "perm": "citizen_registry.view_citizen",
             },
         ],
     },

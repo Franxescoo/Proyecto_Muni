@@ -72,6 +72,31 @@ class CitizenRequestForm(forms.ModelForm):
         return value
 
 
+class PublicVerifiedRequestForm(forms.Form):
+    """Solo datos propios de la solicitud; la identidad proviene de la sesión verificada."""
+
+    subject = forms.CharField(
+        label="Asunto", max_length=160,
+        widget=forms.TextInput(attrs={"class": "form-control", "maxlength": "160"}),
+    )
+    description = forms.CharField(
+        label="Descripción",
+        widget=forms.Textarea(attrs={"class": "form-control", "rows": 5}),
+    )
+
+    def clean_subject(self):
+        value = self.cleaned_data["subject"].strip()
+        if not value:
+            raise forms.ValidationError("Indica el asunto de la solicitud.")
+        return value
+
+    def clean_description(self):
+        value = self.cleaned_data["description"].strip()
+        if not value:
+            raise forms.ValidationError("Describe la solicitud.")
+        return value
+
+
 class PublicTrackingCodeForm(forms.Form):
     tracking_code = forms.UUIDField(
         label="Código de seguimiento",

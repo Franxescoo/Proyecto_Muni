@@ -26,6 +26,7 @@ handler500 = "organization.error_views.server_error"
 
 
 urlpatterns = [
+    path("correo/", include("institutional_mail.urls")),
     # -----------------------------------------------------
     # Administración de Django
     # -----------------------------------------------------
@@ -110,6 +111,8 @@ urlpatterns = [
     # -----------------------------------------------------
     # Eventos, campañas e inscripciones municipales
     # -----------------------------------------------------
+    path("ciudadanos/", include("citizen_registry.urls")),
+
     path(
         "eventos-campanas/",
         include("municipal_events.urls"),

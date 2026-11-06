@@ -1,10 +1,12 @@
 
 {% extends "planning/base.html" %}
-{% load i18n %}
+{% load i18n static %}
 
 {% block titulo %}Catálogo de Ítems - La Serena{% endblock %}
 
 {% block estilos %}
+<link rel="stylesheet" href="{% static 'css/sgr_module_guides.css' %}?v=1">
+<link rel="stylesheet" href="{% static 'css/sgr_autoayuda_dos_modulos.css' %}?v=1">
 <style>
     /* Diseño basado en Indicadores */
 
@@ -135,6 +137,7 @@
         overflow-y: auto;
     }
 </style>
+{% include "planning/_fullwidth_styles.html" %}
 {% endblock %}
 
 
@@ -167,6 +170,10 @@
 
     </section>
 
+
+    {% include "shared/_sgr_autoayuda.html" with help_namespace="planning" help_section="items" only %}
+    <div class="sgr-guide-layout">
+      <div class="sgr-guide-main">
 
     <!-- TARJETAS DE RESUMEN -->
     <div class="row g-3 mb-4">
@@ -466,6 +473,9 @@
 
     </section>
 
+      </div>{# sgr-guide-main #}
+      {% include "planning/_side_guide.html" with section="items" only %}
+    </div>{# sgr-guide-layout #}
 </div>
 
 
@@ -544,4 +554,5 @@ document.addEventListener("DOMContentLoaded", function () {
 </script>
 {% endif %}
 
+<script src="{% static 'js/sgr_autoayuda_dos_modulos.js' %}?v=1" defer></script>
 {% endblock %}

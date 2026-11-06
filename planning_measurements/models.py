@@ -1,4 +1,5 @@
 from django.core.exceptions import ValidationError
+from django.conf import settings
 from django.db import models
 from django.core.validators import MinValueValidator
 
@@ -45,16 +46,32 @@ class Period(BaseModel):
                 errors["end_date"] = (
                     "La fecha de término no puede ser anterior al inicio."
                 )
-            elif self.computable_days is not None:
-                duration = (
-                    self.end_date - self.start_date
-                ).days + 1
-
-                if self.computable_days > duration:
-                    errors["computable_days"] = (
-                        "Los días computables no pueden superar "
-                        "la duración del período."
+            else:
+                # Los períodos vigentes comparten un mismo calendario de medición.
+                # Se incluye el día inicial y final: compartir cualquiera de ellos
+                # también cuenta como solapamiento. El registro propio se excluye
+                # al editar y los períodos archivados no bloquean nuevas fechas.
+                overlapping = type(self).objects.filter(
+                    deleted_at__isnull=True,
+                    start_date__lte=self.end_date,
+                    end_date__gte=self.start_date,
+                ).exclude(pk=self.pk)
+                if overlapping.exists():
+                    errors["start_date"] = (
+                        "Las fechas se superponen con otro período no archivado. "
+                        "Selecciona un rango que no esté ocupado."
                     )
+
+                if self.computable_days is not None:
+                    duration = (
+                        self.end_date - self.start_date
+                    ).days + 1
+
+                    if self.computable_days > duration:
+                        errors["computable_days"] = (
+                            "Los días computables no pueden superar "
+                            "la duración del período."
+                        )
 
         if errors:
             raise ValidationError(errors)
@@ -293,3 +310,55 @@ class MeasurementItem(BaseModel):
 
     def __str__(self):
         return f"{self.code} - {self.name}"
+
+
+class PeriodParameterSnapshot(models.Model):
+    """Copia histórica de la configuración vigente al registrar el evento.
+
+    Las revisiones se agregan; no se editan o eliminan por la aplicación.
+    Esta tabla NO sustituye el motor de indicadores ni su histórico de resultados.
+    """
+
+    class Event(models.TextChoices):
+        CREATED = "CREATED", "Creación"
+        CONFIGURED = "CONFIGURED", "Actualización de parámetros"
+        GOALS_UPDATED = "GOALS_UPDATED", "Modificación de metas"
+        CATALOG_UPDATED = "CATALOG_UPDATED", "Cambio de ítem"
+        CLOSED = "CLOSED", "Cierre"
+        REOPENED = "REOPENED", "Reapertura"
+
+    period = models.ForeignKey(
+        Period, on_delete=models.PROTECT, related_name="parameter_snapshots"
+    )
+    revision = models.PositiveIntegerField()
+    event = models.CharField(max_length=20, choices=Event.choices)
+    saved_at = models.DateTimeField(auto_now_add=True)
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="period_parameter_snapshots"
+    )
+    content = models.JSONField(default=dict)
+
+    class Meta:
+        ordering = ("-revision",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=("period", "revision"),
+                name="unique_period_parameter_revision",
+            ),
+        ]
+        verbose_name = "Versión histórica del período"
+        verbose_name_plural = "Versiones históricas del período"
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            raise ValidationError(
+                "Las versiones históricas son inmutables: crea otra revisión."
+            )
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("No se pueden eliminar versiones históricas.")
+
+    def __str__(self):
+        return f"Período {self.period_id} - revisión {self.revision}"

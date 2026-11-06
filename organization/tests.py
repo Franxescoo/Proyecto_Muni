@@ -271,31 +271,41 @@ class OrganizationListTests(TestCase):
         )
 
     def test_role_catalog_respects_personal_permissions(self):
+        # CATALOGO_COMPLETO_ROLES_SGR_V1: el editor de roles puede otorgar
+        # permisos del catálogo que él no tiene personalmente.
         manager = get_user_model().objects.create_user(
             username="role_manager_without_catalog_access",
             password="test-pass-123",
         )
+        manager.user_permissions.add(Permission.objects.get(
+            content_type__app_label="organization",
+            codename="change_organizationrole",
+        ))
+        other = Permission.objects.get(
+            content_type__app_label="municipal_events",
+            codename="view_municipalevent",
+        )
+        self.assertFalse(manager.has_perm("municipal_events.view_municipalevent"))
         form = OrganizationRoleForm(actor=manager)
-        self.assertFalse(form.fields["permissions"].queryset.exists())
+        self.assertIn(other, form.fields["permissions"].queryset)
+
 
     def test_editing_other_role_preserves_permissions_outside_actor_scope(self):
         manager = get_user_model().objects.create_user(
             username="scoped_role_manager",
             password="test-pass-123",
         )
-        manager.user_permissions.add(
-            Permission.objects.get(
-                content_type__app_label="organization",
-                codename="change_organizationrole",
-            )
-        )
+        manager.user_permissions.add(Permission.objects.get(
+            content_type__app_label="organization",
+            codename="change_organizationrole",
+        ))
         group = Group.objects.create(name="Rol protegido")
+        # Permiso técnico no incluido en el catálogo funcional.
         protected = Permission.objects.get(
-            content_type__app_label="monitoring_traceability",
-            codename="delete_evidence",
+            content_type__app_label="auth",
+            codename="view_group",
         )
         group.permissions.add(protected)
-
         form = OrganizationRoleForm(
             data={
                 "name": group.name,
@@ -310,6 +320,41 @@ class OrganizationListTests(TestCase):
             form.fields["permissions"].queryset.filter(pk=protected.pk).exists()
         )
         self.assertIn(protected.pk, form._preserved_permission_ids)
+
+
+    def test_role_manager_can_assign_an_unowned_catalog_permission(self):
+        manager = get_user_model().objects.create_user(
+            username="role_manager_grants_unowned",
+            password="test-pass-123",
+        )
+        rights = Permission.objects.filter(
+            content_type__app_label="organization",
+            codename__in=("view_organizationrole", "add_organizationrole", "change_organizationrole"),
+        )
+        manager.user_permissions.add(*rights)
+        profile = UserProfile.objects.create(
+            user=manager,
+            delegation=self.delegation,
+            employee_code="ROLE-ALL-PERMS",
+        )
+        profile.authorized_delegations.add(self.delegation)
+        to_grant = Permission.objects.get(
+            content_type__app_label="municipal_events",
+            codename="view_municipalevent",
+        )
+        self.assertFalse(manager.has_perm("municipal_events.view_municipalevent"))
+        self.client.force_login(manager)
+        response = self.client.post(reverse("organization:role_list"), {
+            "action": "create",
+            "name": "Rol con permiso de otro módulo",
+            "description": "Prueba de asignación por administrador funcional",
+            "delegations": [self.delegation.pk],
+            "permissions": [to_grant.pk],
+        })
+        self.assertEqual(response.status_code, 302)
+        group = Group.objects.get(name="Rol con permiso de otro módulo")
+        self.assertIn(to_grant, group.permissions.all())
+        self.assertFalse(manager.has_perm("municipal_events.view_municipalevent"))
 
     def test_assigned_role_cannot_be_modified_by_owner(self):
         manager = get_user_model().objects.create_user(

@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% load static %}
 
+{% block sidebar %}{% endblock %}
+
 {% block titulo %}Solicitud registrada · Portal Ciudadano{% endblock %}
 
 {% block public_navigation %}
@@ -18,11 +20,23 @@
 </nav>
 {% endblock %}
 
+{% block estilos %}
+<link rel="stylesheet" href="{% static 'css/portal_publico_moderno.css' %}">
+<link rel="stylesheet" href="{% static 'css/portal_ciudadano_ajustes.css' %}">
+{% endblock %}
+
 {% block contenido %}
-<div class="container py-2 py-md-5">
+<div class="public-portal portal-inner portal-confirmation-page">
+  <div class="portal-shell">
+    <a class="portal-back mb-3" href="{% url 'citizen_requests:public_portal' %}"><i class="bi bi-arrow-left" aria-hidden="true"></i>Volver al Portal Ciudadano</a>
+    <header class="portal-page-header mb-4">
+        <span class="portal-page-eyebrow"><i class="bi bi-check-circle me-2" aria-hidden="true"></i>Trámite completado</span>
+        <h1>Solicitud registrada</h1>
+        <p>Tu solicitud fue recibida. Conserva el código para consultar su avance cuando quieras.</p>
+    </header>
     <div class="row justify-content-center">
-        <div class="col-12 col-lg-8">
-            <div class="card citizen-card shadow-sm text-center">
+        <div class="col-12 col-xl-10">
+            <div class="card citizen-card portal-form-card shadow-sm text-center">
                 <div class="card-body p-4 p-md-5">
                     <div class="text-success display-5 mb-3">
                         <i class="bi bi-check-circle-fill"></i>
@@ -48,13 +62,14 @@
                         Conserva el código mostrado para futuras consultas.
                     </div>
                     {% endif %}
-                    <a class="btn btn-primary mt-2" href="{% url 'citizen_requests:public_portal' %}">
+                    <a class="btn btn-primary mt-2" href="{% url 'citizen_requests:public_request_form' %}">
                         Registrar otra solicitud
                     </a>
                 </div>
             </div>
         </div>
     </div>
+  </div>
     <script>
 document.addEventListener("DOMContentLoaded", function () {
     const button = document.getElementById("copy-code");

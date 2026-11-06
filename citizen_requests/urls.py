@@ -1,11 +1,24 @@
 from django.urls import path
 
 from . import views
+from .history import public_request_history
+from .verify_followup import verify_followup_email
 
 
 app_name = "citizen_requests"
 
 urlpatterns = [
+    path("portal/verificar-correo/<str:token>/", verify_followup_email, name="verify_followup_email"),
+    path(
+        "portal/mis-solicitudes/",
+        public_request_history,
+        name="public_request_history",
+    ),
+    path(
+        "portal/nueva-solicitud/",
+        views.public_request_form,
+        name="public_request_form",
+    ),
     path(
         "portal/",
         views.public_portal,

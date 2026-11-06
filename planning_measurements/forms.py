@@ -9,6 +9,8 @@ from organization.models import Employee, PositionFunction
 from .models import Goal, Period, MeasurementItem
 
 from .working_days import calculate_computable_days
+from .measurement_rules import (SUPPORTED_PERCENTAGE_FORMULA, canonical_percentage_formula)
+from .parameter_history import compliance_cap_value
 import re
 from decimal import Decimal
 
@@ -50,6 +52,15 @@ def _set_text_limit(field, limit, label):
 
 class PeriodForm(BootstrapMixin, forms.ModelForm):
 
+    compliance_cap = forms.DecimalField(
+        label="Tope de cumplimiento (%)",
+        required=False,
+        min_value=Decimal("100"), max_value=Decimal("300"),
+        max_digits=6, decimal_places=2,
+        initial=Decimal("150"),
+        help_text="Valor inicial 150 %. Configurable entre 100 y 300 %.",
+    )
+
     status = forms.ChoiceField(
         label="Estado",
         choices=Period.Status.choices,
@@ -82,6 +93,9 @@ class PeriodForm(BootstrapMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
 
         self._apply_bootstrap()
+        self.fields["compliance_cap"].initial = Decimal(
+            compliance_cap_value(self.instance.thresholds if self.instance.pk else "")
+        )
         _set_text_limit(self.fields["thresholds"], 255, "Los umbrales")
         _set_text_limit(
             self.fields["parameters_version"],
@@ -114,6 +128,7 @@ class PeriodForm(BootstrapMixin, forms.ModelForm):
             r"Verde\s*:\s*(\d+(?:\.\d+)?)\s*,\s*"
             r"Amarillo\s*:\s*(\d+(?:\.\d+)?)\s*,\s*"
             r"Rojo\s*:\s*(\d+(?:\.\d+)?)"
+            r"(?:\s*,\s*(?:Tope|Max)\s*:\s*\d+(?:[.,]\d+)?)?"
         )
 
         resultado = re.fullmatch(
@@ -128,7 +143,7 @@ class PeriodForm(BootstrapMixin, forms.ModelForm):
 
         verde, amarillo, rojo = (
             Decimal(numero)
-            for numero in resultado.groups()
+            for numero in resultado.groups()[:3]
         )
 
         if not (0 <= rojo < amarillo < verde <= 100):
@@ -142,6 +157,28 @@ class PeriodForm(BootstrapMixin, forms.ModelForm):
     
     def clean(self):
         cleaned_data = super().clean()
+
+        # Mantiene un tope explícito y legible para el servicio de
+        # Monitoreo existente, sin modificar ese módulo.
+        threshold_string = cleaned_data.get("thresholds", "")
+        threshold_valid = re.fullmatch(
+            r"\s*Verde\s*:\s*\d+(?:\.\d+)?\s*,\s*"
+            r"Amarillo\s*:\s*\d+(?:\.\d+)?\s*,\s*"
+            r"Rojo\s*:\s*\d+(?:\.\d+)?"
+            r"(?:\s*,\s*(?:Tope|Max)\s*:\s*\d+(?:[.,]\d+)?)?\s*",
+            threshold_string, re.I,
+        )
+        if threshold_valid and "compliance_cap" in cleaned_data:
+            cap = cleaned_data["compliance_cap"]
+            if cap is None:
+                cap = Decimal(compliance_cap_value(threshold_string))
+            base = re.sub(
+                r"\s*,\s*(?:Tope|Max)\s*:\s*\d+(?:[.,]\d+)?\s*$",
+                "", threshold_string, flags=re.I,
+            )
+            cleaned_data["thresholds"] = (
+                base.rstrip() + f", Tope: {cap:.2f}"
+            )
 
         start_date = cleaned_data.get("start_date")
         end_date = cleaned_data.get("end_date")
@@ -548,5 +585,25 @@ class MeasurementItemForm(BootstrapMixin, forms.ModelForm):
         _set_text_limit(self.fields["formula"], 500, "La fórmula")
 
         self.fields["formula"].help_text = (
-            "Obligatoria para ítems porcentuales."
+            "Para ítems porcentuales, fórmula admitida: "
+            + SUPPORTED_PERCENTAGE_FORMULA
         )
+
+    def clean(self):
+        data = super().clean()
+        if data.get("item_type") == MeasurementItem.ItemType.PERCENTAGE:
+            expression = canonical_percentage_formula(data.get("formula"))
+            unchanged_legacy = (
+                self.instance.pk
+                and self.instance.item_type == MeasurementItem.ItemType.PERCENTAGE
+                and data.get("formula") == self.instance.formula
+            )
+            if expression is None and not unchanged_legacy:
+                self.add_error(
+                    "formula",
+                    "La fórmula porcentual admitida actualmente es: "
+                    + SUPPORTED_PERCENTAGE_FORMULA,
+                )
+            elif expression is not None:
+                data["formula"] = expression
+        return data

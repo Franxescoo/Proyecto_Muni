@@ -1,7 +1,9 @@
+# SGR_PERMISOS_EVENTOS_V2
 """Etiquetas de lectura para permisos de Django (no modifica sus códigos)."""
 from django import forms
 
 APP_NAMES = {
+    "citizen_registry": "Ciudadanos",
     "accounts": "Cuentas",
     "municipal_events": "Eventos y campañas",
     "citizen_requests": "Solicitudes ciudadanas",
@@ -11,8 +13,10 @@ APP_NAMES = {
     "monitoring_traceability": "Monitoreo y trazabilidad",
 }
 MODEL_NAMES = {
+    "citizen": "Ciudadanos",
     "municipalevent": "Eventos municipales",
     "eventedition": "Ediciones anuales",
+    "eventparticipation": "Participantes de eventos",
     "campaign": "Campañas municipales",
     "beneficiary": "Beneficiarios",
     "enrollment": "Inscripciones a campañas",
@@ -52,12 +56,20 @@ ACTIONS = {
     "view": "Puede consultar",
 }
 SPECIAL = {
+    "delete_municipalevent": "Puede desactivar eventos municipales",
+    "delete_eventedition": "Puede desactivar ediciones anuales",
+    "delete_campaign": "Puede desactivar campañas municipales",
+    "evaluate_eventparticipation": "Puede evaluar participantes de eventos",
+    "withdraw_eventparticipation": "Puede retirar participantes de eventos",
+    "reactivate_eventparticipation": "Puede reactivar participantes de eventos",
     "delete_closed_period": "Puede eliminar períodos cerrados",
     "derivar_solicitud": "Puede derivar solicitudes ciudadanas",
 }
 
 CATALOG_MODELS = {
+    "citizen_registry": {"citizen"},
     "municipal_events": {
+        "eventparticipation",
         "municipalevent", "eventedition", "campaign", "enrollment", "giftdelivery",
     },
     "accounts": {
@@ -99,10 +111,15 @@ CATALOG_MODELS = {
 }
 
 CATALOG_ACTIONS = {
+    ("citizen_registry", "citizen"): {"view_citizen", "add_citizen", "change_citizen"},
     ("municipal_events", "municipalevent"): {"delete_municipalevent", "add_municipalevent", "change_municipalevent", "view_municipalevent"},
-    ("municipal_events", "eventedition"): {"delete_eventedition", "add_eventedition", "change_eventedition"},
+    ("municipal_events", "eventedition"): {"delete_eventedition", "add_eventedition", "change_eventedition", "view_eventedition"},
     ("municipal_events", "campaign"): {"delete_campaign", "add_campaign", "change_campaign", "view_campaign"},
     ("municipal_events", "enrollment"): {"add_enrollment", "change_enrollment", "view_enrollment"},
+    ("municipal_events", "eventparticipation"): {
+        "view_eventparticipation", "add_eventparticipation", "change_eventparticipation",
+        "evaluate_eventparticipation", "withdraw_eventparticipation", "reactivate_eventparticipation",
+    },
     ("municipal_events", "giftdelivery"): {"add_giftdelivery", "view_giftdelivery"},
     ("citizen_requests", "citizenrequest"): {"derivar_solicitud"},
     ("monitoring_traceability", "activity"): {

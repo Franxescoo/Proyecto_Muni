@@ -439,7 +439,7 @@ class PlanningTests(TestCase):
             "end_date": "2026-01-05",
             "computable_days": 366,
             "status": "Closed",
-        })
+        }, instance=self.period)
 
         self.assertTrue(form.is_valid(), form.errors)
 
@@ -723,9 +723,16 @@ class PlanningTests(TestCase):
             side_effect=RuntimeError("simulated failure"),
         ):
             with self.assertRaises(RuntimeError):
+                data = self.inline_data()
+                # El período de prueba ocupa 2026; este nuevo rango
+                # no debe fallar antes de llegar al guardado de metas.
+                data.update({
+                    "start_date": "2027-01-04",
+                    "end_date": "2027-01-29",
+                })
                 self.client.post(
                     reverse("planning:period_create"),
-                    self.inline_data(),
+                    data,
                 )
 
         self.assertEqual(
@@ -854,6 +861,11 @@ class PeriodWeightCalculationTests(PlanningTests):
             employee=self.outside,
             item="Atenciones",
             weight=40,
+        )
+        self.create_goal(
+            employee=self.outside,
+            item="Informes",
+            weight=60,
         )
 
         self.assertIsNone(

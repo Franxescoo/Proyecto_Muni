@@ -1,0 +1,17 @@
+<div class="mec-modal-title"><i class="bi bi-person-lines-fill me-2"></i> Ficha de participante</div>
+<div class="row g-3">
+ <div class="col-md-6"><strong>Nombre</strong><p>{{ item.full_name }}</p></div>
+ <div class="col-md-6"><strong>RUT</strong><p>{{ item.rut }}</p></div>
+ <div class="col-md-6"><strong>Correo</strong><p>{{ item.email }}</p></div>
+ <div class="col-md-6"><strong>Edición</strong><p>{{ item.edition }}</p></div>
+ <div class="col-md-6"><strong>Estado</strong><p>{% if item.withdrawn_at %}Retirado{% else %}{{ item.get_status_display }}{% endif %}</p></div>
+ <div class="col-md-6"><strong>Fecha de registro</strong><p>{{ item.created_at|date:"d/m/Y H:i" }}</p></div>
+ {% if item.withdrawn_at %}<div class="col-md-6"><strong>Retirado el</strong><p>{{ item.withdrawn_at|date:"d/m/Y H:i" }}</p></div>{% endif %}
+ {% if item.description %}<div class="col-12"><strong>Antecedentes</strong><p>{{ item.description|linebreaksbr }}</p></div>{% endif %}
+ {% if item.review_reason %}<div class="col-12"><strong>Motivo de evaluación</strong><p>{{ item.review_reason|linebreaksbr }}</p></div>{% endif %}
+</div>
+<h3 class="h6 fw-bold mt-3">Historial de acciones</h3>
+<div class="table-responsive"><table class="table table-sm table-striped"><thead><tr><th>Fecha</th><th>Acción</th><th>Funcionario</th><th>Motivo</th></tr></thead><tbody>
+{% for log in audit_history %}<tr><td>{{ log.created_at|date:"d/m/Y H:i" }}</td><td>{{ log.action }}</td><td>{{ log.actor.get_username }}</td><td>{{ log.reason|default:"—" }}</td></tr>{% empty %}<tr><td colspan="4" class="text-muted">Sin acciones registradas.</td></tr>{% endfor %}
+</tbody></table></div>
+<div class="modal-footer px-0 pb-0"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button></div>

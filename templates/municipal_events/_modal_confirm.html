@@ -1,12 +1,16 @@
-<div class="mec-modal-title"><i class="bi bi-trash me-2"></i>{{ title }}</div>
-<p>¿Confirmas eliminar <strong>{{ object_label }}</strong>?</p>
+<div class="mec-modal-title"><i class="bi bi-shield-check me-2"></i>{{ title }}</div>
+<p>¿Confirmas <strong>{{ action_text|lower }}</strong> el registro <strong>{{ object_label }}</strong>?</p>
 {% if blocked %}<div class="alert alert-warning" role="alert">{{ blocked }}</div>{% endif %}
 {% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
 {% if not blocked %}
-<form method="post" action="{{ request.path }}" data-mec-ajax-form>{% csrf_token %}
+<form method="post" action="{{ request.path }}" data-mec-ajax-form data-mec-confirm-record="{{ action_kind }}">{% csrf_token %}
+  <div class="mb-3"><label class="form-label fw-semibold">Motivo (obligatorio)</label>
+    <textarea class="form-control" name="reason" rows="3" maxlength="500" required>{{ request_reason }}</textarea>
+    <div class="form-text">Se guardará en el historial de auditoría.</div>
+  </div>
   <div class="modal-footer px-0 pb-0">
     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-    <button type="submit" class="btn btn-danger"><i class="bi bi-trash me-1"></i> Eliminar definitivamente</button>
+    <button type="submit" class="btn {% if action_kind == 'reactivate' %}btn-success{% else %}btn-danger{% endif %}">{{ action_text }}</button>
   </div>
 </form>
 {% else %}

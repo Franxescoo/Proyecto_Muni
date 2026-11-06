@@ -30,7 +30,7 @@ def remember_attention_link_transition(
         previous_attention_id is None
         and instance.attention_entry_id is not None
         and instance.origin == "CITIZEN"
-        and bool(instance.requester_email)
+        and bool(instance.followup_recipient)
     )
 
 
@@ -46,7 +46,7 @@ def notify_new_attention_link(
     transaction.on_commit(
         lambda request_id=instance.pk,
         requester_name=instance.requester_name,
-        requester_email=instance.requester_email,
+        requester_email=instance.followup_recipient,
         tracking_code=str(instance.tracking_code): send_attention_notification(
             request_id,
             requester_name,
