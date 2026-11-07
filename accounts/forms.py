@@ -25,10 +25,11 @@ from organization.models import (
 from .models import UserProfile
 from registration_validation.models import Service
 from planning_measurements.models import MeasurementItem
+from organization.validators import normalize_rut
 
 
 class UsuarioOCorreoAuthenticationForm(AuthenticationForm):
-    """Permite iniciar sesión con usuario o correo electrónico."""
+    """Permite iniciar sesión únicamente con RUT o correo institucional."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -38,22 +39,35 @@ class UsuarioOCorreoAuthenticationForm(AuthenticationForm):
     def clean(self):
         identificador = self.cleaned_data.get("username")
 
-        if identificador and "@" in identificador:
+        if identificador:
             usuarios = get_user_model()._default_manager
-
-            # Primero comprobar si es un nombre de usuario.
-            if not usuarios.filter(username=identificador).exists():
-
-                # Buscar una cuenta con ese correo.
+            coincidencias = []
+            if "@" in identificador:
                 coincidencias = list(
                     usuarios.filter(
-                        email__iexact=identificador
+                        email__iexact=identificador.strip()
                     ).values_list("username", flat=True)[:2]
                 )
+            else:
+                try:
+                    rut = normalize_rut(identificador)
+                except forms.ValidationError:
+                    rut = None
+                if rut:
+                    coincidencias = list(
+                        usuarios.filter(
+                            profile__employee__rut=rut,
+                            profile__deleted_at__isnull=True,
+                        ).values_list("username", flat=True)[:2]
+                    )
 
-                # Solo permitir el correo si pertenece a una cuenta.
-                if len(coincidencias) == 1:
-                    self.cleaned_data["username"] = coincidencias[0]
+            if len(coincidencias) == 1:
+                self.cleaned_data["username"] = coincidencias[0]
+            else:
+                self.add_error(
+                    "username",
+                    "Ingresa un RUT o correo institucional válido.",
+                )
 
         return super().clean()
 

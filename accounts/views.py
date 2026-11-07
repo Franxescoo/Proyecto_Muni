@@ -2,6 +2,7 @@ from functools import wraps
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
+from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import Group
 from django.core.exceptions import PermissionDenied
@@ -38,6 +39,8 @@ from .services import create_user_account
 
 RECOVERY_SESSION_KEY = "password_recovery_code_id"
 RECOVERY_VERIFIED_SESSION_KEY = "password_recovery_verified"
+PROFILE_PASSWORD_SESSION_KEY = "profile_password_code_id"
+PROFILE_PASSWORD_VERIFIED_SESSION_KEY = "profile_password_verified"
 
 
 def password_reset_request(request):
@@ -120,6 +123,145 @@ def password_reset_password(request):
     return render(
         request,
         "registration/password_reset_password.html",
+        {"form": form},
+    )
+
+
+@login_required
+def profile_view(request):
+    profile = (
+        UserProfile.objects
+        .filter(user=request.user, deleted_at__isnull=True)
+        .select_related(
+            "employee",
+            "employee__delegation",
+            "employee__position",
+            "delegation",
+        )
+        .prefetch_related(
+            "authorized_delegations",
+            "user__groups",
+        )
+        .first()
+    )
+    return render(
+        request,
+        "accounts/profile.html",
+        {
+            "profile": profile,
+            "employee": profile.employee if profile else None,
+            "authorized_delegations": (
+                profile.authorized_delegations.all()
+                if profile
+                else []
+            ),
+        },
+    )
+
+
+@login_required
+def profile_password_request(request):
+    profile = UserProfile.objects.filter(
+        user=request.user,
+        deleted_at__isnull=True,
+    ).first()
+    if profile is None or not request.user.email:
+        messages.error(
+            request,
+            "No hay un correo institucional disponible para verificar el cambio.",
+        )
+        return redirect("accounts:profile")
+
+    if request.method == "POST":
+        recovery, code = create_recovery_code(request.user)
+        send_recovery_code(request, request.user, code)
+        request.session[PROFILE_PASSWORD_SESSION_KEY] = recovery.pk
+        request.session.pop(PROFILE_PASSWORD_VERIFIED_SESSION_KEY, None)
+        messages.success(
+            request,
+            "Enviamos un código de 6 dígitos a tu correo institucional.",
+        )
+        return redirect("accounts:profile_password_verify")
+
+    return redirect("accounts:profile")
+
+
+@login_required
+def profile_password_verify(request):
+    recovery_id = request.session.get(PROFILE_PASSWORD_SESSION_KEY)
+    if not recovery_id:
+        return redirect("accounts:profile")
+
+    recovery = get_object_or_404(
+        PasswordRecoveryCode.objects.select_related("user"),
+        pk=recovery_id,
+        user=request.user,
+    )
+    form = RecoveryCodeForm(request.POST or None)
+    if request.method == "POST":
+        if not valid_recovery_code(recovery, request.POST.get("code", "")):
+            form.add_error("code", "El código es incorrecto o ya expiró.")
+        elif form.is_valid():
+            request.session[PROFILE_PASSWORD_VERIFIED_SESSION_KEY] = True
+            return redirect("accounts:profile_password_change")
+
+    return render(
+        request,
+        "accounts/profile_password_verify.html",
+        {"form": form, "expires_at": recovery.expires_at},
+    )
+
+
+@login_required
+def profile_password_change(request):
+    recovery_id = request.session.get(PROFILE_PASSWORD_SESSION_KEY)
+    if (
+        not request.session.get(PROFILE_PASSWORD_VERIFIED_SESSION_KEY)
+        or not recovery_id
+    ):
+        return redirect("accounts:profile")
+
+    recovery = get_object_or_404(
+        PasswordRecoveryCode.objects.select_related("user"),
+        pk=recovery_id,
+        user=request.user,
+    )
+    if recovery.expires_at <= timezone.now() or recovery.used_at is not None:
+        request.session.pop(PROFILE_PASSWORD_SESSION_KEY, None)
+        request.session.pop(PROFILE_PASSWORD_VERIFIED_SESSION_KEY, None)
+        messages.error(request, "El código expiró. Solicita uno nuevo.")
+        return redirect("accounts:profile")
+
+    form = RecoveryPasswordForm(request.user, request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        with transaction.atomic():
+            locked = PasswordRecoveryCode.objects.select_for_update().get(
+                pk=recovery.pk,
+            )
+            if locked.used_at is not None or locked.expires_at <= timezone.now():
+                form.add_error(None, "El código expiró. Solicita uno nuevo.")
+            else:
+                request.user.set_password(
+                    form.cleaned_data["new_password1"]
+                )
+                request.user.save(update_fields=["password"])
+                update_session_auth_hash(request, request.user)
+                locked.used_at = timezone.now()
+                locked.save(update_fields=["used_at"])
+                request.session.pop(PROFILE_PASSWORD_SESSION_KEY, None)
+                request.session.pop(
+                    PROFILE_PASSWORD_VERIFIED_SESSION_KEY,
+                    None,
+                )
+                messages.success(
+                    request,
+                    "Tu contraseña fue actualizada correctamente.",
+                )
+                return redirect("accounts:profile")
+
+    return render(
+        request,
+        "accounts/profile_password_change.html",
         {"form": form},
     )
 

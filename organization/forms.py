@@ -308,6 +308,15 @@ class AccountRolePreviewSelect(forms.Select):
 
 
 class EmployeeForm(AccountsEmployeeForm):
+    ui_hidden_fields = {
+        "user_account",
+        "assigned_roles_display",
+        "username",
+        "employee_code",
+        "authorized_delegations",
+        "groups",
+    }
+
     status = forms.ChoiceField(
         choices=STATUS_CHOICES,
         label="Estado",
@@ -328,7 +337,7 @@ class EmployeeForm(AccountsEmployeeForm):
         help_text="Se creará o actualizará junto con el empleado.",
     )
     email = forms.EmailField(
-        label="Correo electrónico",
+        label="Correo institucional",
         required=False,
     )
     employee_code = forms.CharField(
@@ -550,10 +559,42 @@ class EmployeeForm(AccountsEmployeeForm):
         password1 = cleaned_data.get("password1", "")
         password2 = cleaned_data.get("password2", "")
         account_fields = (
-            username or email or employee_code or password1 or password2
+            email or password1 or password2
             or cleaned_data.get("groups")
             or cleaned_data.get("authorized_delegations")
         )
+
+        existing_profile = None
+        if self.instance.pk:
+            existing_profile = UserProfile.objects.filter(
+                employee=self.instance,
+                deleted_at__isnull=True,
+            ).select_related("user").first()
+        current_profile = existing_profile
+
+        if current_profile and not self.data.getlist("groups"):
+            cleaned_data["groups"] = current_profile.user.groups.all()
+        if (
+            current_profile
+            and not self.data.getlist("authorized_delegations")
+        ):
+            cleaned_data["authorized_delegations"] = (
+                current_profile.authorized_delegations.all()
+            )
+
+        rut = cleaned_data.get("rut") or ""
+        if not username:
+            if current_profile:
+                username = current_profile.user.username
+            else:
+                username = "".join(
+                    character for character in (rut or email.lower())
+                    if character.isalnum()
+                ).lower()
+            cleaned_data["username"] = username
+        if not employee_code and username:
+            cleaned_data["employee_code"] = f"EMP-{username[:26]}"
+            employee_code = cleaned_data["employee_code"]
 
         if self.instance.pk and (
             Employee.objects.filter(pk=self.instance.pk, responsible_for_delegations__isnull=False).exists()
@@ -563,15 +604,7 @@ class EmployeeForm(AccountsEmployeeForm):
             if cleaned_data.get("status") not in ("Active", "Activo"):
                 self.add_error("status", "Primero cambia el responsable de la delegación.")
 
-        existing_profile = None
-
-        if self.instance.pk:
-            existing_profile = UserProfile.objects.filter(
-                employee=self.instance,
-                deleted_at__isnull=True,
-            ).first()
-
-        if existing_profile and (
+        if existing_profile and "user_account" in self.data and (
             profile is None
             or profile.pk != existing_profile.pk
         ):
@@ -588,20 +621,9 @@ class EmployeeForm(AccountsEmployeeForm):
                     "a la misma delegación.",
                 )
 
-        current_profile = (
-            UserProfile.objects.filter(
-                employee=self.instance,
-                deleted_at__isnull=True,
-            ).select_related("user").first()
-            if self.instance.pk else None
-        )
         if account_fields:
-            if not username:
-                self.add_error("username", "Indica el usuario de acceso.")
             if not email:
-                self.add_error("email", "Indica el correo electrónico.")
-            if not employee_code:
-                self.add_error("employee_code", "Indica el código interno.")
+                self.add_error("email", "Indica el correo institucional.")
             if not current_profile and not password1:
                 self.add_error("password1", "Indica una contraseña.")
             if password1 != password2:

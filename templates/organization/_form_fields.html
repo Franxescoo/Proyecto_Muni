@@ -20,7 +20,9 @@
 
 <div class="row g-3">
     {% for field in form %}
-        {% if not form.profile_photo or field.name != 'profile_photo' and field.name != 'name' %}
+        {% if field.name in form.ui_hidden_fields %}
+            {# La cuenta se administra desde Gestión de accesos. #}
+        {% elif not form.profile_photo or field.name != 'profile_photo' and field.name != 'name' %}
 
             <div class="{% if field.name == 'roles' or field.name == 'authorized_delegations' or field.name == 'delegations' or field.name == 'assigned_groups' or field.name == 'permissions' or field.name == 'measurable_items' or field.name == 'services' or field.name == 'catalog_services' or field.name == 'catalog_items' or field.name == 'weightings' %}col-12{% else %}col-12 col-md-6{% endif %}">
 

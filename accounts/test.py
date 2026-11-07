@@ -1,14 +1,21 @@
 
 from datetime import date
+import re
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
 from django.core.management import call_command
+from django.core import mail
 from django.test import TestCase
+from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.forms import AccountCreateForm, AccountEditForm
+from accounts.forms import (
+    AccountCreateForm,
+    AccountEditForm,
+    UsuarioOCorreoAuthenticationForm,
+)
 from accounts.permission_audit import direct_permission_inventory
 from accounts.models import UserProfile
 from organization.models import (
@@ -97,6 +104,7 @@ class AccountTests(TestCase):
         self.assertIn("authorized_delegations", form.fields)
         self.assertIn("employee", form.fields)
         self.assertIn("username", form.fields)
+
 
     def test_edit_form_allows_roles_and_delegations(self):
         user = get_user_model().objects.create_user(
@@ -497,3 +505,118 @@ class AccountTests(TestCase):
 
         profile.refresh_from_db()
         self.assertIsNotNone(profile.deleted_at)
+
+
+class LoginIdentifierTests(TestCase):
+    def setUp(self):
+        delegation = Delegation.objects.create(
+            name="Delegación Login",
+            scope="Urbano",
+            status="Active",
+        )
+        position = PositionFunction.objects.create(
+            position_name="Cargo Login",
+            measurable_items="Informes",
+            services="Atención",
+            weightings="100%",
+            validity_start=date(2026, 1, 1),
+            validity_end=date(2026, 12, 31),
+        )
+        employee = Employee.objects.create(
+            name="Usuario Login",
+            rut="12.345.678-5",
+            delegation=delegation,
+            position=position,
+            roles="Atención",
+            status="Active",
+        )
+        user = get_user_model().objects.create_user(
+            username="rut12345678",
+            email="usuario.institucional@municipio.cl",
+            password="Clave-Segura-9271!",
+        )
+        UserProfile.objects.create(
+            user=user,
+            employee=employee,
+            employee_code="LOGIN-001",
+            delegation=delegation,
+        )
+        self.password = "Clave-Segura-9271!"
+
+    def login_form(self, identifier):
+        return UsuarioOCorreoAuthenticationForm(
+            data={
+                "username": identifier,
+                "password": self.password,
+            }
+        )
+
+    def test_login_accepts_institutional_email(self):
+        form = self.login_form("usuario.institucional@municipio.cl")
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_login_accepts_rut(self):
+        form = self.login_form("123456785")
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_login_rejects_technical_username(self):
+        form = self.login_form("rut12345678")
+        self.assertFalse(form.is_valid())
+
+
+@override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+class ProfilePasswordChangeTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="profile_password_user",
+            email="profile@municipio.cl",
+            password="Clave-Anterior-9271!",
+        )
+        UserProfile.objects.create(
+            user=self.user,
+            employee_code="PROFILE-001",
+        )
+        self.client.force_login(self.user)
+
+    def test_password_change_requires_email_code_and_updates_password(self):
+        response = self.client.post(
+            reverse("accounts:profile_password_request"),
+        )
+        self.assertRedirects(
+            response,
+            reverse("accounts:profile_password_verify"),
+        )
+        self.assertEqual(len(mail.outbox), 1)
+        code = re.search(
+            r"\b(\d{6})\b",
+            mail.outbox[0].body,
+        ).group(1)
+
+        response = self.client.post(
+            reverse("accounts:profile_password_verify"),
+            {"code": code},
+        )
+        self.assertRedirects(
+            response,
+            reverse("accounts:profile_password_change"),
+        )
+        response = self.client.post(
+            reverse("accounts:profile_password_change"),
+            {
+                "new_password1": "Clave-Nueva-9271!",
+                "new_password2": "Clave-Nueva-9271!",
+            },
+        )
+        self.assertRedirects(response, reverse("accounts:profile"))
+        self.user.refresh_from_db()
+        self.assertTrue(
+            self.user.check_password("Clave-Nueva-9271!")
+        )
+
+    def test_profile_does_not_expose_editable_employee_data(self):
+        response = self.client.get(reverse("accounts:profile"))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'name="email"')
+        self.assertNotContains(response, 'name="rut"')
+        self.assertNotContains(response, 'name="address"')
+        self.assertContains(response, "Cambiar contraseña")
