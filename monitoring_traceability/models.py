@@ -355,6 +355,18 @@ class Audit(BaseModel):
             "-audit_id",
         )
 
+    def save(self, *args, **kwargs):
+        if self.pk:
+            raise ValidationError(
+                "Los eventos de auditoría son inmutables."
+            )
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError(
+            "Los eventos de auditoría no se pueden eliminar."
+        )
+
     def __str__(self):
         return (
             f"{self.event} - "

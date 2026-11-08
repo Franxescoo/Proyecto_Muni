@@ -806,6 +806,8 @@
             <div id="globalSidebarMonitoring" class="accordion-collapse collapse {% if request.resolver_match.namespace == 'monitoring' %}show{% endif %}">
                 <div class="accordion-body">
                     {% if perms.monitoring_traceability.view_indicator %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'executive_dashboard' %} active{% endif %}" href="{% url 'monitoring:executive_dashboard' %}"><i class="bi bi-speedometer2"></i> Resumen ejecutivo</a>
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'activity_control' %} active{% endif %}" href="{% url 'monitoring:activity_control' %}"><i class="bi bi-person-check"></i> Control de actividad</a>
                         <a class="global-sidebar-link{% if request.resolver_match.url_name == 'indicator_list' %} active{% endif %}" href="{% url 'monitoring:indicator_list' %}"><i class="bi bi-bar-chart-line"></i> Indicadores</a>
                     {% endif %}
                     {% if perms.monitoring_traceability.view_commitment %}
