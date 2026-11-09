@@ -1,0 +1,16 @@
+<div class="mec-modal-title"><i class="bi {{ action_icon }} me-2"></i>{{ action_label }}</div>
+<p>Inscripción de <strong>{{ item.beneficiary.name }}</strong> a <strong>{{ item.campaign.title }}</strong>.</p>
+{% if note %}<p class="small text-muted">{{ note }}</p>{% endif %}
+{% if blocked %}<div class="alert alert-warning" role="alert">{{ blocked }}</div>
+<div class="modal-footer px-0 pb-0"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button></div>
+{% else %}
+<form method="post" action="{{ request.path }}" data-mec-ajax-form data-mec-confirm-enrollment="{% if item.deleted_at %}reactivar{% else %}desactivar{% endif %}">
+  {% csrf_token %}
+  <label for="mecEnrollmentReason" class="form-label fw-semibold">Motivo de la acción <span class="text-danger">*</span></label>
+  <textarea id="mecEnrollmentReason" name="reason" class="form-control" maxlength="500" rows="3" required placeholder="Motivo que quedará en el historial"></textarea>
+  <div class="modal-footer px-0 pb-0 mt-3">
+    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+    <button type="submit" class="btn {% if item.deleted_at %}btn-success{% else %}btn-danger{% endif %}">{{ action_label }}</button>
+  </div>
+</form>
+{% endif %}

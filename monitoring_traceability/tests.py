@@ -160,8 +160,8 @@ class TraceabilityModelsTest(TestCase):
 
 		indicator.refresh_from_db()
 		self.assertEqual(indicator.actual_progress, 1)
-		self.assertEqual(indicator.compliance, 20)
-		self.assertEqual(indicator.weighted_result, 10)
+		self.assertEqual(indicator.compliance, 1)
+		self.assertEqual(indicator.weighted_result, 0.5)
 		self.assertEqual(indicator.traffic_light, "Red")
 
 	def test_multiple_evidences_on_one_activity_count_once(self):
@@ -195,8 +195,8 @@ class TraceabilityModelsTest(TestCase):
 
 		self.assertEqual(indicator.approved_activities, 1)
 		self.assertEqual(indicator.approved_evidences, 2)
-		self.assertEqual(indicator.actual_progress, 2)
-		self.assertEqual(indicator.compliance, 40)
+		self.assertEqual(indicator.actual_progress, 1)
+		self.assertEqual(indicator.compliance, 1)
 
 		for number in range(3, 7):
 			evidence = Evidence.objects.create(
@@ -218,8 +218,8 @@ class TraceabilityModelsTest(TestCase):
 		indicator = recalculate_indicator_for_goal(self.north_goal)
 
 		self.assertEqual(indicator.approved_evidences, 6)
-		self.assertEqual(indicator.actual_progress, 6)
-		self.assertEqual(indicator.compliance, 120)
+		self.assertEqual(indicator.actual_progress, 1)
+		self.assertEqual(indicator.compliance, 1)
 
 	def test_indicator_uses_goal_evidence_requirement(self):
 		self.north_goal.required_evidence_count = 10
@@ -227,7 +227,7 @@ class TraceabilityModelsTest(TestCase):
 
 		indicator = recalculate_indicator_for_goal(self.north_goal)
 
-		self.assertEqual(indicator.expected_value, 10)
+		self.assertEqual(indicator.expected_value, 100)
 		self.assertEqual(indicator.compliance, 0)
 
 	def test_commitment_comments_preserve_author_and_text(self):

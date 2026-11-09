@@ -1,0 +1,33 @@
+{% extends "municipal_events/base.html" %}
+{% block events_content %}
+<div class="mec-crumb">Gestión municipal / Eventos y Campañas / Resumen</div>
+<div class="mec-heading"><div><h1>Panel de Eventos y Campañas</h1><p class="mec-subtitle">Gestiona las actividades municipales y el ciclo de inscripción, aprobación y entrega.</p></div><div class="mec-actions">{% if perms.municipal_events.add_campaign %}<a class="btn btn-success" href="{% url 'municipal_events:campaign_create' %}" data-mec-modal-url><i class="bi bi-plus-lg"></i> Nueva campaña</a>{% endif %}{% if perms.municipal_events.add_municipalevent %}<a class="btn btn-outline-primary" href="{% url 'municipal_events:event_create' %}" data-mec-modal-url>Nuevo evento</a>{% endif %}</div></div>
+<div class="mec-stats">
+ <div class="mec-stat"><div class="mec-stat-label">Eventos municipales</div><div class="mec-stat-value">{{ summary.events|default_if_none:"—" }}</div><div class="mec-stat-hint">Eventos base registrados</div></div>
+ <div class="mec-stat"><div class="mec-stat-label">Campañas</div><div class="mec-stat-value">{{ summary.campaigns|default_if_none:"—" }}</div><div class="mec-stat-hint">Campañas registradas</div></div>
+ <div class="mec-stat"><div class="mec-stat-label">Inscripciones pendientes</div><div class="mec-stat-value">{{ summary.pending|default_if_none:"—" }}</div><div class="mec-stat-hint">Solo tu ámbito autorizado</div></div>
+ <div class="mec-stat"><div class="mec-stat-label">Regalos entregados</div><div class="mec-stat-value">{{ summary.delivered|default_if_none:"—" }}</div><div class="mec-stat-hint">Solo tu ámbito autorizado</div></div>
+</div>
+<div class="mec-grid">
+  <div>
+    <section class="mec-panel"><div class="mec-panel-heading"><h2><i class="bi bi-gift me-2"></i> Campañas recientes</h2>{% if can_campaigns %}<a class="btn btn-outline-primary btn-sm" href="{% url 'municipal_events:campaign_list' %}">Ver todas</a>{% endif %}</div>
+    {% if can_campaigns %}<div class="mec-table-wrap"><table class="mec-table"><thead><tr><th>Campaña</th><th>Período</th><th>Estado</th><th></th></tr></thead><tbody>
+    {% for item in recent_campaigns %}<tr><td><strong>{{ item.title }}</strong><span class="mec-sub">{{ item.attention_type.name }}</span></td><td>{{ item.year }}<span class="mec-sub">{{ item.closes_on|date:"d/m/Y" }}</span></td><td>{% if item.accepts_enrollments %}<span class="mec-pill success">Abierta</span>{% elif item.status == 'DRAFT' %}<span class="mec-pill warning">Borrador</span>{% else %}<span class="mec-pill neutral">{{ item.get_status_display }}</span>{% endif %}</td><td><a href="{% url 'municipal_events:campaign_detail' item.pk %}" data-mec-modal-url>Ver <i class="bi bi-chevron-right"></i></a></td></tr>
+    {% empty %}<tr><td colspan="4"><div class="mec-empty"><i class="bi bi-gift"></i>Todavía no hay campañas creadas.</div></td></tr>{% endfor %}
+    </tbody></table></div>{% else %}<p class="mec-subtitle">Sin permiso para consultar campañas.</p>{% endif %}
+    </section>
+    <section class="mec-panel"><div class="mec-panel-heading"><h2><i class="bi bi-people me-2"></i> Últimas inscripciones</h2>{% if can_enrollments %}<a class="btn btn-outline-primary btn-sm" href="{% url 'municipal_events:enrollment_list' %}">Ver inscripciones</a>{% endif %}</div>
+    {% if can_enrollments %}<div class="mec-table-wrap"><table class="mec-table"><thead><tr><th>Beneficiario</th><th>Campaña</th><th>Estado</th></tr></thead><tbody>
+      {% for item in recent_enrollments %}<tr><td><strong>{{ item.beneficiary.name }}</strong><span class="mec-sub">{{ item.delegation.name }}</span></td><td>{{ item.campaign.title }}</td><td>{% if item.delivery %}<span class="mec-pill success">Entregado</span>{% elif item.status == 'APPROVED' %}<span class="mec-pill success">Aprobada</span>{% elif item.status == 'REJECTED' %}<span class="mec-pill danger">Rechazada</span>{% else %}<span class="mec-pill warning">Pendiente</span>{% endif %}</td></tr>
+      {% empty %}<tr><td colspan="3"><div class="mec-empty">No hay inscripciones visibles.</div></td></tr>{% endfor %}
+    </tbody></table></div>{% else %}<p class="mec-subtitle">Las inscripciones requieren un permiso de consulta específico.</p>{% endif %}
+    </section>
+  </div>
+  <div>
+    <section class="mec-panel"><h2><i class="bi bi-diagram-3 me-2"></i> ¿Cómo funciona?</h2><ol class="mec-steps"><li><span>Se registra una atención desde <strong>Ingreso de Atención</strong>.</span></li><li><span>Si el Tipo de atención coincide con una campaña abierta, se habilita <strong>Inscribir en campaña</strong>.</span></li><li><span>Se comprueba el RUT del niño para evitar inscripciones duplicadas en esa campaña.</span></li><li><span>Un funcionario autorizado evalúa la inscripción y después registra la entrega.</span></li></ol></section>
+    <section class="mec-panel"><div class="mec-panel-heading"><h2><i class="bi bi-clock-history me-2"></i> Movimientos recientes</h2>{% if can_enrollments %}<a class="btn btn-outline-primary btn-sm" href="{% url 'municipal_events:history_list' %}">Historial</a>{% endif %}</div>
+      {% if can_enrollments %}{% if recent_history %}<div class="mec-timeline">{% for log in recent_history %}<div class="mec-timeline-item"><strong>{{ log.get_action_display|default:log.action }}</strong><p>{{ log.enrollment.campaign.title }}{% if log.reason %} · {{ log.reason|truncatechars:100 }}{% endif %}</p><small>{{ log.created_at|date:"d/m/Y H:i" }} · {{ log.actor.username }}</small></div>{% endfor %}</div>{% else %}<p class="mec-subtitle">Sin movimientos registrados todavía.</p>{% endif %}{% else %}<p class="mec-subtitle">Sin permiso para consultar movimientos de inscripciones.</p>{% endif %}
+    </section>
+  </div>
+</div>
+{% endblock %}

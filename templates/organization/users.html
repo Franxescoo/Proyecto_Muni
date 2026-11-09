@@ -99,6 +99,16 @@
                 <tr>
 
                     <td class="fw-semibold">
+                        {% if account.profile.profile_photo %}
+                            <img src="{{ account.profile.profile_photo.url }}"
+                                 alt="Foto de {{ account.username }}"
+                                 class="rounded-circle me-2"
+                                 width="40"
+                                 height="40"
+                                 style="object-fit: cover;">
+                        {% else %}
+                            <i class="bi bi-person-circle text-secondary me-2" aria-hidden="true"></i>
+                        {% endif %}
                         {{ account.username }}
                     </td>
 

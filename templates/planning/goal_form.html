@@ -29,6 +29,9 @@
 
                 <form method="post" novalidate>
                     {% csrf_token %}
+                    {% if goal and not readonly %}
+                    <input type="hidden" name="version" value="{{ goal.updated_at.isoformat }}">
+                    {% endif %}
 
                     <!-- ENCABEZADO -->
                     <div class="modal-header">

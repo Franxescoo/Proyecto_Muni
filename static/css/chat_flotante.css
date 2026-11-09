@@ -1,0 +1,125 @@
+/* SGR | Chat institucional flotante — aislado del resto de modales Bootstrap. */
+.sgr-floating-chat {
+    --sgr-chat-width: 440px;
+    position: fixed;
+    z-index: 2000 !important;
+    /* Superior a topbar, barra lateral y sus superposiciones. */
+    right: 20px;
+    bottom: 18px;
+    width: min(var(--sgr-chat-width), calc(100vw - 24px));
+    height: min(570px, calc(100dvh - 36px));
+    display: none;
+    isolation: isolate;
+    margin: 0;
+    pointer-events: auto;
+}
+.sgr-floating-chat.is-open { display: block; }
+.sgr-floating-chat .modal-dialog {
+    position: static;
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    pointer-events: auto;
+    transform: none !important;
+}
+.sgr-floating-chat .sgr-chat-modal {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid #d7dde4;
+    border-radius: 14px;
+    box-shadow: 0 22px 68px rgba(25, 26, 42, .28);
+    overflow: hidden;
+    background: #fff;
+}
+.sgr-floating-chat .sgr-chat-header {
+    display: flex;
+    gap: .6rem;
+    align-items: center;
+    flex: 0 0 auto;
+    user-select: none;
+    touch-action: none;
+    cursor: grab;
+    padding: .8rem 1rem;
+    background: linear-gradient(120deg,#af0d1f,#790711);
+}
+.sgr-floating-chat.is-dragging .sgr-chat-header { cursor: grabbing; }
+.sgr-floating-chat .sgr-chat-header .modal-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: .98rem;
+    font-weight: 700;
+    color: #fff;
+}
+.sgr-floating-chat .sgr-chat-window-controls { display: flex; align-items: center; gap: .25rem; }
+.sgr-floating-chat .sgr-chat-window-controls button {
+    display: grid;
+    place-items: center;
+    min-width: 32px;
+    min-height: 32px;
+    background: rgba(255,255,255,.09);
+    border: 1px solid transparent;
+    border-radius: 7px;
+    color: #fff;
+    padding: 4px 7px;
+    cursor: pointer;
+}
+.sgr-floating-chat .sgr-chat-window-controls button:hover,
+.sgr-floating-chat .sgr-chat-window-controls button:focus-visible {
+    background: rgba(255,255,255,.2);
+    outline: 2px solid rgba(255,255,255,.7);
+    outline-offset: -2px;
+}
+.sgr-floating-chat .sgr-chat-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 12px 15px 15px;
+    background: #fff;
+}
+.sgr-floating-chat .sgr-chat-body > .d-flex { flex: 0 0 auto; margin-bottom: .6rem !important; }
+.sgr-floating-chat .sgr-chat-messages {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
+    overflow: auto;
+    overscroll-behavior: contain;
+    padding: 12px;
+}
+.sgr-floating-chat #chat-form { flex: 0 0 auto; margin-top: .65rem !important; }
+.sgr-floating-chat #chat-form .form-label { margin-bottom: .3rem; }
+.sgr-floating-chat #chat-form .form-control { min-width: 0; color: #17212c; background: #fff; }
+.sgr-floating-chat #chat-form .form-control::placeholder { color: #687483; opacity: 1; }
+.sgr-floating-chat #chat-form input:-webkit-autofill,
+.sgr-floating-chat #chat-form input:-webkit-autofill:focus {
+    -webkit-text-fill-color: #17212c !important;
+    box-shadow: 0 0 0 1000px #fff inset !important;
+    caret-color: #17212c !important;
+}
+/* Minimizado: mantiene una barra accesible y no tapa la pantalla. */
+.sgr-floating-chat.is-minimized { height: 52px !important; }
+.sgr-floating-chat.is-minimized .sgr-chat-body { display: none; }
+.sgr-floating-chat.is-minimized .sgr-chat-modal { border-radius: 12px; }
+.sgr-floating-chat.is-minimized .sgr-chat-header { height: 100%; }
+/* El chat no retrocede detrás de la barra superior al abrir otros elementos. */
+body.modal-open .sgr-floating-chat { z-index: 2000 !important; }
+@media (max-width: 600px) {
+    .sgr-floating-chat {
+        width: calc(100vw - 16px);
+        height: min(67dvh, 580px);
+        right: 8px;
+        bottom: 8px;
+    }
+    .sgr-floating-chat.is-minimized { height: 52px !important; }
+    .sgr-floating-chat .sgr-chat-header { cursor: grab; touch-action: none; }
+    .sgr-floating-chat .sgr-chat-body { padding: .75rem; }
+    .sgr-floating-chat #chat-form .input-group { flex-wrap: nowrap; }
+    .sgr-floating-chat #chat-form #send { padding-left: .55rem; padding-right: .55rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .sgr-floating-chat, .sgr-floating-chat * { scroll-behavior: auto !important; }
+}

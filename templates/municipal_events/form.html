@@ -1,0 +1,10 @@
+{% extends "municipal_events/base.html" %}
+{% block events_content %}
+<div class="mec-crumb">Eventos y Campañas / Formulario</div>
+<div class="mec-heading"><div><h1>{{ title }}</h1><p class="mec-subtitle">Los cambios se guardan en el SGR y respetan los permisos de tu cuenta.</p></div></div>
+<div class="mec-panel" style="max-width:900px"><form method="post">{% csrf_token %}
+{% if form.non_field_errors %}<div class="alert alert-danger" role="alert">{{ form.non_field_errors }}</div>{% endif %}
+<div class="row g-3">{% for field in form %}<div class="{% if field.field.widget.input_type == 'textarea' %}col-12{% else %}col-md-6{% endif %}"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="text-danger">*</span>{% endif %}</label>{{ field }}{% if field.help_text %}<div class="small text-muted mt-1">{{ field.help_text }}</div>{% endif %}{% for error in field.errors %}<div class="small text-danger" role="alert">{{ error }}</div>{% endfor %}</div>{% endfor %}</div>
+<div class="mec-actions mt-4 pt-3 border-top"><button class="btn btn-success" type="submit"><i class="bi bi-check2-circle"></i> Guardar</button>{% if cancel_url %}<a class="btn btn-outline-secondary" href="{{ cancel_url }}">Cancelar</a>{% else %}<a class="btn btn-outline-secondary" href="{% url cancel %}">Cancelar</a>{% endif %}</div>
+</form></div>
+{% endblock %}

@@ -1,10 +1,12 @@
 
 {% extends "planning/base.html" %}
-{% load i18n %}
+{% load i18n static %}
 
 {% block titulo %}Metas - La Serena{% endblock %}
 
 {% block estilos %}
+<link rel="stylesheet" href="{% static 'css/sgr_module_guides.css' %}?v=1">
+<link rel="stylesheet" href="{% static 'css/sgr_autoayuda_dos_modulos.css' %}?v=1">
 <style>
     .monitor-shell {
         max-width: 1480px;
@@ -110,6 +112,7 @@
         color: #fff;
     }
 </style>
+{% include "planning/_fullwidth_styles.html" %}
 {% endblock %}
 
 {% block contenido %}
@@ -140,6 +143,10 @@
            aria-hidden="true"></i>
 
     </section>
+
+    {% include "shared/_sgr_autoayuda.html" with help_namespace="planning" help_section="goals" only %}
+    <div class="sgr-guide-layout">
+      <div class="sgr-guide-main">
 
     <!-- INDICADORES RESUMEN -->
     <div class="row g-3 mb-4">
@@ -366,11 +373,13 @@
 
                             {% if perms.planning_measurements.delete_goal %}
                             <td>
+                                {% if goal.period.status != "Closed" %}
                                 <input type="checkbox"
-                                       class="form-check-input sel"
-                                       name="_selected_action"
-                                       value="{{ goal.pk }}"
-                                       aria-label="Seleccionar meta {{ goal.pk }}">
+                                    class="form-check-input sel"
+                                    name="_selected_action"
+                                    value="{{ goal.pk }}"
+                                    aria-label="Seleccionar meta {{ goal.pk }}">
+                                {% endif %}
                             </td>
                             {% endif %}
 
@@ -378,7 +387,7 @@
                                 {{ goal.item }}
                             </td>
 
-                            <td>
+                            <td class="sgr-date-cell">
                                 {{ goal.period.start_date|date:"d-m-Y" }}
                                 al
                                 {{ goal.period.end_date|date:"d-m-Y" }}
@@ -436,7 +445,7 @@
                                     {% endif %}
 
                                     <!-- ELIMINAR -->
-                                    {% if perms.planning_measurements.delete_goal %}
+                                    {% if perms.planning_measurements.delete_goal and goal.period.status != "Closed" %}
                                     <a href="{% url 'planning:goal_delete' goal.goal_id %}"
                                        class="btn btn-sm btn-outline-danger goal-delete-btn"
                                        data-goal-name="{{ goal.item }}">
@@ -475,6 +484,9 @@
 
     </section>
 
+      </div>{# sgr-guide-main #}
+      {% include "planning/_side_guide.html" with section="goals" only %}
+    </div>{# sgr-guide-layout #}
 </div>
 
 <!-- VENTANA MODAL EXISTENTE -->
@@ -571,4 +583,5 @@ document.addEventListener("DOMContentLoaded", function () {
 
 {% endif %}
 
+<script src="{% static 'js/sgr_autoayuda_dos_modulos.js' %}?v=1" defer></script>
 {% endblock %}

@@ -85,7 +85,9 @@ def create_user_account(form):
         employee=employee,
         employee_code=form.cleaned_data["employee_code"],
         delegation=delegation,
+        profile_photo=form.cleaned_data.get("profile_photo"),
     )
+
     profile.authorized_delegations.set(delegations)
 
     # Guardar los roles seleccionados en Usuarios.
@@ -97,5 +99,3 @@ def create_user_account(form):
     sync_user_groups(user)
 
     return user
-
-

@@ -16,9 +16,17 @@ from accounts.forms import (
     UsuarioOCorreoAuthenticationForm,
 )
 from accounts import views as account_views
+from organization import error_views
+
+
+handler400 = "organization.error_views.bad_request"
+handler403 = "organization.error_views.permission_denied"
+handler404 = "organization.error_views.page_not_found"
+handler500 = "organization.error_views.server_error"
 
 
 urlpatterns = [
+    path("correo/", include("institutional_mail.urls")),
     # -----------------------------------------------------
     # Administración de Django
     # -----------------------------------------------------
@@ -92,6 +100,25 @@ urlpatterns = [
     ),
 
     # -----------------------------------------------------
+    # -----------------------------------------------------
+    # Solicitudes públicas de vecinos
+    # -----------------------------------------------------
+    path(
+        "",
+        include("citizen_requests.urls"),
+    ),
+
+    # -----------------------------------------------------
+    # Eventos, campañas e inscripciones municipales
+    # -----------------------------------------------------
+    path("ciudadanos/", include("citizen_registry.urls")),
+
+    path(
+        "eventos-campanas/",
+        include("municipal_events.urls"),
+    ),
+
+    # -----------------------------------------------------
     # Cuentas de usuario
     # -----------------------------------------------------
     path(
@@ -105,6 +132,12 @@ urlpatterns = [
     path(
         "",
         include("core.urls"),
+    ),
+    path("chat/", include("websocket.urls")),
+    path(
+        "organization/errores/<int:error_code>/",
+        error_views.error_preview,
+        name="organization_error_preview",
     ),
 ]
 

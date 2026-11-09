@@ -4,20 +4,179 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block titulo %}Proyecto Muni{% endblock %}</title>
+    <title>{% block titulo %}Municipalidad de La Serena{% endblock %}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     <style>
         /* Estilos base de tu proyecto */
-        body { background: #f8f9fb; }
-        
+        body {
+            background: #f8f9fb;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+        .bg-gris-90 { background: #1a1a1a; }
+        .site-footer { margin-top: 2rem; }
+        .global-page-content { flex: 1 0 auto; }
+        .site-footer ul { margin: 0; padding-left: 1.2rem; }
+        .site-footer a:hover { color: #fff; text-decoration: underline!important; }
+        .site-footer-logo { max-width: 240px; height: auto; }
+
         /* Navbar institucional La Serena */
-        .topbar { background-color: #a60a17; border-bottom: 3px solid #800711; }
+        .topbar { background-color: #a60a17; position: sticky; top: 0; z-index: 1050; }
+        body.sidebar-open { overflow: hidden; }
         .topbar .navbar-brand, .topbar .nav-link, .topbar .navbar-text { color: #fff; }
         .topbar .nav-link:hover { color: #ffcccc; }
         .topbar .navbar-brand { font-weight: bold; font-size: 1.2rem; }
+        .profile-menu-toggle {
+            align-items: center;
+            background: transparent;
+            border: 0;
+            color: #fff;
+            display: inline-flex;
+            gap: .55rem;
+            padding: .2rem .35rem;
+        }
+        .profile-menu-toggle:hover,
+        .profile-menu-toggle:focus,
+        .profile-menu-toggle:active {
+            background: transparent!important;
+            border: 0!important;
+            box-shadow: none!important;
+            color: #fff!important;
+        }
+        .profile-menu-avatar {
+            align-items: center;
+            background: #fff;
+            border: 2px solid rgba(255,255,255,.85);
+            border-radius: 50%;
+            color: #a60a17;
+            display: inline-flex;
+            height: 36px;
+            justify-content: center;
+            overflow: hidden;
+            width: 36px;
+        }
+        .profile-menu-avatar img { height: 100%; object-fit: cover; width: 100%; }
+        .profile-menu-label { line-height: 1.15; text-align: left; }
+        .profile-menu-label strong { display: block; font-size: .88rem; }
+        .profile-menu-label small { display: block; font-size: .72rem; opacity: .8; }
+        .profile-menu-dropdown {
+            border: 1px solid #e1e4e8;
+            border-radius: .7rem;
+            box-shadow: 0 14px 34px rgba(20, 27, 38, .2);
+            min-width: 290px;
+            overflow: hidden;
+            padding: 0;
+        }
+        .profile-menu-summary {
+            align-items: center;
+            background: #fff7f7;
+            border-bottom: 1px solid #f0d9dc;
+            display: flex;
+            gap: .75rem;
+            padding: .9rem 1rem;
+        }
+        .profile-menu-summary .profile-menu-avatar { flex: 0 0 48px; height: 48px; width: 48px; }
+        .profile-menu-summary strong { color: #242a31; display: block; font-size: .94rem; }
+        .profile-menu-summary small { color: #68727d; display: block; margin-top: .15rem; }
+        .profile-menu-details { color: #596572; font-size: .78rem; line-height: 1.45; padding: .75rem 1rem; }
+        .profile-menu-details div + div { margin-top: .2rem; }
+        .profile-menu-details i { color: #a60a17; margin-right: .35rem; width: 1rem; }
+        /* Selector de delegacion: misma identidad institucional, sin controles nativos de confirmacion. */
+        .sgr-delegation-card {
+            margin-top: .7rem;
+            padding: .8rem .85rem;
+            background: #fffafa;
+            border: 1px solid rgba(166, 10, 23, .22);
+            border-radius: .75rem;
+        }
+        .sgr-delegation-title {
+            display: flex;
+            align-items: center;
+            gap: .4rem;
+            color: #921024;
+            font-size: .78rem;
+            font-weight: 700;
+            margin-bottom: .4rem;
+        }
+        .sgr-delegation-title i { color: #a60a17; margin: 0; font-size: .94rem; }
+        .profile-menu-delegation-form { margin: 0; }
+        .profile-menu-delegation-form .form-select {
+            width: 100%;
+            min-width: 0;
+            min-height: 40px;
+            border: 1px solid #dfc5c9;
+            border-radius: .55rem;
+            background-color: #fff;
+            color: #27303b;
+            font-size: .82rem;
+            font-weight: 600;
+            padding: .48rem 2rem .48rem .65rem;
+        }
+        .profile-menu-delegation-form .form-select:focus {
+            border-color: #aa1429;
+            box-shadow: 0 0 0 .2rem rgba(166, 10, 23, .12);
+        }
+        .sgr-delegation-help { color: #717780; font-size: .72rem; line-height: 1.4; margin: .5rem 0 0; }
+        .sgr-delegation-current { display: inline-flex; gap: .4rem; align-items: center; color: #374151; font-weight: 600; }
+        .sgr-delegation-current i { color: #a60a17; }
+        .sgr-delegation-modal .modal-content { border: 0; border-radius: 1rem; overflow: hidden; box-shadow: 0 20px 55px rgba(22, 29, 40, .22); }
+        .sgr-delegation-modal .modal-header { background: #a60a17; color: #fff; border: 0; padding: 1.05rem 1.25rem; }
+        .sgr-delegation-modal .modal-title { font-size: 1.04rem; font-weight: 700; }
+        .sgr-delegation-modal .modal-body { padding: 1.35rem; }
+        .sgr-delegation-modal .sgr-delegation-destination { background: #fdf4f5; border: 1px solid #f2dce0; border-radius: .7rem; padding: .85rem 1rem; color: #7f1120; font-weight: 700; overflow-wrap: anywhere; }
+        .sgr-delegation-modal .modal-footer { padding: .9rem 1.25rem 1.2rem; border: 0; }
+        .sgr-delegation-modal .btn-sgr-confirm { background: #a60a17; border-color: #a60a17; color: #fff; }
+        .sgr-delegation-modal .btn-sgr-confirm:hover, .sgr-delegation-modal .btn-sgr-confirm:focus { background: #870816; border-color: #870816; color: #fff; }
+        .profile-menu-chat { border-top: 1px solid #edf0f2; padding: .55rem; }
+        .profile-menu-chat .btn { color: #a60a17; font-weight: 600; width: 100%; }
+        .profile-menu-chat .btn:hover { background: #fbe2e5; color: #800711; }
+        .profile-menu-logout { border-top: 1px solid #edf0f2; padding: .55rem; }
+        .profile-menu-logout .btn { color: #a60a17; font-weight: 600; width: 100%; }
+        .profile-menu-logout .btn:hover { background: #fbe2e5; color: #800711; }
         .workspace-layout { display: flex; align-items: flex-start; gap: 1.25rem; }
         .workspace-sidebar { flex: 0 0 225px; overflow: hidden; background: #fff; border: 1px solid #e1e3e5; border-radius: .65rem; box-shadow: 0 3px 12px rgba(24, 33, 44, .08); }
+        .global-sidebar-toggle {
+            align-items: center;
+            background: transparent;
+            border: 0;
+            color: #fff;
+            display: inline-flex;
+            font-size: 1.55rem;
+            justify-content: center;
+            line-height: 1;
+            min-height: 38px;
+            padding: .2rem .35rem;
+            width: 42px;
+        }
+        .global-sidebar-toggle:hover,
+        .global-sidebar-toggle:focus,
+        .global-sidebar-toggle:active {
+            background: transparent;
+            border: 0;
+            box-shadow: none;
+            color: #fff;
+        }
+        .global-sidebar-backdrop {
+            position: fixed;
+            top: 74px;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            background: rgba(16, 21, 29, 0.25);
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity .2s ease, visibility .2s ease;
+            z-index: 1030;
+        }
+        .global-sidebar-backdrop.is-visible {
+            opacity: 1;
+            visibility: visible;
+        }
+        @media (max-width: 767.98px) {
+            .global-sidebar-backdrop { top: 70px; }
+        }
         .workspace-sidebar-header { align-items: center; background: #a60a17; color: #fff; display: flex; gap: .85rem; min-height: 56px; padding: .75rem 1rem; }
         .workspace-sidebar-header i:first-child { font-size: 1.05rem; }
         .workspace-sidebar-header strong { flex: 1; font-size: .95rem; font-weight: 700; line-height: 1.15; }
@@ -185,15 +344,131 @@
             .sgr-catalog .catalog-toolbar { gap:.75rem; }
             .sgr-catalog .catalog-toolbar-actions { width:100%;justify-content:flex-end; }
         }
+
+        /* Chat institucional SGR */
+
+        .sgr-chat-modal {
+            border: none;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, .18);
+        }
+
+        .sgr-chat-header {
+            background: #65000b;
+            color: #ffffff;
+            border-bottom: none;
+            padding: 16px 20px;
+        }
+
+        .sgr-chat-body {
+            background: #ffffff;
+            padding: 22px;
+        }
+
+        .sgr-chat-messages {
+            list-style: none;
+            height: 340px;
+            overflow-y: auto;
+            margin: 0;
+            padding: 16px;
+            border: 1px solid #dee2e6;
+            border-radius: 10px;
+            background: #f8f9fa;
+        }
+
+        .sgr-chat-messages li {
+            background: #ffffff;
+            border: 1px solid #e9ecef;
+            padding: 9px 13px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            overflow-wrap: anywhere;
+        }
+
+        .sgr-chat-body .form-control:focus {
+            border-color: #65000b;
+            box-shadow: 0 0 0 .2rem rgba(101, 0, 11, .15);
+        }
+
+        .sgr-chat-body #send {
+            background: #198754;
+            border-color: #198754;
+        }
+
+        .sgr-chat-body #send:hover {
+            background: #146c43;
+            border-color: #146c43;
+        }
+        /* Mensajes del chat: alineación y estados visibles. */
+        .sgr-chat-messages .sgr-chat-item {
+            width: fit-content;
+            max-width: min(86%, 560px);
+            padding: .55rem .8rem;
+            margin-bottom: .65rem;
+            box-shadow: 0 2px 7px rgba(0,0,0,.06);
+        }
+        .sgr-chat-messages .sgr-chat-other {
+            margin-right: auto;
+            background: #fff;
+            border-color: #dee2e6;
+            color: #212529;
+        }
+        .sgr-chat-messages .sgr-chat-own {
+            margin-left: auto;
+            background: #d1e7dd;
+            border-color: #a3cfbb;
+            color: #0f5132;
+        }
+        .sgr-chat-messages .sgr-chat-failed {
+            background: #f8d7da;
+            border-color: #f1aeb5;
+            color: #842029;
+        }
+        .sgr-chat-messages .sgr-chat-pending { opacity: .65; }
+        .sgr-chat-author {font-size: .78rem; font-weight: 700; margin-bottom: .2rem;}
+        .sgr-chat-text {white-space: pre-wrap; overflow-wrap: anywhere;}
+        .sgr-chat-meta {font-size: .68rem; opacity: .76; text-align: right; margin-top: .25rem;}
+        /* SGR: corregir texto invisible en autocompletado de Chrome */
+        input.form-control:-webkit-autofill,
+        input.form-control:-webkit-autofill:hover,
+        input.form-control:-webkit-autofill:focus,
+        textarea.form-control:-webkit-autofill {
+            -webkit-text-fill-color: #1f2937 !important;
+            -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+            box-shadow: 0 0 0 1000px #ffffff inset !important;
+            caret-color: #1f2937 !important;
+        }
+
+        /* Campos de solo lectura */
+        input.form-control[readonly],
+        input.form-control:disabled,
+        textarea.form-control[readonly] {
+            color: #1f2937 !important;
+            -webkit-text-fill-color: #1f2937 !important;
+            opacity: 1 !important;
+        }
     </style>
+    <link rel="stylesheet" href="{% static 'css/chat_flotante.css' %}">
     {% block estilos %}{% endblock %}
 </head>
 <body>
+{% block public_navigation %}
 <nav class="navbar navbar-expand-lg topbar mb-4 shadow-sm">
     <div class="container-fluid px-4">
-        <a class="navbar-brand py-0" href="{% url 'home' %}">
-            <img src="{% static 'img/horizontal-blanco.png' %}" alt="Logo La Serena" height="55">
-        </a>
+        <div class="d-flex align-items-center gap-3">
+            {% if request.resolver_match.url_name != 'login' and request.resolver_match.url_name != 'password_reset' and request.resolver_match.url_name != 'password_reset_verify' and request.resolver_match.url_name != 'password_reset_password' and request.resolver_match.url_name != 'password_reset_done' and request.resolver_match.url_name != 'password_reset_confirm' and request.resolver_match.url_name != 'password_reset_complete' %}
+                <button type="button"
+                        class="btn global-sidebar-toggle"
+                        aria-label="Abrir menú"
+                        aria-expanded="false">
+                    <i class="bi bi-list"></i>
+                </button>
+            {% endif %}
+            <a class="navbar-brand py-0" href="{% url 'home' %}">
+                <img src="{% static 'img/horizontal-blanco.png' %}" alt="Logo La Serena" height="65">
+            </a>
+        </div>
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarMain" style="filter: invert(1);">
             <span class="navbar-toggler-icon"></span>
         </button>
@@ -202,45 +477,139 @@
             {% if user.is_authenticated %}
             <ul class="navbar-nav me-auto">
                 {% block top_links %}
-                <li class="nav-item"><a class="nav-link" href="{% url 'home' %}"></a></li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'home' %}"></a>
+                </li>
                 {% endblock %}
-            </ul>
-            <span class="navbar-text me-2" title="Usuario y rol">
-                <i class="bi bi-person-circle"></i> {{ user.username }}
-                <span class="small opacity-75">· {% if user.is_superuser %}Administrador global{% elif sgr_display_roles %}{{ sgr_display_roles|join:", " }}{% else %}Sin rol asignado{% endif %}</span>
-            </span>
-            {% if user.is_superuser %}
-                <span class="badge text-bg-light me-3"><i class="bi bi-building"></i> Delegaciones: global</span>
-            {% elif sgr_active_delegation %}
-                {% if sgr_delegation_options|length > 1 %}
-                <form method="post" action="{% url 'accounts:change_active_delegation' %}" class="d-inline-flex align-items-center me-3 gap-2">
-                    {% csrf_token %}
-                    <label for="sgr-active-delegation" class="text-white small">Delegación activa</label>
-                    <select class="form-select form-select-sm" id="sgr-active-delegation" name="delegation" onchange="if(confirm('¿Cambiar delegación? Guarda antes tus formularios pendientes.')) this.form.submit(); else this.value=this.dataset.selected;" data-selected="{{ sgr_active_delegation.pk }}">
-                    {% for delegation in sgr_delegation_options %}
-                        <option value="{{ delegation.pk }}" {% if delegation.pk == sgr_active_delegation.pk %}selected{% endif %}>{{ delegation.code }} · {{ delegation.name }}</option>
-                    {% endfor %}
-                    </select>
-                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                </form>
-                {% else %}
-                <span class="badge text-bg-light me-3"><i class="bi bi-building"></i> {{ sgr_active_delegation.code }} · {{ sgr_active_delegation.name }}</span>
+
+                {% if sgr_active_delegation %}
+                <li class="nav-item">
+                    <button type="button"
+                            class="nav-link border-0 bg-transparent"
+                            data-sgr-chat-toggle="1" aria-controls="chatInstitucionalModal" aria-expanded="false">
+                        <i class="bi bi-chat-dots-fill me-1"></i>
+                        Chat institucional
+                        <span id="chat-unread-badge" class="badge rounded-pill text-bg-danger ms-1 d-none" aria-live="polite"></span>
+                    </button>
+                </li>
                 {% endif %}
-            {% else %}
-                <span class="badge text-bg-warning me-3">Sin delegación autorizada</span>
-            {% endif %}
-            <form method="post" action="{% url 'logout' %}" class="d-inline">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-outline-light btn-sm">Cerrar sesión</button>
-            </form>
+                <li class="nav-item">
+                    <button type="button"
+                            class="nav-link border-0 bg-transparent"
+                            data-bs-toggle="modal"
+                            data-bs-target="#solicitudesModal">
+                        <i class="bi bi-inbox-fill me-1"></i>
+                        Solicitudes
+                        <span id="solicitudes-pending-badge"
+                              class="badge rounded-pill text-bg-danger ms-1 d-none"
+                              aria-live="polite"></span>
+                    </button>
+                </li>
+                {% include "institutional_mail/topbar_button.html" %}
+            </ul>
+            <div class="dropdown">
+                <button class="profile-menu-toggle dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <span class="profile-menu-avatar">
+                        {% if user.profile.profile_photo %}
+                            <img src="{{ user.profile.profile_photo.url }}" alt="Foto de {{ user.username }}">
+                        {% else %}
+                            <i class="bi bi-person-fill" aria-hidden="true"></i>
+                        {% endif %}
+                    </span>
+                    <span class="profile-menu-label">
+                        <strong>{{ user.username }}</strong>
+                        <small>{% if user.is_superuser %}Administrador global{% elif sgr_display_roles %}{{ sgr_display_roles|join:", " }}{% else %}Sin rol asignado{% endif %}</small>
+                    </span>
+                </button>
+                <div class="dropdown-menu dropdown-menu-end profile-menu-dropdown">
+                    <div class="profile-menu-summary">
+                        <span class="profile-menu-avatar">
+                            {% if user.profile.profile_photo %}
+                                <img src="{{ user.profile.profile_photo.url }}" alt="Foto de {{ user.username }}">
+                            {% else %}
+                                <i class="bi bi-person-fill" aria-hidden="true"></i>
+                            {% endif %}
+                        </span>
+                        <div>
+                            <strong>{{ user.get_full_name|default:user.username }}</strong>
+                            <small>{{ user.email|default:"Sin correo registrado" }}</small>
+                        </div>
+                    </div>
+                    <div class="profile-menu-details">
+                        <div><i class="bi bi-person-badge"></i>{% if user.is_superuser %}Administrador global{% elif sgr_display_roles %}{{ sgr_display_roles|join:", " }}{% else %}Sin rol asignado{% endif %}</div>
+                        {% if user.is_superuser %}
+                            <div class="sgr-delegation-current"><i class="bi bi-building" aria-hidden="true"></i> Delegaciones: global</div>
+                        {% elif sgr_delegation_options|length > 1 %}
+                            <div class="sgr-delegation-card">
+                                <label for="sgrDelegationSelect" class="sgr-delegation-title">
+                                    <i class="bi bi-buildings" aria-hidden="true"></i> Cambiar delegación
+                                </label>
+                                <form method="post" action="{% url 'accounts:change_active_delegation' %}" class="profile-menu-delegation-form" id="sgrDelegationForm">
+                                    {% csrf_token %}
+                                    <select class="form-select" name="delegation" id="sgrDelegationSelect" data-selected="{% if sgr_active_delegation %}{{ sgr_active_delegation.pk }}{% endif %}" aria-label="Delegación activa" required>
+                                        {% for delegation in sgr_delegation_options %}
+                                            <option value="{{ delegation.pk }}" {% if sgr_active_delegation and delegation.pk == sgr_active_delegation.pk %}selected{% endif %}>{% if delegation.code %}{{ delegation.code }} · {% endif %}{{ delegation.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                </form>
+                                <p class="sgr-delegation-help">La delegación elegida determina qué información puedes consultar.</p>
+                            </div>
+                        {% elif sgr_active_delegation %}
+                            <div class="sgr-delegation-current"><i class="bi bi-building" aria-hidden="true"></i>{{ sgr_active_delegation.name }}</div>
+                        {% else %}
+                            <div class="sgr-delegation-current"><i class="bi bi-building" aria-hidden="true"></i>Sin delegación autorizada</div>
+                        {% endif %}
+                    </div>
+                    <div class="profile-menu-chat">
+                        <a class="btn btn-sm" href="{% url 'accounts:profile' %}">
+                            <i class="bi bi-person-vcard me-1"></i>Mi perfil
+                        </a>
+                    </div>
+                    <div class="profile-menu-logout">
+                        <form method="post" action="{% url 'logout' %}" class="m-0">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm"><i class="bi bi-box-arrow-right me-1"></i>Cerrar sesión</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
             {% endif %}
         </div>
     </div>
 </nav>
+{% endblock %}
 
+{% if user.is_authenticated and sgr_delegation_options|length > 1 and not user.is_superuser %}
+<div class="modal fade sgr-delegation-modal" id="sgrDelegationConfirmModal" tabindex="-1" aria-labelledby="sgrDelegationConfirmTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="sgrDelegationConfirmTitle"><i class="bi bi-arrow-left-right me-2" aria-hidden="true"></i>Cambiar delegación</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-3">¿Quieres cambiar tu delegación activa a:</p>
+                <div class="sgr-delegation-destination"><i class="bi bi-building me-2" aria-hidden="true"></i><span id="sgrDelegationDestination"></span></div>
+                <p class="small text-secondary mt-3 mb-0"><i class="bi bi-info-circle me-1" aria-hidden="true"></i>Guarda antes los formularios pendientes. Al confirmar, se actualizará la delegación activa de tu sesión.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-sgr-confirm" id="sgrDelegationConfirmButton"><i class="bi bi-check2-circle me-1" aria-hidden="true"></i>Confirmar cambio</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="global-page-content">
 <div class="container-fluid px-4">
     <div class="workspace-layout">
-        {% block sidebar %}{% endblock %}
+        {% block sidebar %}
+            {% if request.resolver_match.url_name != 'login' and request.resolver_match.url_name != 'password_reset' and request.resolver_match.url_name != 'password_reset_verify' and request.resolver_match.url_name != 'password_reset_password' and request.resolver_match.url_name != 'password_reset_done' and request.resolver_match.url_name != 'password_reset_confirm' and request.resolver_match.url_name != 'password_reset_complete' %}
+                {% include "shared/global_sidebar.html" %}
+            {% endif %}
+        {% endblock %}
         <div class="workspace-content">
             {% block submenu %}{% endblock %}
             <main>
@@ -259,8 +628,687 @@
         </div>
     </div>
 </div>
+</div>
+{% if request.resolver_match.url_name == 'login' or request.resolver_match.url_name == 'home' or request.resolver_match.url_name == 'password_reset' or request.resolver_match.url_name == 'password_reset_verify' or request.resolver_match.url_name == 'password_reset_password' or request.resolver_match.url_name == 'password_reset_done' or request.resolver_match.url_name == 'password_reset_confirm' or request.resolver_match.url_name == 'password_reset_complete' or request.resolver_match.url_name == 'public_portal' or request.resolver_match.url_name == 'public_request_form' or request.resolver_match.url_name == 'public_request_history' or request.resolver_match.url_name == 'public_request_confirmation' %}
+<footer class="site-footer bg-gris-90 pt-3 pb-3">
+    <div class="container">
+        <div class="row align-items-center">
+            <div class="col-md d-none d-md-block order-2 order-md-1 mb-2">
+                <div class="text-light tx-2">
+                    <ul>
+                        <li>
+                            <a class="text-light text-decoration-none"
+                               href="https://www.portaltransparencia.cl/PortalPdT/directorio-de-organismos-regulados/?org=MU126"
+                               target="_blank" rel="noopener noreferrer">
+                                Transparencia Activa | Ley de Transparencia
+                            </a>
+                        </li>
+                        <li>
+                            <a class="text-light text-decoration-none"
+                               href="https://www.portaltransparencia.cl/PortalPdT/web/guest/directorio-de-organismos-regulados?p_p_id=pdtorganismos_WAR_pdtorganismosportlet&amp;orgcode=d67e38e61d6896e0e50080a9baaabf3f"
+                               target="_blank" rel="noopener noreferrer">
+                                Solicitar Información | Ley de Transparencia
+                            </a>
+                        </li>
+                        <li>
+                            <a class="text-light text-decoration-none"
+                               href="https://www.leylobby.gob.cl/instituciones/MU126"
+                               target="_blank" rel="noopener noreferrer">
+                                Plataforma Ley del Lobby
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+            <div class="col-md-4 ms-auto col-12 order-1 order-md-2 mb-2">
+                <div class="text-light text-md-end text-center lh-1">
+                    <div class="mb-2">
+                        <img class="site-footer-logo"
+                             src="{% static 'img/horizontal-blanco.png' %}"
+                             alt="Ilustre Municipalidad de La Serena">
+                    </div>
+                    <div><strong>Ilustre Municipalidad de La Serena</strong></div>
+                    <div>Arturo Prat #451</div>
+                    <div>(56) 51 - 2 206600</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</footer>
+{% endif %}
+<div class="global-sidebar-backdrop" id="globalSidebarBackdrop" aria-hidden="true"></div>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="{% static 'js/catalog_details.js' %}?v=20261021a" defer></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const toggle = document.querySelector('.global-sidebar-toggle');
+    const sidebar = document.querySelector('.global-sidebar');
+    const closeButton = document.querySelector('.global-sidebar-close');
+    const backdrop = document.getElementById('globalSidebarBackdrop');
+    if (!toggle || !sidebar || !closeButton || !backdrop) return;
+
+    const closeSidebar = function () {
+        sidebar.classList.remove('is-open');
+        document.body.classList.remove('sidebar-open');
+        toggle.setAttribute('aria-expanded', 'false');
+        toggle.setAttribute('aria-label', 'Abrir menú');
+        backdrop.classList.remove('is-visible');
+        backdrop.setAttribute('aria-hidden', 'true');
+    };
+
+    const openSidebar = function () {
+        sidebar.classList.add('is-open');
+        document.body.classList.add('sidebar-open');
+        toggle.setAttribute('aria-expanded', 'true');
+        toggle.setAttribute('aria-label', 'Cerrar menú');
+        backdrop.classList.add('is-visible');
+        backdrop.setAttribute('aria-hidden', 'false');
+    };
+
+    toggle.addEventListener('click', function () {
+        const isOpen = sidebar.classList.contains('is-open');
+        if (isOpen) {
+            closeSidebar();
+        } else {
+            openSidebar();
+        }
+    });
+
+    backdrop.addEventListener('click', closeSidebar);
+    closeButton.addEventListener('click', closeSidebar);
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') closeSidebar();
+    });
+});
+</script>
 {% block scripts %}{% endblock %}
+
+{% if user.is_authenticated %}
+<div class="sgr-floating-chat"
+     id="chatInstitucionalModal"
+     data-chat-enabled="{% if sgr_active_delegation %}1{% else %}0{% endif %}"
+     data-chat-user-id="{{ user.pk }}"
+     data-chat-delegation-id="{{ sgr_active_delegation.pk|default:'' }}"
+     role="dialog"
+     tabindex="-1"
+     aria-labelledby="chatInstitucionalTitulo"
+     aria-hidden="true">
+
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content sgr-chat-modal">
+
+            <div class="modal-header sgr-chat-header" tabindex="0" title="Arrastra para mover el chat; Alt + flechas para mover con teclado">
+                <h5 class="modal-title" id="chatInstitucionalTitulo">
+                    <i class="bi bi-chat-dots-fill me-2"></i>
+                    Chat institucional
+                </h5>
+
+                <div class="sgr-chat-window-controls">
+                    <button type="button" data-sgr-chat-minimize title="Minimizar" aria-label="Minimizar chat"><i class="bi bi-dash-lg" aria-hidden="true"></i></button>
+                    <button type="button" data-sgr-chat-close title="Cerrar" aria-label="Cerrar chat"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+                </div>
+            </div>
+
+            <div class="modal-body sgr-chat-body">
+
+                <div class="d-flex justify-content-end mb-3">
+                    <span id="chat-status" class="badge bg-secondary">
+                        Desconectado
+                    </span>
+                </div>
+
+                <ul id="messages"
+                    class="sgr-chat-messages"
+                    aria-live="polite">
+                </ul>
+
+                <form id="chat-form"
+                      action="{% url 'websocket:send' %}"
+                      data-history-url="{% url 'websocket:history' %}"
+                      data-read-url="{% url 'websocket:read' %}"
+                      class="mt-3">
+
+                    {% csrf_token %}
+
+                    <label for="message"
+                           class="form-label fw-semibold">
+                        Mensaje
+                    </label>
+
+                    <div class="input-group">
+                        <input type="text"
+                               id="message"
+                               name="message"
+                               class="form-control"
+                               maxlength="300"
+                               placeholder="Escribe un mensaje..."
+                               required>
+
+                        <button type="submit"
+                                id="send"
+                                class="btn btn-success">
+                            <i class="bi bi-send me-1"></i>
+                            Enviar
+                        </button>
+                    </div>
+
+                </form>
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endif %}
+{% if user.is_authenticated %}
+<div class="modal fade"
+     id="solicitudesModal"
+     tabindex="-1"
+     aria-labelledby="solicitudesTitulo"
+     aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="solicitudesTitulo">
+                    <i class="bi bi-inbox-fill me-2"></i>Solicitudes
+                </h5>
+                <button type="button" class="btn-close btn-close-white"
+                        data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div id="solicitudes-pending-notice"
+                     class="alert alert-warning d-none"
+                     role="status"></div>
+                <div class="row g-2 mb-3">
+                    <div class="col-md-7">
+                        <label class="form-label" for="solicitudes-search">Buscar</label>
+                        <input id="solicitudes-search" class="form-control"
+                               placeholder="Código de seguimiento o asunto">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label" for="solicitudes-status">Estado</label>
+                        <select id="solicitudes-status" class="form-select">
+                            <option value="">Todos</option>
+                            <option value="NEW">Nueva</option>
+                            <option value="IN_PROGRESS">En proceso</option>
+                            <option value="CLOSED">Cerrada</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button id="solicitudes-filter" type="button"
+                                class="btn btn-primary w-100">Filtrar</button>
+                    </div>
+                </div>
+                <div id="solicitudes-feedback" class="alert d-none" role="alert"></div>
+                <section class="mb-4">
+                    <h6 class="border-bottom pb-2">Pendientes de derivación</h6>
+                    <div id="solicitudes-pending"></div>
+                </section>
+                <section>
+                    <h6 class="border-bottom pb-2">
+                        Solicitudes de la delegación activa
+                        <span id="solicitudes-active-delegation"
+                              class="text-muted fw-normal"></span>
+                    </h6>
+                    <div id="solicitudes-delegated"></div>
+                </section>
+                <div id="solicitud-detail" class="mt-4"></div>
+                <div id="solicitud-action" class="mt-4"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% include "registration_validation/_attention_readonly_modal.html" %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const modal = document.getElementById("solicitudesModal");
+    if (!modal) return;
+
+    const inboxUrl = "{% url 'citizen_requests:request_inbox' %}";
+    const pendingCountUrl = "{% url 'citizen_requests:pending_request_count' %}";
+    const detailBaseUrl = "{% url 'citizen_requests:request_detail' 0 %}";
+    const createAttentionBaseUrl = "{% url 'registration:attention_entry_create' %}";
+    const viewAttentionBaseUrl = "{% url 'registration:attention_entry_detail' 0 %}";
+    const feedback = document.getElementById("solicitudes-feedback");
+    const detail = document.getElementById("solicitud-detail");
+    const action = document.getElementById("solicitud-action");
+    const search = document.getElementById("solicitudes-search");
+    const status = document.getElementById("solicitudes-status");
+    const pendingBadge = document.getElementById("solicitudes-pending-badge");
+    const pendingNotice = document.getElementById("solicitudes-pending-notice");
+    const pendingPollInterval = 30000;
+    let loaded = false;
+    let activeDetailId = null;
+
+    function updatePendingIndicator(count) {
+        const pendingCount = Number.isFinite(Number(count)) ? Number(count) : 0;
+        if (pendingCount > 0) {
+            pendingBadge.textContent = pendingCount;
+            pendingBadge.classList.remove("d-none");
+            pendingNotice.textContent =
+                "Hay " + pendingCount + " solicitudes pendientes de derivación";
+            pendingNotice.classList.remove("d-none");
+        } else {
+            pendingBadge.textContent = "";
+            pendingBadge.classList.add("d-none");
+            pendingNotice.textContent = "";
+            pendingNotice.classList.add("d-none");
+        }
+    }
+
+    function refreshPendingCount() {
+        fetch(pendingCountUrl, {
+            headers: {"X-Requested-With": "XMLHttpRequest"},
+        })
+            .then(response => {
+                if (!response.ok) throw new Error("No se pudo actualizar el contador.");
+                return response.json();
+            })
+            .then(data => updatePendingIndicator(data.pending_count))
+            .catch(() => {});
+    }
+
+    function showFeedback(message, kind) {
+        feedback.textContent = message;
+        feedback.className = "alert alert-" + kind;
+    }
+
+    function hideFeedback() {
+        feedback.textContent = "";
+        feedback.className = "alert d-none";
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? "").replace(/[&<>"']/g, character => ({
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            '"': "&quot;",
+            "'": "&#039;"
+        }[character]));
+    }
+
+    function pagination(section, data, params) {
+        if (data.pages <= 1) return "";
+        const pageParam = section === "pending" ? "pending_page" : "delegated_page";
+        const previous = data.has_previous
+            ? `<button class="btn btn-sm btn-outline-secondary" data-page-param="${pageParam}" data-page="${data.page - 1}">Anterior</button>`
+            : "";
+        const next = data.has_next
+            ? `<button class="btn btn-sm btn-outline-secondary" data-page-param="${pageParam}" data-page="${data.page + 1}">Siguiente</button>`
+            : "";
+        return `<div class="d-flex justify-content-between align-items-center mt-2">
+            <small class="text-muted">Página ${data.page} de ${data.pages}</small>
+            <div class="btn-group">${previous}${next}</div>
+        </div>`;
+    }
+
+    function renderSection(targetId, section, data, params, canAssign) {
+        const target = document.getElementById(targetId);
+        if (!data.items.length) {
+            target.innerHTML = '<p class="text-muted mb-0">No hay solicitudes para mostrar.</p>';
+            return;
+        }
+        const rows = data.items.map(item => {
+            const attentionAction = section === "delegated" && item.has_attention && item.can_view_attention
+                ? `<button type="button" class="btn btn-sm btn-outline-primary"
+                    data-view-attention-id="${item.attention_entry_id}">Ver atención</button>`
+                : section === "delegated" && !item.has_attention && item.can_create_attention
+                ? `<a class="btn btn-sm btn-outline-success"
+                    href="${createAttentionBaseUrl}?citizen_request=${encodeURIComponent(item.id)}">Crear atención</a>`
+                : "";
+            const actionLabel = section === "pending" && canAssign && item.can_derive
+                ? `<button type="button" class="btn btn-sm btn-outline-success"
+                    data-assign-id="${item.id}">Derivar</button>`
+                : section === "delegated"
+                ? `${item.can_change_delegation ? `<button type="button" class="btn btn-sm btn-outline-warning"
+                    data-change-id="${item.id}">Cambiar derivación</button>` : ""}${attentionAction}`
+                : "";
+            return `
+            <tr>
+                <td class="text-nowrap">${escapeHtml(item.tracking_code)}</td>
+                <td>${escapeHtml(item.subject)}</td>
+                <td class="text-nowrap">${escapeHtml(new Date(item.created_at).toLocaleString())}</td>
+                <td>${escapeHtml(item.status)}</td>
+                <td>${escapeHtml(item.address)}</td>
+                <td>${escapeHtml(item.delegation)}</td>
+                <td><div class="d-flex gap-1">
+                    <button type="button" class="btn btn-sm btn-outline-primary"
+                        data-detail-id="${item.id}">${item.has_attention ? "Ver solicitud" : "Ver"}</button>
+                    ${actionLabel}
+                </div></td>
+            </tr>`;
+        }).join("");
+        target.innerHTML = `<div class="table-responsive"><table class="table table-sm align-middle">
+            <thead><tr><th>Código</th><th>Asunto</th><th>Ingreso</th><th>Estado</th>
+            <th>Dirección</th><th>Delegación</th><th></th></tr></thead>
+            <tbody>${rows}</tbody></table></div>${pagination(section, data, params)}`;
+        target.querySelectorAll("[data-page-param]").forEach(button => {
+            button.addEventListener("click", () => {
+                params[button.dataset.pageParam] = button.dataset.page;
+                loadRequests(params);
+            });
+        });
+    }
+
+    function loadRequests(params = {}) {
+        hideFeedback();
+        const query = new URLSearchParams(params);
+        const q = search.value.trim();
+        if (q) query.set("q", q); else query.delete("q");
+        if (status.value) query.set("status", status.value);
+        fetch(inboxUrl + "?" + query.toString(), {
+            headers: {"X-Requested-With": "XMLHttpRequest"},
+        })
+            .then(response => {
+                if (!response.ok) throw new Error("No se pudo cargar la bandeja.");
+                return response.json();
+            })
+            .then(data => {
+                lastInboxData = data;
+                updatePendingIndicator(data.pending_count ?? data.pending.total);
+                renderSection(
+                    "solicitudes-pending",
+                    "pending",
+                    data.pending,
+                    params,
+                    data.can_derive
+                );
+                renderSection(
+                    "solicitudes-delegated",
+                    "delegated",
+                    data.delegated,
+                    params,
+                    false
+                );
+                document.getElementById("solicitudes-active-delegation").textContent =
+                    data.active_delegation ? "· " + data.active_delegation : "· Sin delegación activa";
+                loaded = true;
+            })
+            .catch(error => showFeedback(error.message, "danger"));
+    }
+
+    function csrfToken() {
+        const token = document.cookie.split("; ").find(row => row.startsWith("csrftoken="));
+        return token ? decodeURIComponent(token.split("=")[1]) : "";
+    }
+
+    function showDelegationForm(item, changing, delegations) {
+        const requestId = item.id;
+        const options = delegations.map(item =>
+            `<option value="${item.id}">${escapeHtml(item.name)}</option>`
+        ).join("");
+        const actionUrl = changing
+            ? `{% url 'citizen_requests:change_request_delegation' 0 %}`.replace("/0/", "/" + requestId + "/")
+            : `{% url 'citizen_requests:assign_request' 0 %}`.replace("/0/", "/" + requestId + "/");
+        action.innerHTML = `<div class="card border-primary">
+            <div class="card-header fw-semibold">${changing ? "Cambiar derivación" : "Derivar solicitud"}</div>
+            <div class="card-body">
+                <p class="mb-3"><strong>Asunto:</strong> ${escapeHtml(item.subject)}
+                    <br><strong>Dirección:</strong> ${escapeHtml(item.address)}</p>
+                <label class="form-label" for="delegation-action-select">Delegación de destino</label>
+                ${changing ? `<p class="small text-muted">Delegación actual: ${escapeHtml(item.delegation)}</p>` : ""}
+                <select id="delegation-action-select" class="form-select mb-2" required>
+                    <option value="">Selecciona una delegación</option>${options}
+                </select>
+                <label class="form-label" for="delegation-action-reason">Motivo</label>
+                <textarea id="delegation-action-reason" class="form-control mb-3"
+                    rows="3" maxlength="500" required></textarea>
+                <div class="d-flex gap-2">
+                    <button type="button" id="delegation-action-cancel"
+                        class="btn btn-outline-secondary">Cancelar</button>
+                    <button type="button" id="delegation-action-confirm"
+                        class="btn btn-primary">Confirmar ${changing ? "cambio" : "derivación"}</button>
+                </div>
+            </div>
+        </div>`;
+        action.scrollIntoView({behavior: "smooth", block: "nearest"});
+        document.getElementById("delegation-action-cancel").addEventListener(
+            "click", () => { action.innerHTML = ""; }
+        );
+        document.getElementById("delegation-action-confirm").addEventListener(
+            "click", () => {
+                const delegation = document.getElementById("delegation-action-select").value;
+                const reason = document.getElementById("delegation-action-reason").value.trim();
+                if (!delegation || !reason) {
+                    showFeedback("Selecciona una delegación e ingresa un motivo.", "warning");
+                    return;
+                }
+                fetch(actionUrl, {
+                    method: "POST",
+                    headers: {
+                        "X-CSRFToken": csrfToken(),
+                        "X-Requested-With": "XMLHttpRequest",
+                    },
+                    body: new URLSearchParams({delegation: delegation, reason: reason}),
+                })
+                    .then(response => response.json().then(data => ({ok: response.ok, data})))
+                    .then(result => {
+                        if (!result.ok) throw new Error(result.data.message || "No se pudo actualizar.");
+                        action.innerHTML = "";
+                        detail.innerHTML = "";
+                        activeDetailId = null;
+                        loadRequests();
+                    })
+                    .catch(error => showFeedback(error.message, "danger"));
+            }
+        );
+    }
+
+    function loadDetail(requestId) {
+        if (activeDetailId === String(requestId)) {
+            detail.innerHTML = "";
+            activeDetailId = null;
+            return;
+        }
+        activeDetailId = String(requestId);
+        fetch(detailBaseUrl.replace("/0/", "/" + requestId + "/"), {
+            headers: {"X-Requested-With": "XMLHttpRequest"},
+        })
+            .then(response => {
+                if (!response.ok) throw new Error("No se pudo cargar el detalle.");
+                return response.json();
+            })
+            .then(data => {
+                if (activeDetailId !== String(requestId)) return;
+                const item = data.request;
+                const history = item.events.length
+                    ? `<ol class="list-group list-group-numbered">
+                        ${item.events.map(event => `
+                            <li class="list-group-item">
+                                <div class="fw-semibold">${escapeHtml(event.type)}</div>
+                                <div class="small text-muted">${escapeHtml(new Date(event.created_at).toLocaleString())}</div>
+                                <div>${escapeHtml(event.actor)}</div>
+                                ${event.previous_delegation && event.new_delegation
+                                    ? `<div>${escapeHtml(event.previous_delegation)} &rarr; ${escapeHtml(event.new_delegation)}</div>`
+                                    : ""}
+                                ${event.previous_status !== event.new_status
+                                    ? `<div>Estado: ${escapeHtml(event.previous_status)} &rarr; ${escapeHtml(event.new_status)}</div>`
+                                    : ""}
+                                <div>Motivo: ${escapeHtml(event.reason || event.observation)}</div>
+                            </li>`).join("")}
+                    </ol>`
+                    : '<p class="text-muted mb-0">No hay movimientos registrados</p>';
+                const comparison = [
+                    ["Solicitante", item.original_requester_name, item.requester_name],
+                    ["Correo", item.original_requester_email, item.requester_email],
+                    ["Teléfono", item.original_requester_phone, item.requester_phone],
+                    ["Dirección", item.original_address, item.address],
+                    ["Asunto", item.original_subject, item.subject],
+                    ["Descripción", item.original_description, item.description],
+                    ["Delegación", item.original_delegation, item.delegation],
+                    ["Responsable", item.original_responsible, item.responsible_employee],
+                    ["Tipo de atención", "", item.attention_type],
+                    ["Subatención", "", item.sub_attention],
+                ];
+                if (item.can_view_rut) {
+                    comparison.unshift(["RUT vinculado", item.original_rut, item.current_rut]);
+                }
+                const comparisonHtml = comparison.map(([label, original, current]) =>
+                    `<tr><th scope="row">${escapeHtml(label)}</th>` +
+                    `<td>${escapeHtml(original || "—")}</td>` +
+                    `<td class="${(original || "") !== (current || "") ? "fw-semibold" : ""}">${escapeHtml(current || "—")}</td></tr>`
+                ).join("");
+                detail.innerHTML = `<div class="card">
+                    <div class="card-header fw-semibold">Detalle de solicitud</div>
+                    <div class="card-body">
+                        <dl class="row mb-0">
+                            <dt class="col-sm-3">Código</dt><dd class="col-sm-9">${escapeHtml(item.tracking_code)}</dd>
+                            <dt class="col-sm-3">Atención vinculada</dt><dd class="col-sm-9">${item.has_attention ? "Sí" : "No"}</dd>
+                            {% if perms.citizen_registry.view_citizen and perms.registration_validation.add_attentionentry %}
+                            <dt class="col-sm-3">Ciudadano registrado</dt><dd class="col-sm-9">${item.citizen_rut ? escapeHtml(item.citizen_name + " · " + item.citizen_rut) : `
+                              <div class="d-flex gap-2 flex-wrap align-items-center">
+                                <input class="form-control form-control-sm" style="max-width:185px;color:#151515" data-citizen-request-rut placeholder="RUT del vecino">
+                                <button type="button" class="btn btn-sm btn-outline-danger" data-citizen-request-link="${item.id}">Vincular por RUT</button>
+                                {% if perms.citizen_registry.add_citizen %}<a class="btn btn-link btn-sm" target="_blank" rel="noopener" href="{% url 'citizen_registry:list' %}">Agregar ciudadano</a>{% endif %}
+                              </div><span class="small text-muted">Sin alterar los datos originales de la solicitud.</span>`}</dd>
+                            {% endif %}
+                        </dl>
+                        <h6 class="border-top pt-3 mt-3">Datos originales y actuales</h6>
+                        <div class="table-responsive"><table class="table table-sm table-bordered">
+                            <thead><tr><th>Campo</th><th>Solicitud original</th><th>Atención actual</th></tr></thead>
+                            <tbody>${comparisonHtml}</tbody>
+                        </table></div>
+                        <p class="small text-muted">Los datos originales no se sobrescriben. Cuando se corrige el ciudadano, los avisos quedan suspendidos hasta verificar el correo nuevo.</p>
+                        ${item.followup_email_pending ? '<div class="alert alert-warning small">Correo de seguimiento pendiente de verificación: no se envían detalles del caso hasta que se confirme.</div>' : ''}
+                        <h6 class="border-top pt-3 mt-3">Historial de movimientos</h6>
+                        ${history}
+                    </div>
+                </div>`;
+                const linkButton = detail.querySelector('[data-citizen-request-link]');
+                if(linkButton){linkButton.addEventListener('click',async()=>{
+                    const rutInput=detail.querySelector('[data-citizen-request-rut]');
+                    if(!rutInput?.value.trim()){showFeedback('Ingresa el RUT del ciudadano.', 'warning');return}
+                    const url="{% url 'citizen_registry:link_request' 0 %}".replace('/0/', '/'+requestId+'/');
+                    const body=new URLSearchParams({rut:rutInput.value.trim()});
+                    const result=await fetch(url,{method:'POST',headers:{'X-CSRFToken':csrfToken(),'X-Requested-With':'XMLHttpRequest'},body});
+                    const data=await result.json().catch(()=>({}));
+                    if(!result.ok){showFeedback(data.error||'No fue posible vincular al ciudadano.','warning');return}
+                    showFeedback('Ciudadano vinculado correctamente.','success');
+                    activeDetailId=null;loadDetail(requestId);
+                })}
+            })
+            .catch(error => showFeedback(error.message, "danger"));
+    }
+
+    modal.addEventListener("click", function (event) {
+        const detailButton = event.target.closest("[data-detail-id]");
+        if (detailButton) {
+            loadDetail(detailButton.dataset.detailId);
+            return;
+        }
+        const assignButton = event.target.closest("[data-assign-id]");
+        if (assignButton) {
+            const item = lastInboxData.pending.items.find(
+                candidate => String(candidate.id) === assignButton.dataset.assignId
+            );
+            if (item) showDelegationForm(item, false, lastInboxData.active_delegations);
+            return;
+        }
+        const changeButton = event.target.closest("[data-change-id]");
+        if (changeButton) {
+            const item = lastInboxData.delegated.items.find(
+                candidate => String(candidate.id) === changeButton.dataset.changeId
+            );
+            if (item) showDelegationForm(item, true, lastInboxData.active_delegations);
+        }
+    });
+
+    let lastInboxData = {
+        pending: {items: []},
+        delegated: {items: []},
+        active_delegations: [],
+    };
+
+    modal.addEventListener("shown.bs.modal", function () {
+        if (!loaded) loadRequests();
+    });
+    modal.addEventListener("hidden.bs.modal", function () {
+        detail.innerHTML = "";
+        action.innerHTML = "";
+        activeDetailId = null;
+        hideFeedback();
+        loaded = false;
+    });
+    document.getElementById("solicitudes-filter").addEventListener("click", () => loadRequests());
+    refreshPendingCount();
+    window.setInterval(refreshPendingCount, pendingPollInterval);
+});
+</script>
+{% if user.is_authenticated and sgr_active_delegation %}
+<script defer src="{% static 'js/chat_institucional.js' %}"></script>
+<script defer src="{% static 'js/chat_flotante.js' %}"></script>
+{% endif %}
+<script>
+/* Confirmacion Bootstrap 5 al cambiar delegacion, sin confirm() del navegador. */
+document.addEventListener("DOMContentLoaded", function () {
+    const select = document.getElementById("sgrDelegationSelect");
+    const form = document.getElementById("sgrDelegationForm");
+    const modalElement = document.getElementById("sgrDelegationConfirmModal");
+    const destination = document.getElementById("sgrDelegationDestination");
+    const confirmButton = document.getElementById("sgrDelegationConfirmButton");
+    if (!select || !form || !modalElement || !destination || !confirmButton || !window.bootstrap) return;
+
+    const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+    let submitted = false;
+    select.addEventListener("change", function () {
+        if (select.value === select.dataset.selected) return;
+        destination.textContent = select.options[select.selectedIndex]?.textContent.trim() || "Delegación seleccionada";
+        const dropdownToggle = document.querySelector(".profile-menu-toggle");
+        if (dropdownToggle) bootstrap.Dropdown.getInstance(dropdownToggle)?.hide();
+        modal.show();
+    });
+    modalElement.addEventListener("hidden.bs.modal", function () {
+        if (!submitted) select.value = select.dataset.selected;
+    });
+    confirmButton.addEventListener("click", function () {
+        if (submitted || !select.value || select.value === select.dataset.selected) return;
+        submitted = true;
+        confirmButton.disabled = true;
+        confirmButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span> Cambiando...';
+        form.requestSubmit();
+    });
+});
+</script>
+{% if user.is_authenticated %}
+{% include "institutional_mail/modal.html" %}
+{% endif %}
+<!-- SGR_MENU_TRES_RAYAS_INICIO -->
+<style id="sgr-sidebar-hamburger-mode">
+/* Solo presentación: recupera la apertura con las tres rayitas, sin tocar
+   los enlaces, los permisos, los submenús o el diseño del faro. */
+@media (min-width: 992px) {
+    /* La barra no debe reservar espacio mientras permanezca oculta. */
+    body:has(.global-sidebar) .global-page-content {
+        padding-left: 0 !important;
+    }
+    body:has(.global-sidebar) .site-footer {
+        margin-left: 0 !important;
+    }
+    /* Restaurar botón y capa de cierre que el modo fijo deshabilitaba. */
+    .topbar button.global-sidebar-toggle {
+        display: inline-flex !important;
+    }
+    .global-sidebar-close {
+        display: flex !important;
+    }
+    .global-sidebar-backdrop {
+        display: block !important;
+    }
+    /* Mantiene intactos los colores, foto, difuminado, dimensiones y scroll. */
+    .global-sidebar {
+        transform: translateX(-110%) !important;
+        z-index: 1040 !important;
+    }
+    .global-sidebar.is-open {
+        transform: translateX(0) !important;
+    }
+    body.sidebar-open {
+        overflow: hidden !important;
+    }
+}
+</style>
+<!-- SGR_MENU_TRES_RAYAS_FIN -->
 </body>
 </html>

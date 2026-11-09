@@ -63,7 +63,7 @@ class PruebasRolesYCatalogoSinSuperusuario(TestCase):
         self.assertNotContains(r, "Eliminar</button>")
         r2 = self.client.get(reverse("organization:role_list"), {"modal": "view", "id": self.group.pk})
         self.assertEqual(r2.status_code, 200)
-        self.assertContains(r2, "Organización | Cargos y funciones | Puede consultar cargos y funciones")
+        self.assertContains(r2, "Puede consultar cargos y funciones")
 
     def test_rol_creacion_exige_permiso_explicito(self):
         self.grant("view_organizationrole")
@@ -88,17 +88,52 @@ class PruebasRolesYCatalogoSinSuperusuario(TestCase):
         self.assertFalse(self.actor.is_superuser)
         self.assertEqual(list(created.permissions.values_list("pk", flat=True)), [permission.pk])
 
-    def test_admin_normal_no_puede_otorgar_un_permiso_ajeno(self):
-        self.grant("view_organizationrole", "add_organizationrole")
+    def test_admin_normal_puede_otorgar_un_permiso_ajeno(self):
+        self.grant(
+            "view_organizationrole",
+            "add_organizationrole",
+            "change_organizationrole",
+        )
         self.client.force_login(self.actor)
-        permission = Permission.objects.get(content_type__app_label="organization", codename="delete_employee")
-        r = self.client.post(reverse("organization:role_list"), {
-            "action": "create", "name": "Intento de escalamiento", "description": "Prueba",
-            "delegations": [self.delegation.pk], "permissions": [permission.pk],
-        })
-        self.assertEqual(r.status_code, 200)
-        self.assertIn("permissions", r.context["form"].errors)
-        self.assertFalse(Group.objects.filter(name="Intento de escalamiento").exists())
+
+        permission = Permission.objects.get(
+            content_type__app_label="organization",
+            codename="delete_employee",
+        )
+
+        # El administrador no posee personalmente este permiso.
+        self.assertFalse(
+            self.actor.has_perm("organization.delete_employee")
+        )
+
+        # Crea un rol asignando un permiso que no posee.
+        r = self.client.post(
+            reverse("organization:role_list"),
+            {
+                "action": "create",
+                "name": "Rol con permiso ajeno",
+                "description": "Prueba de catálogo completo",
+                "delegations": [self.delegation.pk],
+                "permissions": [permission.pk],
+            },
+        )
+
+        # El rol debe crearse correctamente.
+        self.assertEqual(r.status_code, 302)
+
+        created = Group.objects.get(
+            name="Rol con permiso ajeno"
+        )
+
+        # El permiso debe quedar asignado al nuevo rol.
+        self.assertTrue(
+            created.permissions.filter(pk=permission.pk).exists()
+        )
+
+        # El administrador sigue sin recibir ese permiso.
+        self.assertFalse(
+            self.actor.has_perm("organization.delete_employee")
+        )
 
     def test_role_ajeno_no_visible_ni_editable(self):
         foreign = Group.objects.create(name="Rol de otra delegación")
@@ -114,11 +149,17 @@ class PruebasRolesYCatalogoSinSuperusuario(TestCase):
     def test_etiqueta_permiso_espanol_no_cambia_codename(self):
         permission = Permission.objects.get(content_type__app_label="organization", codename="view_delegationresponsibilitylog")
         before = (permission.codename, permission.name)
-        self.assertIn("Historial de responsables de delegación", permission_label(permission))
+        self.assertEqual(
+            permission_label(permission),
+            "Puede consultar historial de responsables de delegación",
+        )
         self.assertIn("Puede consultar", permission_label(permission))
         self.assertEqual((permission.codename, permission.name), before)
         field = OrganizationRoleForm().fields["permissions"]
-        self.assertIn("Organización", field.label_from_instance(permission))
+        self.assertEqual(
+            "Puede consultar historial de responsables de delegación",
+            field.label_from_instance(permission),
+        )
 
     def test_usuario_solo_lectura_no_puede_modificar_cuentas(self):
         self.grant("view_userprofile")

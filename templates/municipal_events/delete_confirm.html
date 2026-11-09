@@ -1,0 +1,13 @@
+{% extends "municipal_events/base.html" %}
+{% block events_content %}
+<section class="mec-panel"><h2>{{ title }}</h2>
+<p>Registro: <strong>{{ object_label }}</strong></p>
+{% if blocked %}<div class="alert alert-warning">{{ blocked }}</div>{% endif %}
+{% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+{% if not blocked %}<form method="post">{% csrf_token %}
+<div class="mb-3"><label class="form-label">Motivo</label><textarea class="form-control" name="reason" maxlength="500" required>{{ request_reason }}</textarea></div>
+<button class="btn {% if action_kind == 'reactivate' %}btn-success{% else %}btn-danger{% endif %}" type="submit">{{ action_text }}</button>
+<a href="{{ cancel_url }}" class="btn btn-outline-secondary">Cancelar</a>
+</form>{% endif %}
+</section>
+{% endblock %}

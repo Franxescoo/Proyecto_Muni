@@ -9,6 +9,7 @@ from django.utils import timezone
 from django.contrib.auth import get_user_model
 from django.views.decorators.http import require_POST
 from django.utils.http import url_has_allowed_host_and_scheme
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from accounts.services import sync_employee
 from accounts.permissions import allowed_delegation_ids
@@ -20,7 +21,13 @@ from .forms import (
     PositionForm,
     mark_invalid_fields,
 )
-from .models import Delegation, Employee, PositionFunction, DelegationResponsibilityLog
+from .models import (
+    Delegation,
+    Employee,
+    PositionFunction,
+    DelegationResponsibilityLog,
+    OrganizationRole,
+)
 from .exports import role_delegations, workbook_response
 
 from django.db import IntegrityError
@@ -62,7 +69,21 @@ def set_page_size(request):
         url=next_url, allowed_hosts={request.get_host()},
         require_https=request.is_secure()
     ):
-        next_url = "organization:delegation_list"
+        next_url = reverse("organization:employee_list")
+    else:
+        parsed = urlsplit(next_url)
+        query = [
+            (key, value)
+            for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+            if key not in {"modal", "id"}
+        ]
+        next_url = urlunsplit((
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            urlencode(query),
+            "",
+        ))
     return redirect(next_url)
 
 
@@ -162,6 +183,61 @@ def _limit_form_choices(form, user, permission=None):
                 | Q(delegation_id__in=permitted)
             ).distinct()
         )
+        form.fields["authorized_delegations"].queryset = (
+            form.fields["authorized_delegations"].queryset.filter(
+                pk__in=permitted
+            )
+        )
+        form.fields["groups"].queryset = form.fields["groups"].queryset.filter(
+            Q(organization_role__application_delegations__pk__in=permitted)
+            | Q(
+                organization_role__application_delegations__isnull=True,
+                organization_role__delegation_id__in=permitted,
+            )
+        ).distinct()
+
+
+def _sync_employee_account(employee, form):
+    """Crea o actualiza el acceso que pertenece al empleado."""
+    username = form.cleaned_data.get("username", "").strip()
+    if not username:
+        return
+
+    User = get_user_model()
+    profile = UserProfile.objects.filter(
+        employee=employee,
+        deleted_at__isnull=True,
+    ).select_related("user").first()
+    if profile:
+        user = profile.user
+    else:
+        user = User()
+
+    user.username = username
+    user.email = form.cleaned_data["email"].strip()
+    user.first_name = employee.name
+    user.last_name = ""
+    user.is_staff = False
+    user.is_superuser = False
+    password = form.cleaned_data.get("password1")
+    if password:
+        user.set_password(password)
+    user.save()
+
+    delegations = form.cleaned_data.get("authorized_delegations")
+    primary = employee.delegation
+    profile, _ = UserProfile.objects.update_or_create(
+        user=user,
+        defaults={
+            "employee": employee,
+            "employee_code": form.cleaned_data["employee_code"].strip(),
+            "delegation": primary,
+            "deleted_at": None,
+        },
+    )
+    profile.authorized_delegations.set(delegations or [primary])
+    user.groups.set(form.cleaned_data.get("groups") or [])
+    sync_user_groups(user)
 
 
 def _handle_mutations(
@@ -256,6 +332,7 @@ def _handle_mutations(
                                 update_fields=["employee", "updated_at"]
                             )
 
+                    _sync_employee_account(saved, form)
                     # Copiar los roles del Usuario al Funcionario.
                     sync_employee(saved)
 
@@ -320,12 +397,20 @@ def _role_groups_for(user, action="view"):
         Q(organization_role__application_delegations__pk__in=scopes)
         | Q(organization_role__application_delegations__isnull=True,
             organization_role__delegation_id__in=scopes)
+        | Q(
+            organization_role__application_delegations__isnull=True,
+            organization_role__delegation__isnull=True,
+        )
     ).distinct()
 
 
 def _role_target(user, pk, action):
     group = get_object_or_404(_role_groups_for(user, action), pk=pk)
     if not user.is_superuser and action in ("change", "delete"):
+        if action == "change" and user.groups.filter(pk=group.pk).exists():
+            raise PermissionDenied(
+                "No puedes modificar un rol que tienes asignado."
+            )
         if action == "delete":
             own = user.get_all_permissions()
             if any(
@@ -340,10 +425,12 @@ def _role_target(user, pk, action):
             allowed = allowed_delegation_ids(
                 user, f"organization.{action}_organizationrole", active_only=False
             )
-            assigned = set(role.application_delegations.values_list("pk", flat=True))
-            if not assigned:
+            assigned = set(
+                role.application_delegations.values_list("pk", flat=True)
+            )
+            if not assigned and role.delegation_id:
                 assigned = {role.delegation_id}
-            if not assigned.issubset(allowed):
+            if assigned and not assigned.issubset(allowed):
                 raise PermissionDenied("El rol incluye delegaciones que no administras.")
     return group
 
@@ -352,23 +439,20 @@ def _role_target(user, pk, action):
 def role_list(request):
     groups = _role_groups_for(request.user).select_related(
         "organization_role__delegation"
-    ).prefetch_related(
-        "organization_role__application_delegations"
     ).annotate(
         permission_count=Count("permissions", distinct=True),
         account_count=Count("user", distinct=True),
         employee_count=Count("assigned_employees", distinct=True),
     ).order_by("name")
+    own_role_ids = set(
+        request.user.groups.values_list("pk", flat=True)
+    )
     search = _query(request.GET.get("q"))
     if search:
         groups = groups.filter(
             Q(name__icontains=search)
             | Q(organization_role__description__icontains=search)
             | Q(organization_role__delegation__name__icontains=search)
-            | Q(
-                organization_role__application_delegations__name__icontains=
-                search
-            )
         ).distinct()
     selected_delegation = _query(request.GET.get("delegation"))
     groups = role_filter_delegation(groups, selected_delegation)
@@ -448,11 +532,7 @@ def role_list(request):
         "page_description": "Crea roles y define los permisos que se asignarán a empleados y cuentas.",
         "page_icon": "bi-shield-lock",
         "search": search,
-        "selected_delegation": selected_delegation,
-        "delegation_options": Delegation.objects.filter(
-            pk__in=allowed_delegation_ids(request.user, "organization.view_organizationrole", active_only=False),
-            deleted_at__isnull=True
-        ).order_by("name") if not request.user.is_superuser else Delegation.objects.filter(deleted_at__isnull=True).order_by("name"),
+        "own_role_ids": own_role_ids,
     }
     page, querystring = organization_pagination(request, groups)
     context["roles"] = page
@@ -465,19 +545,13 @@ def role_list(request):
 def role_export(request):
     groups = _role_groups_for(request.user).select_related(
         "organization_role__delegation"
-    ).prefetch_related("organization_role__application_delegations").order_by(
-        "name"
-    )
+    ).order_by("name")
     search = _query(request.GET.get("q"))
     if search:
         groups = groups.filter(
             Q(name__icontains=search)
             | Q(organization_role__description__icontains=search)
             | Q(organization_role__delegation__name__icontains=search)
-            | Q(
-                organization_role__application_delegations__name__icontains=
-                search
-            )
         ).distinct()
     groups = role_filter_delegation(groups, _query(request.GET.get("delegation")))
     return workbook_response(
@@ -519,6 +593,8 @@ def employee_list(request):
     if search:
         employees = employees.filter(
             Q(name__icontains=search)
+            | Q(rut__icontains=search)
+            | Q(address__icontains=search)
             | Q(roles__icontains=search)
             | Q(delegation__name__icontains=search)
             | Q(position__position_name__icontains=search)

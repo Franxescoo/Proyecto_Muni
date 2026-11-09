@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+
+{% block titulo %}{{ error_code }} · {{ error_title }}{% endblock %}
+
+{% block estilos %}
+<style>
+    .organization-error-page {
+        background:
+            radial-gradient(circle at 8% 18%, rgba(166, 10, 23, .08), transparent 22rem),
+            linear-gradient(160deg, #fff 0%, #fff8f8 58%, #f9e3e5 100%);
+        border-top: 4px solid #a60a17;
+        min-height: calc(100vh - 74px);
+        overflow: hidden;
+        position: relative;
+    }
+    .organization-error-page::before {
+        border: 1px solid rgba(166, 10, 23, .08);
+        border-radius: 50%;
+        bottom: -16rem;
+        content: "";
+        height: 34rem;
+        left: -8rem;
+        position: absolute;
+        width: 34rem;
+    }
+    .organization-error-page::after {
+        background: rgba(166, 10, 23, .07);
+        border-radius: 50% 50% 0 0;
+        bottom: -13rem;
+        content: "";
+        height: 20rem;
+        position: absolute;
+        right: -8rem;
+        transform: rotate(-8deg);
+        width: 65%;
+    }
+    .organization-error-card {
+        align-items: center;
+        background: rgba(255, 255, 255, .94);
+        border: 1px solid rgba(166, 10, 23, .12);
+        border-radius: 1.35rem;
+        box-shadow: 0 18px 45px rgba(80, 31, 35, .12);
+        display: grid;
+        gap: clamp(2rem, 6vw, 5rem);
+        grid-template-columns: minmax(240px, .9fr) minmax(280px, 1fr);
+        margin: 4rem auto;
+        max-width: 1060px;
+        padding: clamp(2rem, 5vw, 3.8rem);
+        position: relative;
+        text-align: left;
+        z-index: 1;
+    }
+    .organization-error-illustration {
+        align-items: center;
+        display: flex;
+        justify-content: center;
+        min-height: 225px;
+        position: relative;
+    }
+    .organization-error-illustration::before {
+        background: #fae3e5;
+        border-radius: 48% 52% 55% 45%;
+        content: "";
+        height: 190px;
+        position: absolute;
+        transform: rotate(-8deg);
+        width: 250px;
+    }
+    .organization-error-window {
+        background: #fff;
+        border: 4px solid #a60a17;
+        border-radius: 1rem;
+        box-shadow: 0 12px 0 rgba(166, 10, 23, .08);
+        color: #d7192b;
+        font-size: clamp(3.4rem, 8vw, 5.3rem);
+        font-weight: 800;
+        line-height: 1;
+        padding: 2rem 1.35rem 1.4rem;
+        position: relative;
+        transform: rotate(-10deg);
+        z-index: 1;
+    }
+    .organization-error-window::before {
+        background: #a60a17;
+        border-radius: 1rem 1rem 0 0;
+        content: "";
+        height: 1.45rem;
+        left: -4px;
+        position: absolute;
+        right: -4px;
+        top: -4px;
+    }
+    .organization-error-window::after {
+        background: #fff;
+        border-radius: 50%;
+        box-shadow: 1.1rem 0 #fff, 2.2rem 0 #fff;
+        content: "";
+        height: .45rem;
+        left: .85rem;
+        position: absolute;
+        top: .48rem;
+        width: .45rem;
+    }
+    .organization-error-search {
+        border: .65rem solid #a60a17;
+        border-radius: 50%;
+        bottom: 1.6rem;
+        height: 4.1rem;
+        position: absolute;
+        right: 2rem;
+        transform: rotate(-10deg);
+        width: 4.1rem;
+        z-index: 2;
+    }
+    .organization-error-search::after {
+        background: #a60a17;
+        border-radius: 1rem;
+        bottom: -2rem;
+        content: "";
+        height: 2.4rem;
+        position: absolute;
+        right: -1.15rem;
+        transform: rotate(-40deg);
+        width: .7rem;
+    }
+    .organization-error-copy {
+        border-left: 2px solid #f4dadd;
+        padding-left: clamp(1.5rem, 4vw, 3rem);
+    }
+    .organization-error-copy h1 {
+        color: #9c0b18;
+        font-size: clamp(1.8rem, 4vw, 2.8rem);
+        font-weight: 800;
+    }
+    .organization-error-copy p {
+        color: #4c5158;
+        font-size: 1.15rem;
+        line-height: 1.55;
+        max-width: 30rem;
+    }
+    .organization-error-actions { display: flex; flex-wrap: wrap; gap: .85rem; }
+    .organization-error-actions .btn {
+        border-radius: .8rem;
+        font-weight: 700;
+        min-width: 12rem;
+        padding: .8rem 1.1rem;
+    }
+    .organization-error-actions .btn-primary { background: #d7192b; border-color: #d7192b; }
+    .organization-error-actions .btn-primary:hover { background: #a60a17; border-color: #a60a17; }
+    .organization-error-actions .btn-outline-primary { border-color: #d7192b; color: #a60a17; }
+    .organization-error-actions .btn-outline-primary:hover { background: #fff0f1; color: #8d0713; }
+    @media (max-width: 767.98px) {
+        .organization-error-card { grid-template-columns: 1fr; gap: 1rem; margin: 2rem 1rem; padding: 2rem 1.25rem; }
+        .organization-error-copy { border-left: 0; border-top: 2px solid #f4dadd; padding-left: 0; padding-top: 1.5rem; text-align: center; }
+        .organization-error-copy p { margin-left: auto; margin-right: auto; }
+        .organization-error-actions { justify-content: center; }
+    }
+</style>
+{% endblock %}
+
+{% block contenido %}
+<main class="organization-error-page">
+    <section class="organization-error-card" role="alert">
+        <div class="organization-error-illustration" aria-hidden="true">
+            <div class="organization-error-window">{{ error_code }}</div>
+            <div class="organization-error-search"></div>
+        </div>
+        <div class="organization-error-copy">
+            <h1 class="mb-3">{{ error_title }}</h1>
+            <p class="mb-4">{% block error_message %}{% endblock %}</p>
+            <div class="organization-error-actions">
+            <a class="btn btn-primary" href="{% url 'home' %}">
+                <i class="bi bi-house me-1"></i>Volver al inicio
+            </a>
+            <button class="btn btn-outline-primary" type="button" onclick="history.back()">
+                <i class="bi bi-arrow-left me-1"></i>Volver atrás
+            </button>
+            </div>
+        </div>
+    </section>
+</main>
+{% endblock %}

@@ -51,6 +51,8 @@ class OrganizationRole(models.Model):
     delegation = models.ForeignKey(
         Delegation,
         on_delete=models.PROTECT,
+        null=True,
+        blank=True,
         related_name="organization_roles",
     )
     application_delegations = models.ManyToManyField(
@@ -135,7 +137,19 @@ class Employee(BaseModel):
     )
 
     name = models.CharField(max_length=150)
-    roles = models.TextField()
+    rut = models.CharField(
+        max_length=12,
+        unique=True,
+        null=True,
+        blank=True,
+        verbose_name="RUT",
+    )
+    address = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name="Dirección",
+    )
+    roles = models.TextField(max_length=1000)
     status = models.CharField(max_length=50)
     profile_photo = models.ImageField(
         upload_to="profile_photos/",
