@@ -1,9 +1,12 @@
 import re
-from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 
-from .models import Indicator
+from django.utils import timezone
+
+from .models import Commitment, Indicator
+from planning_measurements.measurement_rules import canonical_percentage_formula
 from planning_measurements.working_days import calculate_computable_days
+from registration_validation.models import Activity, Evidence
 
 
 _THRESHOLD_PATTERN = re.compile(
@@ -35,14 +38,29 @@ def _thresholds(period):
 
 
 
-def _traffic_light(compliance, period):
-    expected = _expected_progress(period)
-    green, yellow = _thresholds(period)
+def _traffic_light(compliance, period, expected_progress=None):
+    today = timezone.localdate()
+    if (
+        period.start_date > today
+        or calculate_computable_days(
+            period.start_date,
+            period.end_date,
+        ) <= 0
+    ):
+        return "Red"
 
-    if compliance >= expected * green / Decimal("100"):
+    green, yellow = _thresholds(period)
+    if expected_progress is None:
+        green_limit = green
+        yellow_limit = yellow
+    else:
+        green_limit = expected_progress * green / Decimal("100")
+        yellow_limit = expected_progress * yellow / Decimal("100")
+
+    if compliance >= green_limit:
         return "Green"
 
-    if compliance >= expected * yellow / Decimal("100"):
+    if compliance >= yellow_limit:
         return "Yellow"
 
     return "Red"
@@ -51,7 +69,7 @@ def _traffic_light(compliance, period):
 
 
 def _expected_progress(period, on_date=None):
-    on_date = on_date or date.today()
+    on_date = on_date or timezone.localdate()
 
     if on_date < period.start_date:
         return Decimal("0.00")
@@ -94,13 +112,13 @@ def _evidence_is_approved(evidence):
     validations = list(
         evidence.validations.filter(
             deleted_at__isnull=True
-        ).order_by("-date", "-version")
+        ).order_by("-date", "-version", "-validation_id")
     )
     if validations:
         latest = validations[0]
         return (
-            latest.decision.casefold() == "approved"
-            or latest.result.casefold() == "approved"
+            latest.decision.strip().casefold() == "approved"
+            and latest.result.strip().casefold() == "approved"
         )
     return False
 
@@ -113,11 +131,12 @@ def _activity_is_approved(activity):
 
 
 def recalculate_indicator_for_goal(goal, create_if_missing=True):
+    today = timezone.localdate()
     activities = (
         goal.activities.filter(
             deleted_at__isnull=True,
             date__gte=goal.period.start_date,
-            date__lte=goal.period.end_date,
+            date__lte=min(today, goal.period.end_date),
         )
         .prefetch_related("evidences__validations")
     )
@@ -140,11 +159,7 @@ def recalculate_indicator_for_goal(goal, create_if_missing=True):
     item = goal.measurement_item
 
     if item and item.item_type == "percentage":
-        formula = " ".join(
-            (item.formula or "").casefold().replace("×", "*").split()
-        )
-
-        if formula == "(actividades aprobadas / actividades registradas) * 100":
+        if canonical_percentage_formula(item.formula):
             total_actividades = len(activities)
 
             if total_actividades > 0:
@@ -199,7 +214,7 @@ def recalculate_indicator_for_goal(goal, create_if_missing=True):
         indicator = Indicator(
             goal=goal,
             employee=goal.employee,
-            calculation_date=date.today(),
+            calculation_date=today,
         )
     if indicator is None:
         return None
@@ -215,7 +230,11 @@ def recalculate_indicator_for_goal(goal, create_if_missing=True):
     indicator.weighted_result = weighted_result
     indicator.approved_activities = approved_activities
     indicator.approved_evidences = raw_approved_evidences
-    indicator.traffic_light = _traffic_light(compliance, goal.period)
+    indicator.traffic_light = _traffic_light(
+        compliance,
+        goal.period,
+        expected_progress,
+    )
     indicator.save(
         update_fields=[
             "employee",
@@ -243,3 +262,44 @@ def synchronize_indicators_for_goals(goals):
     for goal in goals.select_related("employee", "period"):
         if goal.deleted_at is None and goal.period.deleted_at is None:
             recalculate_indicator_for_goal(goal, create_if_missing=True)
+
+
+def monitoring_alerts(*, employees, period=None, minimum_compliance=Decimal("80")):
+    """Return operational alerts using only active monitoring records."""
+    employee_ids = [employee.pk for employee in employees]
+    activity_filter = {
+        "deleted_at__isnull": True,
+        "author_id__in": employee_ids,
+    }
+    if period is not None:
+        activity_filter.update(
+            date__gte=period.start_date,
+            date__lte=period.end_date,
+        )
+
+    pending_evidences = Evidence.objects.filter(
+        deleted_at__isnull=True,
+        activity__in=Activity.objects.filter(**activity_filter),
+    ).exclude(
+        review_status__iexact="Approved",
+    ).count()
+
+    overdue_commitments = Commitment.objects.filter(
+        deleted_at__isnull=True,
+        responsible_id__in=employee_ids,
+        commitment_date__lt=timezone.localdate(),
+    ).exclude(
+        status__in=("Completed", "Completado", "Realizado"),
+    ).count()
+
+    low_performance = Indicator.objects.filter(
+        deleted_at__isnull=True,
+        employee_id__in=employee_ids,
+        compliance__lt=minimum_compliance,
+    ).count()
+
+    return {
+        "pending_evidences": pending_evidences,
+        "overdue_commitments": overdue_commitments,
+        "low_performance": low_performance,
+    }

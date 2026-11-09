@@ -46,7 +46,7 @@
         </form>
         <div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr><th>Evento</th><th>Usuario</th><th>Entidad</th><th>Identificador</th><th>Fecha</th><th class="text-end">Detalle</th></tr></thead><tbody>
             {% for audit in audits %}
-            <tr><td><span class="event-icon me-2"><i class="bi bi-clock-history" aria-hidden="true"></i></span><span class="fw-semibold">{{ audit.event|default:"Evento" }}</span></td>
+            <tr><td><span class="event-icon me-2"><i class="bi bi-clock-history" aria-hidden="true"></i></span><span class="fw-semibold">{{ audit.event|visual_es|default:"Evento" }}</span></td>
                 <td>
                     {% if audit.entity == "Goal" and audit.new_value.editado_por %}
                         {{ audit.new_value.editado_por }}
@@ -56,7 +56,7 @@
                 </td>
 
                 <td>
-                    {{ audit.entity|default:"—" }}
+                    {{ audit.entity|visual_es|default:"—" }}
                 </td>
                 <td><code>{{ audit.object_identifier|default:"—" }}</code></td><td class="text-muted small">{% language 'es' %}{{ audit.event_date|date:"d \d\e F \d\e Y H:i"|default:"—" }}{% endlanguage %}</td>
                 <td class="text-end">

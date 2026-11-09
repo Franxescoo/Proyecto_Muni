@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block titulo %}Control de actividad · Monitoreo y trazabilidad{% endblock %}
+
+{% block estilos %}
+<style>
+    .monitor-shell { max-width: 1480px; margin: 0 auto; }
+    .monitor-hero { background: linear-gradient(135deg, #a60a17, #760710); color: #fff; border-radius: .65rem; padding: 1.5rem 1.75rem; box-shadow: 0 6px 18px rgba(166, 10, 23, .18); }
+    .monitor-hero h1 { font-size: clamp(1.35rem, 2vw, 1.85rem); }
+    .monitor-hero p { color: rgba(255,255,255,.78); }
+    .section-card { background: #fff; border: 1px solid #e5e7eb; border-radius: .65rem; box-shadow: 0 3px 12px rgba(24, 33, 44, .04); }
+    .metric { border-left: 4px solid #a60a17; padding: 1rem 1.1rem; }
+    .metric .value { font-size: 1.55rem; font-weight: 700; color: #23272b; }
+    .metric .label { color: #6c757d; font-size: .82rem; }
+    .table thead th { color: #6c757d; font-size: .72rem; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
+    .table tbody td { vertical-align: middle; }
+    .filter-label { color: #56616b; font-size: .78rem; font-weight: 600; margin-bottom: .35rem; }
+    .activity-status { border-radius: 999px; font-size: .75rem; font-weight: 600; padding: .35rem .65rem; }
+    .activity-status-alert { background: #fbe1e3; color: #a60a17; }
+    .activity-status-ok { background: #dff5e9; color: #147a49; }
+</style>
+{% endblock %}
+
+{% block top_links %}{% endblock %}
+{% block sidebar %}{% include "shared/global_sidebar.html" %}{% endblock %}
+
+{% block contenido %}
+<div class="monitor-shell pb-4" id="control-actividad">
+    <section class="monitor-hero mb-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
+        <div>
+            <div class="small text-uppercase fw-semibold opacity-75 mb-2">Monitoreo y trazabilidad</div>
+            <h1 class="mb-2 fw-bold">Control de actividad</h1>
+            <p class="mb-0">Seguimiento de ingresos, registros válidos y actividad de los funcionarios.</p>
+        </div>
+        <i class="bi bi-person-check display-5 opacity-75" aria-hidden="true"></i>
+    </section>
+
+    <section class="section-card p-3 p-lg-4 mb-4">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-12 col-md-3"><label class="filter-label" for="activity-delegation">Delegación</label><select class="form-select" id="activity-delegation" name="delegation"><option value="">Todas</option>{% for delegation in delegations %}<option value="{{ delegation.delegation_id }}" {% if request.GET.delegation == delegation.delegation_id|stringformat:"s" %}selected{% endif %}>{{ delegation.delegation__name }}</option>{% endfor %}</select></div>
+            <div class="col-12 col-md-3"><label class="filter-label" for="activity-position">Cargo</label><select class="form-select" id="activity-position" name="position"><option value="">Todos</option>{% for position in positions %}<option value="{{ position.position_id }}" {% if request.GET.position == position.position_id|stringformat:"s" %}selected{% endif %}>{{ position.position__position_name }}</option>{% endfor %}</select></div>
+            <div class="col-12 col-md-3"><label class="filter-label" for="activity-period">Período</label><select class="form-select" id="activity-period" name="period"><option value="">Todos</option>{% for period in periods %}<option value="{{ period.pk }}" {% if selected_period.pk == period.pk %}selected{% endif %}>{{ period.start_date }} - {{ period.end_date }}</option>{% endfor %}</select></div>
+            <div class="col-12 col-md-2"><button class="btn btn-dark w-100" type="submit"><i class="bi bi-funnel me-1"></i>Filtrar</button></div>
+        </form>
+    </section>
+
+    <section class="section-card p-3 p-lg-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <div><h2 class="h5 mb-1 fw-bold">Actividad por funcionario</h2><p class="text-muted small mb-0">Identifica inactividad y ritmo de registros del período seleccionado.</p></div>
+            <a class="btn btn-outline-secondary btn-sm" href="{% url 'monitoring:executive_dashboard' %}"><i class="bi bi-speedometer2 me-1"></i>Resumen ejecutivo</a>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead><tr><th>Funcionario</th><th>Último ingreso</th><th>Días sin ingreso</th><th>Última actividad</th><th class="text-end">Registros válidos</th><th class="text-end">Promedio diario</th></tr></thead>
+                <tbody>
+                {% for row in rows %}<tr><td class="fw-semibold">{{ row.employee }}</td><td>{% if row.last_login %}{{ row.last_login|date:"d/m/Y H:i" }}{% else %}<span class="text-muted">Sin registro</span>{% endif %}</td><td>{% if row.days_without_activity is not None %}<span class="activity-status {% if row.days_without_activity > 7 %}activity-status-alert{% else %}activity-status-ok{% endif %}">{{ row.days_without_activity }} días</span>{% else %}<span class="text-muted">Sin registro</span>{% endif %}</td><td>{{ row.last_activity|date:"d/m/Y"|default:"Sin actividad" }}</td><td class="text-end">{{ row.records }}</td><td class="text-end fw-semibold">{{ row.daily_average }}</td></tr>
+                {% empty %}<tr><td colspan="6" class="text-center py-5"><i class="bi bi-person-check fs-2 text-muted d-block mb-2"></i><span class="text-muted">No hay funcionarios para los filtros seleccionados.</span></td></tr>{% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+{% endblock %}

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load i18n %}
+{% load audit_extras %}
 
 {% block titulo %}Indicadores · Monitoreo y trazabilidad{% endblock %}
 
@@ -72,7 +73,7 @@
                 <tbody>
                 {% for indicator in indicators %}
                 <tr>
-                    <td class="fw-semibold">{{ indicator.goal.item|default:"Sin meta" }}</td>
+                    <td class="fw-semibold">{{ indicator.goal.item|visual_es|default:"Sin meta" }}</td>
                     <td>{{ indicator.employee|default:"Sin responsable" }}</td>
                     <td class="text-end">{{ indicator.expected_value|default_if_none:"—" }}</td>
                     <td class="text-end">{{ indicator.approved_evidences|default:"0" }}</td>

@@ -175,6 +175,18 @@ MODULES = [
         "title": "Monitoreo y trazabilidad",
         "cards": [
             {
+                "title": "Resumen ejecutivo",
+                "icon": "bi-speedometer2",
+                "url": "monitoring:executive_dashboard",
+                "perm": "monitoring_traceability.view_indicator",
+            },
+            {
+                "title": "Control de actividad",
+                "icon": "bi-person-check",
+                "url": "monitoring:activity_control",
+                "perm": "monitoring_traceability.view_indicator",
+            },
+            {
                 "title": "Indicadores",
                 "icon": "bi-graph-up",
                 "url": "monitoring:indicator_list",

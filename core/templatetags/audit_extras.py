@@ -52,6 +52,63 @@ ESTADOS = {
     "REJECTED": "Rechazado",
     "PENDING": "Pendiente",
     "COMPLETED": "Completado",
+    "IN_PROGRESS": "En progreso",
+}
+
+VALORES_VISUALES = {
+    "Reports delivered": "Informes entregados",
+    "Response time": "Tiempo de respuesta",
+    "Citizen satisfaction": "Satisfacción ciudadana",
+    "Southern territory": "Territorio sur",
+    "Northern territory": "Territorio norte",
+    "Southern Delegation": "Delegación sur",
+    "Northern Delegation": "Delegación norte",
+    "Commitment": "Compromiso",
+    "Evidence": "Evidencia",
+    "Activity": "Actividad",
+    "Goal": "Meta",
+    "Period": "Período",
+    "Indicator": "Indicador",
+    "CommitmentComment": "Comentario de compromiso",
+    "Created Commitment": "Creó un compromiso",
+    "Updated Commitment": "Actualizó un compromiso",
+    "Deleted Commitment": "Eliminó un compromiso",
+    "Created Evidence": "Creó una evidencia",
+    "Updated Evidence": "Actualizó una evidencia",
+    "Deleted Evidence": "Eliminó una evidencia",
+    "Created Activity": "Creó una actividad",
+    "Updated Activity": "Actualizó una actividad",
+    "Deleted Activity": "Eliminó una actividad",
+    "Created Goal": "Creó una meta",
+    "Updated Goal": "Actualizó una meta",
+    "Deleted Goal": "Eliminó una meta",
+    "Created Period": "Creó un período",
+    "Updated Period": "Actualizó un período",
+    "Deleted Period": "Eliminó un período",
+    "Created Indicator": "Creó un indicador",
+    "Updated Indicator": "Actualizó un indicador",
+    "Deleted Indicator": "Eliminó un indicador",
+    "Reopened Period": "Reabrió un período",
+    "CREATE": "Creación",
+    "UPDATE": "Actualización",
+    "DELETE": "Eliminación",
+    "In progress": "En progreso",
+    "Pending": "Pendiente",
+    "Completed": "Completado",
+    "Approved": "Aprobado",
+    "Rejected": "Rechazado",
+    "Active": "Activo",
+    "Closed": "Cerrado",
+    "Expired": "Vencido",
+    "Overdue": "Vencido",
+    "percent": "porcentaje",
+    "percentage": "porcentual",
+    "quantitative": "cuantitativo",
+    "None": "—",
+    "null": "—",
+    "NULL": "—",
+    "True": "Sí",
+    "False": "No",
 }
 
 CAMPOS_SENSIBLES = {
@@ -92,6 +149,12 @@ def mostrar_valor(valor):
         return ", ".join(str(v) for v in valor) if valor else "Ninguno"
 
     if isinstance(valor, str):
+        if valor.strip() in {"None", "null", "NULL"}:
+            return "—"
+
+        if valor in VALORES_VISUALES:
+            return VALORES_VISUALES[valor]
+
         if valor.upper() in ESTADOS:
             return ESTADOS[valor.upper()]
 
@@ -102,6 +165,14 @@ def mostrar_valor(valor):
             pass
 
     return str(valor)
+
+
+@register.filter
+def visual_es(valor):
+    """Presenta valores heredados en español sin cambiar su valor almacenado."""
+    if valor is None or valor == "":
+        return valor
+    return VALORES_VISUALES.get(str(valor), str(valor))
 
 
 def comparar(antes, despues, ruta, cambios):
