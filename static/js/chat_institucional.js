@@ -173,8 +173,23 @@
                 // La señal de close programará el reintento.
             });
         }
+
+        function newClientId() {
+            if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+            const bytes = new Uint8Array(16);
+            if (window.crypto && crypto.getRandomValues) {
+                crypto.getRandomValues(bytes);
+            } else {
+                for (let i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
+            }
+            bytes[6] = (bytes[6] & 0x0f) | 0x40;
+            bytes[8] = (bytes[8] & 0x3f) | 0x80;
+            const h = Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+            return h.slice(0, 8) + "-" + h.slice(8, 12) + "-" + h.slice(12, 16) + "-" + h.slice(16, 20) + "-" + h.slice(20);
+        }
+        
         async function send(message, existingClientId) {
-            const clientId = existingClientId || (window.crypto && crypto.randomUUID ? crypto.randomUUID() : null);
+            const clientId = existingClientId || newClientId();
             if (!clientId) { connectionStatus("No se puede generar el envío", "bg-danger"); return; }
             const draft = {client_id:clientId,user_id:myId,username:"Tú",message:message,created_at:new Date().toISOString()};
             upsertMessage(draft, "pending");
