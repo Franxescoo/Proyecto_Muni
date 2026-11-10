@@ -152,6 +152,9 @@ activemq-data/
 
 # Environments
 .env
+.env.*
+!.env.example
+phpmailer/vendor/
 .envrc
 .venv
 env/
@@ -211,3 +214,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Copias temporales de archivos
+*.bak_*
+*.respaldo_*
+
+*.sqlite3

@@ -1,7 +1,7 @@
 
 {% if open_modal %}
 
-<div class="modal fade"
+<div class="modal fade sgr-upgraded-modal"
      id="evidenceModal"
      tabindex="-1"
      aria-labelledby="evidenceModalLabel"
@@ -19,7 +19,9 @@
 
                 <div class="modal-header">
 
-                    <h5 class="modal-title fw-bold"
+                    <div class="sgr-modal-title-block">
+                        <div class="sgr-modal-eyebrow"><i class="bi bi-shield-check me-2" aria-hidden="true"></i>REGISTRO Y VALIDACIÓN</div>
+                        <h5 class="modal-title fw-bold"
                         id="evidenceModalLabel">
 
                         {% if object %}
@@ -29,6 +31,8 @@
                         {% endif %}
 
                     </h5>
+                        <p class="sgr-modal-subtitle mb-0">Consulta o completa la información del registro de forma segura.</p>
+                    </div>
 
                     <a href="{% url 'registration:evidence_list' %}"
                        class="btn-close"
@@ -39,6 +43,7 @@
 
 
                 <div class="modal-body">
+                    <div class="sgr-form-section-title"><span class="sgr-section-icon"><i class="bi bi-card-list" aria-hidden="true"></i></span><span>Información de la evidencia</span></div>
 
                     {% if form.non_field_errors %}
 

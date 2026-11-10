@@ -16,11 +16,7 @@
     </a>
     <a class="btn btn-primary"
        href="{% url 'accounts:employee_create' %}">
-        Crear funcionario
-    </a>
-    <a class="btn btn-success"
-       href="{% url 'accounts:account_create' %}">
-        Crear cuenta
+        Crear empleado
     </a>
 </div>
 
@@ -52,7 +48,7 @@
     {% endfor %}
 </ul>
 
-<h4>Funcionarios</h4>
+<h4>Empleados</h4>
 <ul class="list-group mb-4">
     {% for employee in employees %}
     <li class="list-group-item d-flex justify-content-between">
@@ -64,47 +60,8 @@
         </a>
     </li>
     {% empty %}
-    <li class="list-group-item">No hay funcionarios.</li>
+    <li class="list-group-item">No hay empleados.</li>
     {% endfor %}
 </ul>
 
-<h4>Cuentas de usuario</h4>
-
-<ul class="list-group mb-4">
-    {% for account in users %}
-    <li class="list-group-item d-flex justify-content-between">
-        <span>
-            {{ account.username }}
-            {% if not account.is_active %}
-                — Inactiva
-            {% endif %}
-        </span>
-
-        <a href="{% url 'accounts:account_edit' account.pk %}">
-            Editar cuenta y grupos
-        </a>
-    </li>
-    {% empty %}
-    <li class="list-group-item">
-        No hay cuentas de trabajadores.
-    </li>
-    {% endfor %}
-</ul>
-
-<h4>Cuentas con perfil</h4>
-<ul class="list-group mb-4">
-    {% for profile in profiles %}
-    <li class="list-group-item d-flex justify-content-between">
-        <span>
-            {{ profile.user.username }}
-            — {{ profile.employee|default:"Sin funcionario" }}
-        </span>
-        <a href="{% url 'accounts:profile_link' profile.pk %}">
-            Vincular funcionario
-        </a>
-    </li>
-    {% empty %}
-    <li class="list-group-item">No hay perfiles.</li>
-    {% endfor %}
-</ul>
 {% endblock %}

@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block sidebar %}{% endblock %}
+
+{% block titulo %}Mis solicitudes · Portal Ciudadano{% endblock %}
+
+{% block public_navigation %}
+<nav class="navbar navbar-expand topbar mb-4 shadow-sm">
+    <div class="container-fluid px-4">
+        <a class="navbar-brand py-0" href="{% url 'citizen_requests:public_portal' %}">
+            <img src="{% static 'img/horizontal-blanco.png' %}"
+                 alt="Logo Municipalidad de La Serena" height="55">
+        </a>
+        <a class="btn btn-outline-light ms-auto" href="{% url 'login' %}">
+            <i class="bi bi-box-arrow-in-right me-1"></i>Iniciar sesión
+        </a>
+    </div>
+</nav>
+{% endblock %}
+
+{% block estilos %}
+<link rel="stylesheet" href="{% static 'css/portal_publico_moderno.css' %}">
+<link rel="stylesheet" href="{% static 'css/portal_ciudadano_ajustes.css' %}">
+<style>
+    .citizen-history-hero { background: linear-gradient(135deg,#a60a17,#6a040d); color:#fff; border-radius:.65rem; }
+    .citizen-history-card { border: 1px solid #e5e7eb; border-radius:.7rem; overflow:hidden; }
+    .citizen-history-card .card-header { background:#a60a17; color:#fff; }
+    .citizen-history-card .btn-primary { background:#a60a17; border-color:#a60a17; }
+    .citizen-history-card .btn-primary:hover { background:#800711; border-color:#800711; }
+    .citizen-history-card .form-control:focus { border-color:#a60a17; box-shadow:0 0 0 .22rem rgba(166,10,23,.13); }
+</style>
+{% endblock %}
+
+{% block contenido %}
+<div class="public-portal portal-inner portal-history-page">
+<div class="portal-shell">
+    <header class="portal-page-header mb-4">
+        <span class="portal-page-eyebrow"><i class="bi bi-envelope-check me-2" aria-hidden="true"></i>Consulta privada y segura</span>
+        <h1><i class="bi bi-clock-history me-2" aria-hidden="true"></i>Mis solicitudes</h1>
+        <p>Verifica tu correo electrónico para revisar tus solicitudes anteriores, sus fechas, estados y códigos de seguimiento.</p>
+    </header>
+
+    <div class="row g-4 justify-content-center">
+        <div class="col-12">
+            <a href="{% url 'citizen_requests:public_portal' %}" class="portal-back mb-3">
+                <i class="bi bi-arrow-left me-1"></i>Volver al Portal Ciudadano
+            </a>
+            {% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
+            {% if notice %}<div class="alert alert-warning" role="status">{{ notice }}</div>{% endif %}
+
+            {% if verified_email %}
+                <div class="row g-3 g-xl-4 align-items-stretch citizen-history-layout">
+                    <div class="col-12 col-xl-4">
+                        <section class="card citizen-history-card h-100" aria-labelledby="datosSolicitanteTitulo">
+                            <div class="card-header p-3 d-flex align-items-center gap-2">
+                                <i class="bi bi-person-vcard" aria-hidden="true"></i>
+                                <h2 class="h5 mb-0" id="datosSolicitanteTitulo">Datos del solicitante</h2>
+                            </div>
+                            <div class="card-body p-3 p-md-4">
+                                {% if selected_request %}
+                                    <p class="text-secondary small mb-3">Datos correspondientes a la solicitud seleccionada en el historial.</p>
+                                    <dl class="citizen-requester-details mb-3">
+                                        <div><dt>Nombre</dt><dd>{% if selected_request.citizen_id %}{{ selected_request.citizen.full_name }}{% else %}{{ selected_request.requester_name }}{% endif %}</dd></div>
+                                        <div><dt>Correo electrónico</dt><dd>{{ verified_email }}</dd></div>
+                                        <div><dt>Teléfono</dt><dd>{% if selected_request.citizen_id %}{{ selected_request.citizen.phone|default:"No informado" }}{% else %}{{ selected_request.requester_phone|default:"No informado" }}{% endif %}</dd></div>
+                                        <div><dt>Dirección</dt><dd>{% if selected_request.citizen_id %}{{ selected_request.citizen.address }}{% else %}{{ selected_request.address }}{% endif %}</dd></div>
+                                    </dl>
+                                    <p class="text-muted small mb-0"><i class="bi bi-lock me-1" aria-hidden="true"></i>Información de solo lectura.</p>
+                                {% else %}
+                                    <p class="text-secondary mb-0">No hay solicitudes vecinales para mostrar datos.</p>
+                                {% endif %}
+                            </div>
+                        </section>
+                    </div>
+                    <div class="col-12 col-xl-8">
+                        <section class="card citizen-history-card h-100" aria-labelledby="historialSolicitudesTitulo">
+                            <div class="card-header p-3 d-flex align-items-center justify-content-between gap-2 flex-wrap">
+                                <h2 class="h5 mb-0" id="historialSolicitudesTitulo"><i class="bi bi-clock-history me-2" aria-hidden="true"></i>Historial de solicitudes</h2>
+                                <form method="post" class="m-0">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="logout">
+                                    <button class="btn btn-light btn-sm" type="submit">Cerrar consulta</button>
+                                </form>
+                            </div>
+                            <div class="card-body p-3 p-md-4">
+                                <p class="text-secondary small">Correo verificado: <strong>{{ verified_email }}</strong>. El acceso caduca después de 30 minutos.</p>
+                                {% if items %}
+                                <div class="table-responsive">
+                                    <table class="table table-hover align-middle citizen-history-table">
+                                        <thead><tr><th scope="col">Fecha</th><th scope="col">Asunto</th><th scope="col">Estado</th><th scope="col">Código de seguimiento</th><th scope="col">Datos</th></tr></thead>
+                                        <tbody>
+                                        {% for item in items %}
+                                        <tr {% if item.is_selected %}class="citizen-history-selected" aria-current="true"{% endif %}>
+                                            <td class="text-nowrap">{{ item.created_at|date:"d/m/Y H:i" }}</td>
+                                            <td>{{ item.subject }}</td>
+                                            <td><span class="badge text-bg-secondary">{{ item.status }}</span></td>
+                                            <td class="text-break small">{{ item.tracking_code }}</td>
+                                            <td>
+                                                <a class="btn btn-sm btn-outline-danger text-nowrap"
+                                                   href="?page={{ page.number }}&amp;solicitud={{ item.tracking_code }}"
+                                                   aria-label="Ver datos de la solicitud {{ item.subject }}">
+                                                   {% if item.is_selected %}Seleccionada{% else %}Ver datos{% endif %}
+                                                </a>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                {% if page.has_other_pages %}
+                                <nav aria-label="Páginas de solicitudes" class="d-flex justify-content-between align-items-center gap-2">
+                                    {% if page.has_previous %}<a class="btn btn-sm btn-outline-secondary" href="?page={{ page.previous_page_number }}">Anterior</a>{% else %}<span></span>{% endif %}
+                                    <span class="text-secondary small">Página {{ page.number }} de {{ page.paginator.num_pages }}</span>
+                                    {% if page.has_next %}<a class="btn btn-sm btn-outline-secondary" href="?page={{ page.next_page_number }}">Siguiente</a>{% else %}<span></span>{% endif %}
+                                </nav>
+                                {% endif %}
+                                {% else %}
+                                <div class="alert alert-info mb-0" role="status">No se encontraron solicitudes vecinales asociadas a este correo.</div>
+                                {% endif %}
+                            </div>
+                        </section>
+                    </div>
+                </div>
+            {% elif pending %}
+                <section class="card citizen-history-card shadow-sm">
+                    <div class="card-header p-3"><h2 class="h5 mb-0">Verifica tu correo</h2></div>
+                    <div class="card-body p-4">
+                        <p>Enviamos un código de 6 dígitos al correo <strong>{{ pending.email }}</strong>. Caduca en 10 minutos.</p>
+                        <form method="post" autocomplete="off">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="verify">
+                            <label for="history-code" class="form-label">Código de verificación</label>
+                            <input id="history-code" name="code" class="form-control mb-3" required
+                                   maxlength="6" minlength="6" inputmode="numeric" pattern="[0-9]{6}"
+                                   autocomplete="one-time-code" placeholder="000000">
+                            <button type="submit" class="btn btn-primary">Verificar y mostrar solicitudes</button>
+                        </form>
+                        <form method="post" class="mt-3">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="logout">
+                            <button type="submit" class="btn btn-link px-0">Usar otro correo</button>
+                        </form>
+                    </div>
+                </section>
+            {% else %}
+                <section class="card citizen-history-card shadow-sm">
+                    <div class="card-header p-3"><h2 class="h5 mb-0">Consultar con mi correo</h2></div>
+                    <div class="card-body p-4">
+                        <p class="text-secondary">Por seguridad, necesitas verificar que eres propietario del correo. No basta con escribirlo.</p>
+                        <form method="post">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="send">
+                            <label for="history-email" class="form-label">Correo electrónico</label>
+                            <input type="email" id="history-email" name="email" required maxlength="254"
+                                   autocomplete="email" class="form-control mb-3"
+                                   value="{{ email_value }}" placeholder="nombre@correo.cl">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-envelope-check me-1"></i>Enviar código de verificación
+                            </button>
+                        </form>
+                        <p class="text-muted small mt-3 mb-0">No necesitas crear una cuenta. Solo se muestran solicitudes ingresadas con el correo verificado; las solicitudes internas no se incluyen.</p>
+                    </div>
+                </section>
+            {% endif %}
+        </div>
+    </div>
+    <aside class="portal-info-panel" aria-label="Privacidad del historial">
+        <span class="portal-info-icon"><i class="bi bi-shield-lock" aria-hidden="true"></i></span>
+        <div>
+            <strong>Tus solicitudes están protegidas.</strong>
+            <p>El historial solo se muestra después de verificar tu correo. Las solicitudes internas y las observaciones de los funcionarios no se comparten en esta consulta.</p>
+        </div>
+    </aside>
+</div>
+</div>
+{% endblock %}

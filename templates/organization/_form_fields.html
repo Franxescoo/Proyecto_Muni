@@ -3,7 +3,7 @@
 <div class="row g-3 align-items-end mb-3">
     <div class="col-12 col-md-4">
         <div class="organization-photo-preview mb-2" id="employee-photo-preview" aria-label="Vista previa de foto de perfil">
-            {% if form.instance.profile_photo %}<img src="{{ form.instance.profile_photo.url }}" alt="Foto actual del funcionario">{% else %}<i class="bi bi-person-circle" aria-hidden="true"></i><img alt="Vista previa de foto" hidden>{% endif %}
+            {% if form.instance.profile_photo %}<img src="{{ form.instance.profile_photo.url }}" alt="Foto actual del empleado">{% else %}<i class="bi bi-person-circle" aria-hidden="true"></i><img alt="Vista previa de foto" hidden>{% endif %}
         </div>
         <label class="form-label fw-semibold" for="{{ form.profile_photo.id_for_label }}">{{ form.profile_photo.label }}</label>
         {{ form.profile_photo }}
@@ -17,15 +17,94 @@
     </div>
 </div>
 {% endif %}
+
 <div class="row g-3">
     {% for field in form %}
-    {% if not form.profile_photo or field.name != 'profile_photo' and field.name != 'name' %}
-    <div class="{% if field.name == 'roles' or field.name == 'assigned_groups' or field.name == 'permissions' or field.name == 'measurable_items' or field.name == 'services' or field.name == 'weightings' %}col-12{% else %}col-12 col-md-6{% endif %}">
-        <label class="form-label fw-semibold" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %}<span class="text-danger"> *</span>{% endif %}</label>
-        {% if field.name == 'assigned_groups' or field.name == 'permissions' %}<div class="organization-choice-list">{{ field }}</div>{% else %}{{ field }}{% endif %}
-        {% if field.errors %}<div class="invalid-feedback d-block">{% for error in field.errors %}<div>{{ error }}</div>{% endfor %}</div>{% endif %}
-        {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
-    </div>
-    {% endif %}
+        {% if field.name in form.ui_hidden_fields %}
+            {# La cuenta se administra desde Gestión de accesos. #}
+        {% elif not form.profile_photo or field.name != 'profile_photo' and field.name != 'name' %}
+
+            <div class="{% if field.name == 'roles' or field.name == 'authorized_delegations' or field.name == 'delegations' or field.name == 'assigned_groups' or field.name == 'permissions' or field.name == 'measurable_items' or field.name == 'services' or field.name == 'catalog_services' or field.name == 'catalog_items' or field.name == 'weightings' %}col-12{% else %}col-12 col-md-6{% endif %}">
+
+                <label
+                    class="form-label fw-semibold"
+                    for="{{ field.id_for_label }}">
+
+                    {{ field.label }}
+
+                    {% if field.field.required %}
+                        <span class="text-danger">*</span>
+                    {% endif %}
+
+                </label>
+
+                {% if field.name == 'permissions' %}
+                    <div class="organization-permissions" data-permission-picker>
+                        <div class="organization-permissions-toolbar">
+                            <input type="search" class="form-control form-control-sm" placeholder="Buscar permiso..." data-permission-search>
+                            <span class="organization-permission-total" data-permission-total>0 permisos seleccionados</span>
+                            <button type="button" class="btn btn-outline-primary btn-sm" data-permission-select-all>
+                                Seleccionar todo
+                            </button>
+                            <button type="button" class="btn btn-outline-dark btn-sm" data-permission-clear>
+                                Limpiar
+                            </button>
+                        </div>
+                        <div class="organization-permission-groups">
+                            {% for group in form.permission_groups %}
+                                <details class="organization-permission-group" data-permission-group>
+                                    <summary class="organization-permission-group-header">
+                                        <span class="organization-permission-group-title">
+                                            <strong>{{ group.label }}</strong>
+                                            <small><span data-group-selected>{{ group.selected_count }}</span> de {{ group.total_count }} seleccionados</small>
+                                        </span>
+                                        <span class="organization-permission-group-actions">
+                                            <button type="button" class="btn btn-link btn-sm p-0" data-permission-group-toggle>
+                                                Seleccionar sección
+                                            </button>
+                                            <span class="organization-permission-chevron" aria-hidden="true">⌄</span>
+                                        </span>
+                                    </summary>
+                                    <div class="organization-permission-options">
+                                        {% for permission in group.permissions %}
+                                            <label class="organization-permission-option" data-permission-option>
+                                                <input type="checkbox" name="permissions" value="{{ permission.value }}" {% if permission.checked %}checked{% endif %} {% if field.field.disabled %}disabled{% endif %}>
+                                                <span>{{ permission.label }}</span>
+                                            </label>
+                                        {% endfor %}
+                                    </div>
+                                </details>
+                            {% endfor %}
+                        </div>
+                    </div>
+                {% elif field.name == 'authorized_delegations' or field.name == 'delegations' or field.name == 'assigned_groups' or field.name == 'groups' or field.name == 'catalog_services' or field.name == 'catalog_items'%}
+
+                    <div class="organization-choice-list">
+                        {{ field }}
+                    </div>
+
+                {% else %}
+
+                    {{ field }}
+
+                {% endif %}
+
+                {% if field.errors %}
+                    <div class="invalid-feedback d-block">
+                        {% for error in field.errors %}
+                            <div>{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+
+                {% if field.help_text %}
+                    <div class="form-text">
+                        {{ field.help_text }}
+                    </div>
+                {% endif %}
+
+            </div>
+
+        {% endif %}
     {% endfor %}
 </div>

@@ -1,10 +1,28 @@
 from django.urls import path
 
 from . import views
+from .delegation_context import change_active_delegation
 
 app_name = "accounts"
 
 urlpatterns = [
+    path("profile/", views.profile_view, name="profile"),
+    path(
+        "profile/password/request/",
+        views.profile_password_request,
+        name="profile_password_request",
+    ),
+    path(
+        "profile/password/verify/",
+        views.profile_password_verify,
+        name="profile_password_verify",
+    ),
+    path(
+        "profile/password/change/",
+        views.profile_password_change,
+        name="profile_password_change",
+    ),
+    path("delegation/activate/", change_active_delegation, name="change_active_delegation"),
     path(
         "manage/",
         views.access_home,

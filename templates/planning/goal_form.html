@@ -17,7 +17,7 @@
     </div>
 
     <!-- MODAL BOOTSTRAP -->
-    <div class="modal fade"
+    <div class="modal fade sgr-upgraded-modal"
          id="goalModal"
          tabindex="-1"
          aria-labelledby="goalModalLabel"
@@ -29,13 +29,20 @@
 
                 <form method="post" novalidate>
                     {% csrf_token %}
+                    {% if goal and not readonly %}
+                    <input type="hidden" name="version" value="{{ goal.updated_at.isoformat }}">
+                    {% endif %}
 
                     <!-- ENCABEZADO -->
                     <div class="modal-header">
 
-                        <h5 class="modal-title" id="goalModalLabel">
+                        <div class="sgr-modal-title-block">
+                            <div class="sgr-modal-eyebrow"><i class="bi bi-shield-check me-2" aria-hidden="true"></i>PLANIFICACIÓN</div>
+                            <h5 class="modal-title" id="goalModalLabel">
                             {{ title }}
                         </h5>
+                            <p class="sgr-modal-subtitle mb-0">Consulta o completa la información de la meta.</p>
+                        </div>
 
                         <a href="{% url 'planning:goal_list' %}"
                            class="btn-close"
@@ -46,6 +53,7 @@
 
                     <!-- CUERPO DEL FORMULARIO -->
                     <div class="modal-body">
+                        <div class="sgr-form-section-title"><span class="sgr-section-icon"><i class="bi bi-card-list" aria-hidden="true"></i></span><span>Información de la meta</span></div>
 
                         {% if form.non_field_errors %}
                         <div class="alert alert-danger">
@@ -55,30 +63,75 @@
 
                         <div class="row">
 
+                            
                             {% for field in form %}
 
-                            <div class="col-md-4 mb-3">
+                                {% if field.is_hidden %}
 
-                                {{ field.label_tag }}
+                                    {{ field }}
 
-                                {{ field }}
+                                    {% if field.errors %}
+                                    <div class="text-danger">
+                                        {{ field.errors }}
+                                    </div>
+                                    {% endif %}
 
-                                {% if field.help_text %}
-                                <div class="form-text">
-                                    {{ field.help_text }}
-                                </div>
+                                {% else %}
+                                    {% if field.name == 'measurement_item' %}<div class="col-12"><div class="sgr-form-section-title sgr-section-break"><span class="sgr-section-icon"><i class="bi bi-bullseye" aria-hidden="true"></i></span><span>Medición y resultados</span></div></div>{% endif %}
+                                    <div class="col-md-4 mb-3">
+
+                                        {{ field.label_tag }}
+
+                                        {{ field }}
+
+                                        {% if field.help_text %}
+                                        <div class="form-text">
+                                            {{ field.help_text }}
+                                        </div>
+                                        {% endif %}
+
+                                        <div class="text-danger">
+                                            {{ field.errors }}
+                                        </div>
+
+                                    </div>
+
                                 {% endif %}
 
-                                <div class="text-danger">
-                                    {{ field.errors }}
-                                </div>
 
-                            </div>
+
 
                             {% endfor %}
 
                         </div>
                         
+                        <!-- INFORMACIÓN DEL ÍTEM HISTÓRICO SIN VINCULAR -->
+                        {% if goal and not goal.measurement_item_id %}
+                        <div class="alert alert-info mt-3">
+
+                            <h6 class="fw-bold mb-2">
+                                Ítem histórico sin código identificado
+                            </h6>
+
+                            <p class="mb-1">
+                                <strong>Nombre original:</strong>
+                                {{ goal.item }}
+                            </p>
+
+                            <p class="mb-1">
+                                <strong>Unidad de medida:</strong>
+                                {{ goal.unit }}
+                            </p>
+
+                            <small>
+                                Esta meta conserva sus datos originales,
+                                pero todavía no tiene un ítem del catálogo vinculado.
+                                Puedes seleccionar un ítem activo al modificarla.
+                            </small>
+
+                        </div>
+                        {% endif %}
+
                         <!-- INFORMACIÓN AUTOMÁTICA DEL ÍTEM -->
                         <div id="itemDetails" class="card bg-light border-0 mt-3 d-none">
                             <div class="card-body">
@@ -135,8 +188,8 @@
                     <div class="modal-footer">
 
                         <a href="{% url 'planning:goal_list' %}"
-                           class="btn btn-dark">
-                            Volver al listado
+                           class="btn btn-outline-secondary">
+                            {% if readonly %}Cerrar{% else %}Cancelar{% endif %}
                         </a>
 
                         {% if not readonly %}

@@ -1,0 +1,57 @@
+{# Ajustes de ancho exclusivos de las pantallas de Planificación. #}
+<style>
+  /* Aprovechar el espacio disponible sin afectar el menú global. */
+  .global-page-content > .container-fluid {
+    padding-inline: clamp(12px, 1.7vw, 30px) !important;
+  }
+  .monitor-shell {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    margin: 0;
+  }
+  .monitor-shell .sgr-guide-layout,
+  .monitor-shell .sgr-guide-main,
+  .monitor-shell .section-card { min-width: 0; }
+  .monitor-shell .row > [class*="col-"] { min-width: 0; }
+  .monitor-shell .table-responsive {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* Las fechas y sus etiquetas no deben saltar de línea dentro de la tabla. */
+  .monitor-shell .sgr-date-cell,
+  .monitor-shell .period-created,
+  .monitor-shell .goal-created {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .monitor-shell .period-created,
+  .monitor-shell .goal-created { min-width: max-content; }
+  .monitor-shell .table thead th { vertical-align: middle; }
+  /* Inputs de fecha en los modales: ancho flexible sin desbordar la tarjeta. */
+  .monitor-shell input[type="date"],
+  #periodModal input[type="date"],
+  #goalModal input[type="date"],
+  #itemModal input[type="date"] {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  .monitor-shell .monitor-hero { width: 100%; }
+  @media (min-width: 1500px) {
+    .monitor-shell .sgr-guide-layout {
+      grid-template-columns: minmax(0, 1fr) minmax(230px, 260px);
+      gap: clamp(14px, 1.3vw, 24px);
+    }
+  }
+  @media (max-width: 767.98px) {
+    .monitor-shell .monitor-hero { padding: 1.1rem 1.2rem; }
+    .monitor-shell .section-card { padding-inline: .9rem; }
+    .monitor-shell .table-responsive { scrollbar-width: thin; }
+  }
+</style>

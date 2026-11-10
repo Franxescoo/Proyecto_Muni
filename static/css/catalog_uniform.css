@@ -1,0 +1,47 @@
+/* Apariencia común de los seis mantenedores obligatorios del SGR.
+   Deliberadamente limitado al panel de listados; no afecta formularios ni otros módulos. */
+.sgr-catalog .catalog-toolbar {display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:1rem;margin-bottom:1.2rem}
+.sgr-catalog .catalog-toolbar .btn {min-height:38px}
+.sgr-catalog .catalog-toolbar-actions {display:flex;flex-wrap:wrap;align-items:center;gap:.5rem}
+.sgr-catalog .catalog-filters {margin-bottom:1.15rem}
+.sgr-catalog .catalog-filters .filter-label{display:block;color:#56616b;font-size:.8rem;font-weight:600;margin-bottom:.35rem}
+.sgr-catalog .catalog-filters .btn {min-height:38px}
+.sgr-catalog .catalog-page-size .btn {white-space:nowrap}
+.sgr-catalog .catalog-pagination .pagination {flex-wrap:wrap}
+.sgr-catalog .table thead th {color:#6c757d;font-size:.74rem;letter-spacing:.02em;text-transform:uppercase;vertical-align:middle}
+.sgr-catalog .table tbody td {vertical-align:middle}
+.sgr-catalog .catalog-toolbar-actions .btn-success {background:#16804f;border-color:#16804f}
+.sgr-catalog .catalog-toolbar-actions .btn-success:hover {background:#11623d;border-color:#11623d}
+
+/* Acciones visibles: icono + texto y alineación estable como en Períodos. */
+.sgr-catalog .table tbody td:last-child .btn {white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;gap:.15rem;}
+.sgr-catalog .table tbody td:last-child form {margin-bottom:0;}
+.sgr-catalog .table tbody td:last-child .d-flex {flex-wrap:wrap;}
+.sgr-catalog .catalog-toolbar-actions {margin-left:auto;justify-content:flex-end;}
+.sgr-catalog .catalog-filters {margin-top:.25rem;}
+
+/* Barra de cabecera de todos los listados administrativos. */
+.sgr-catalog .catalog-toolbar {display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:1rem;}
+.sgr-catalog .catalog-toolbar-actions {display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:.5rem;margin-left:auto;}
+.sgr-catalog .catalog-toolbar-actions .btn {white-space:nowrap;}
+.sgr-catalog .table tbody td:last-child .btn {display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;gap:.18rem;}
+.sgr-catalog .table tbody td:last-child .d-flex {flex-wrap:wrap;}
+.sgr-catalog .catalog-page-size {margin-top:.15rem;}
+/* Paginación: contador izquierda y la barra de controles centrada, siempre visible. */
+.catalog-pagination {width:100%;}
+.catalog-pagination-count {text-align:left;}
+.catalog-pagination nav {width:100%;}
+.catalog-pagination .pagination {justify-content:center;}
+.catalog-pagination .pagination .page-item.active .page-link {background:#0d6efd;border-color:#0d6efd;color:#fff;}
+.catalog-pagination .pagination .page-item.disabled .page-link {background:#eceef1;color:#646c75;}
+@media (max-width:575px) {.sgr-catalog .catalog-toolbar-actions{width:100%;justify-content:flex-end}}
+
+/* Evitar que Ver / Modificar / Eliminar se partan en varias líneas. */
+.sgr-catalog .table tbody td:last-child {white-space:nowrap;}
+.sgr-catalog .table tbody td:last-child .d-flex {
+    flex-wrap:nowrap;
+    align-items:center;
+    width:max-content;
+    margin-left:auto;
+}
+.sgr-catalog .table tbody td:last-child .btn {flex:0 0 auto;}

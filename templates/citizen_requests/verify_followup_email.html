@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block sidebar %}{% endblock %}
+{% block titulo %}Verificar correo · Portal Ciudadano{% endblock %}
+{% block contenido %}
+<main class="container py-5" style="max-width:650px">
+  <h1 class="h4">Verificación de correo de seguimiento</h1>
+  {% if success %}
+    <div class="alert alert-success" role="status">Tu correo fue verificado. Desde ahora recibirás los avisos de esta solicitud. Te enviamos el estado actual y el código de seguimiento.</div>
+  {% elif valid %}
+    <p>Confirma que deseas recibir en este correo las notificaciones de la solicitud municipal asociada. El enlace caduca en 24 horas.</p>
+    <form method="post">{% csrf_token %}<button type="submit" class="btn btn-danger">Confirmar mi correo</button></form>
+  {% else %}
+    <div class="alert alert-warning" role="alert">Este enlace expiró, fue usado o ya no corresponde al ciudadano asociado. Solicita al funcionario que reenvíe una nueva verificación.</div>
+  {% endif %}
+</main>
+{% endblock %}

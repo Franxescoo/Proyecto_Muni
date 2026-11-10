@@ -19,6 +19,8 @@ customtkinter==6.0.0
 darkdetect==0.8.0
 distro==1.9.0
 Django==6.1
+daphne==4.2.1
+channels==4.3.2
 django-bootstrap5==26.3
 dnspython==2.8.0
 edge-tts==7.2.8
@@ -90,5 +92,4 @@ Werkzeug==3.1.8
 yarl==1.24.5
 holidays==0.106
 PyMySQL==1.2.3
-channels>=4.0.0
-daphne>=4.0.0
+openpyxl==3.1.5

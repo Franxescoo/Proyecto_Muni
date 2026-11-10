@@ -1,18 +1,24 @@
 import json
 
 from django import forms
+from django.core.validators import MaxLengthValidator
+from accounts.permissions import allowed_delegation_ids
 
 from organization.models import Employee, PositionFunction
 
 from .models import Goal, Period, MeasurementItem
 
 from .working_days import calculate_computable_days
+from .measurement_rules import (SUPPORTED_PERCENTAGE_FORMULA, canonical_percentage_formula)
+from .parameter_history import compliance_cap_value
+import re
+from decimal import Decimal
 
 
 class BootstrapMixin:
     """Agrega las clases de Bootstrap a los campos."""
 
-    
+
     def _apply_bootstrap(self):
         for field in self.fields.values():
             if isinstance(field.widget, forms.CheckboxInput):
@@ -25,10 +31,35 @@ class BootstrapMixin:
             field.widget.attrs["class"] = css
 
 
+def _set_text_limit(field, limit, label):
+    """Aplica el mismo límite en la validación del servidor y el HTML."""
+    field.widget.attrs["maxlength"] = limit
+    field.validators = [
+        validator
+        for validator in field.validators
+        if not isinstance(validator, MaxLengthValidator)
+    ]
+    field.validators.append(
+        MaxLengthValidator(
+            limit,
+            message=f"{label} no puede superar los {limit} caracteres.",
+        )
+    )
+
+
 
 
 
 class PeriodForm(BootstrapMixin, forms.ModelForm):
+
+    compliance_cap = forms.DecimalField(
+        label="Tope de cumplimiento (%)",
+        required=False,
+        min_value=Decimal("100"), max_value=Decimal("300"),
+        max_digits=6, decimal_places=2,
+        initial=Decimal("150"),
+        help_text="Valor inicial 150 %. Configurable entre 100 y 300 %.",
+    )
 
     status = forms.ChoiceField(
         label="Estado",
@@ -62,6 +93,15 @@ class PeriodForm(BootstrapMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
 
         self._apply_bootstrap()
+        self.fields["compliance_cap"].initial = Decimal(
+            compliance_cap_value(self.instance.thresholds if self.instance.pk else "")
+        )
+        _set_text_limit(self.fields["thresholds"], 255, "Los umbrales")
+        _set_text_limit(
+            self.fields["parameters_version"],
+            50,
+            "La versión de parámetros",
+        )
 
         # El administrador no ingresa manualmente los días.
         self.fields["computable_days"].required = False
@@ -76,8 +116,69 @@ class PeriodForm(BootstrapMixin, forms.ModelForm):
             "excluyendo feriados de Chile."
         )
 
+
+    def clean_thresholds(self):
+        valor = self.cleaned_data["thresholds"].strip()
+
+        # Conservar configuraciones históricas sin modificar.
+        if self.instance.pk and valor == self.instance.thresholds:
+            return valor
+
+        patron = (
+            r"Verde\s*:\s*(\d+(?:\.\d+)?)\s*,\s*"
+            r"Amarillo\s*:\s*(\d+(?:\.\d+)?)\s*,\s*"
+            r"Rojo\s*:\s*(\d+(?:\.\d+)?)"
+            r"(?:\s*,\s*(?:Tope|Max)\s*:\s*\d+(?:[.,]\d+)?)?"
+        )
+
+        resultado = re.fullmatch(
+            patron, valor, flags=re.IGNORECASE
+        )
+
+        if not resultado:
+            raise forms.ValidationError(
+                "Utiliza el formato: "
+                "Verde: 100, Amarillo: 80, Rojo: 60."
+            )
+
+        verde, amarillo, rojo = (
+            Decimal(numero)
+            for numero in resultado.groups()[:3]
+        )
+
+        if not (0 <= rojo < amarillo < verde <= 100):
+            raise forms.ValidationError(
+                "Los umbrales deben estar entre 0 y 100, "
+                "cumpliendo: Verde > Amarillo > Rojo."
+            )
+
+        return valor
+
+
     def clean(self):
         cleaned_data = super().clean()
+
+        # Mantiene un tope explícito y legible para el servicio de
+        # Monitoreo existente, sin modificar ese módulo.
+        threshold_string = cleaned_data.get("thresholds", "")
+        threshold_valid = re.fullmatch(
+            r"\s*Verde\s*:\s*\d+(?:\.\d+)?\s*,\s*"
+            r"Amarillo\s*:\s*\d+(?:\.\d+)?\s*,\s*"
+            r"Rojo\s*:\s*\d+(?:\.\d+)?"
+            r"(?:\s*,\s*(?:Tope|Max)\s*:\s*\d+(?:[.,]\d+)?)?\s*",
+            threshold_string, re.I,
+        )
+        if threshold_valid and "compliance_cap" in cleaned_data:
+            cap = cleaned_data["compliance_cap"]
+            if cap is None:
+                cap = Decimal(compliance_cap_value(threshold_string))
+            base = re.sub(
+                r"\s*,\s*(?:Tope|Max)\s*:\s*\d+(?:[.,]\d+)?\s*$",
+                "", threshold_string, flags=re.I,
+            )
+            cleaned_data["thresholds"] = (
+                base.rstrip() + f", Tope: {cap:.2f}"
+            )
 
         start_date = cleaned_data.get("start_date")
         end_date = cleaned_data.get("end_date")
@@ -139,13 +240,11 @@ class GoalScopeMixin(BootstrapMixin):
         ).select_related("position")
 
         if user is not None and not user.is_superuser:
-            profile = getattr(user, "profile", None)
-            delegation_id = (
-                profile.delegation_id if profile else None
+            permitted = allowed_delegation_ids(
+                user, "planning_measurements.change_goal" if self.instance.pk
+                else "planning_measurements.add_goal"
             )
-            employees = employees.filter(
-                delegation_id=delegation_id
-            )
+            employees = employees.filter(delegation_id__in=permitted)
 
         self.fields["employee"].queryset = employees
         self._apply_bootstrap()
@@ -195,30 +294,91 @@ class GoalScopeMixin(BootstrapMixin):
 
         # El servidor obtiene el cargo real del funcionario.
         return position
-    
+
+
     def _configure_items(self):
-        """Carga los ítems del catálogo y protege la unidad."""
+        """Carga los ítems por ID y conserva los datos históricos."""
 
         items = MeasurementItem.objects.filter(
             deleted_at__isnull=True,
             is_active=True,
         ).order_by("code")
 
-        # Los ítems se siguen guardando como texto en Goal.item.
-        choices = [("", "Seleccione un ítem")]
+        # Si la meta ya tiene un ítem vinculado, también se
+        # permite mostrarlo aunque esté inactivo o archivado.
+        if self.instance.pk and self.instance.measurement_item_id:
+            items = (
+                MeasurementItem.objects.filter(
+                    pk__in=items.values("pk")
+                )
+                | MeasurementItem.objects.filter(
+                    pk=self.instance.measurement_item_id
+                )
+            ).distinct().order_by("code")
 
-        
-        unidades = {}
+        field = self.fields["measurement_item"]
+        field.queryset = items
+        field.label = "Ítem de medición"
+        field.required = not bool(self.instance.pk)
+        field.empty_label = "Seleccione un ítem"
+        field.widget.attrs["class"] = "form-select"
+
+        # Ítems permitidos según el cargo del funcionario.
+        cargos = PositionFunction.objects.filter(
+            pk__in=self.fields["employee"].queryset.values_list(
+                "position_id", flat=True
+            )
+        ).prefetch_related("catalog_items")
+
+        items_por_cargo = {
+            str(cargo.pk): [
+                str(item.pk)
+                for item in cargo.catalog_items.all()
+            ]
+            for cargo in cargos
+        }
+
+        field.widget.attrs["data-items-by-position"] = json.dumps(
+            items_por_cargo
+        )
+
+        # Conserva el ítem de una meta histórica.
+        field.widget.attrs["data-original-item"] = str(
+            self.instance.measurement_item_id or ""
+        )
+        field.widget.attrs["data-original-employee"] = str(
+            self.instance.employee_id or ""
+        )
+
+
+        # Identifica visualmente los ítems históricos desactivados.
+        field.label_from_instance = lambda item: (
+            f"{item.code} - {item.name}"
+            + (
+                " (histórico - inactivo)"
+                if not item.is_active or item.deleted_at is not None
+                else ""
+            )
+        )
+
+
+        # El nombre antiguo se conserva para compatibilidad.
+        self.fields["item"].widget = forms.HiddenInput()
+        self.fields["item"].required = False
+
+        # La unidad no se modifica manualmente.
+        unit_field = self.fields["unit"]
+        unit_field.required = False
+        unit_field.label = "Unidad de medida (automática)"
+        unit_field.widget.attrs["readonly"] = "readonly"
+        unit_field.help_text = (
+            "Se obtiene automáticamente del ítem seleccionado."
+        )
+
         detalles = {}
 
         for item in items:
-            choices.append(
-                (item.name, f"{item.code} - {item.name}")
-            )
-
-            unidades[item.name] = item.unit
-
-            detalles[item.name] = {
+            detalles[str(item.pk)] = {
                 "codigo": item.code,
                 "descripcion": item.description,
                 "tipo": item.get_item_type_display(),
@@ -226,94 +386,109 @@ class GoalScopeMixin(BootstrapMixin):
                 "formula": item.formula,
             }
 
-
-        # Permite mostrar ítems históricos al editar una meta.
-        if self.instance.pk:
-            nombre_actual = self.instance.item
-
-            if nombre_actual and nombre_actual not in unidades:
-                choices.append(
-                    (nombre_actual, f"{nombre_actual} (histórico)")
-                )
-
-        self.fields["item"].widget = forms.Select(
-            choices=choices
+        field.widget.attrs["data-item-details"] = json.dumps(
+            detalles
         )
-        self.fields["item"].widget.attrs["class"] = "form-select"
-
-        self.fields["item"].label = "Ítem de medición"
-        self.fields["item"].help_text = (
-            "Seleccione un ítem registrado en el catálogo."
-        )
-
-        self.fields["unit"].required = False
-        self.fields["unit"].label = "Unidad de medida (automática)"
-        self.fields["unit"].widget.attrs["readonly"] = "readonly"
-        self.fields["unit"].help_text = (
-            "Se obtiene automáticamente del ítem seleccionado."
-        )
-
-        self.fields["item"].widget.attrs[
-            "data-item-units"
-        ] = json.dumps(unidades)
-        
-        self.fields["item"].widget.attrs[
-            "data-item-details"
-        ] = json.dumps(detalles)
-
 
     def clean(self):
         cleaned_data = super().clean()
 
-        nombre = cleaned_data.get("item")
+        item = cleaned_data.get("measurement_item")
 
-        if not nombre:
+        # Si el formulario ya tiene errores en el selector,
+        # no continuar con la validación del ítem.
+        if "measurement_item" in self.errors:
             return cleaned_data
 
-        items = MeasurementItem.objects.filter(
-            name=nombre,
-            deleted_at__isnull=True,
-        )
+        # Metas antiguas sin relación: permitir conservar
+        # sus datos históricos, pero no inventar un código.
+        if item is None:
+            if self.instance.pk and not self.instance.measurement_item_id:
+                cleaned_data["item"] = self.instance.item
+                cleaned_data["unit"] = self.instance.unit
+                return cleaned_data
 
-        if items.count() != 1:
             self.add_error(
-                "item",
-                "El ítem debe existir una sola vez en el catálogo."
+                "measurement_item",
+                "Debe seleccionar un ítem de medición."
             )
             return cleaned_data
 
-        item = items.first()
+        # Una meta vinculada puede conservar su ítem histórico,
+        # aunque posteriormente haya sido desactivado o archivado.
+        es_historico = (
+            bool(self.instance.pk)
+            and self.instance.measurement_item_id == item.pk
+        )
 
-        if not item.is_active:
+        empleado = cleaned_data.get("employee")
+
+        misma_meta = (
+            es_historico
+            and empleado is not None
+            and self.instance.employee_id == empleado.pk
+        )
+
+        if empleado and not misma_meta:
+            if not empleado.position.catalog_items.filter(
+                pk=item.pk
+            ).exists():
+                self.add_error(
+                    "measurement_item",
+                    "Este ítem no corresponde al cargo del funcionario."
+                )
+                return cleaned_data
+
+
+        if (
+            item.deleted_at is not None or not item.is_active
+        ) and not es_historico:
             self.add_error(
-                "item",
+                "measurement_item",
                 "El ítem seleccionado no está activo."
             )
             return cleaned_data
 
-        if not item.unit.strip():
+        # Conserva la unidad histórica de una meta vinculada
+        # si su ítem fue desactivado o archivado.
+        if es_historico and (
+            item.deleted_at is not None or not item.is_active
+        ):
+            cleaned_data["item"] = self.instance.item
+            cleaned_data["unit"] = self.instance.unit
+            return cleaned_data
+
+        # Validación del ítem activo seleccionado.
+        if not item.unit or not item.unit.strip():
             self.add_error(
-                "item",
+                "measurement_item",
                 "Este ítem no tiene unidad de medida. "
                 "Complétela primero en el catálogo."
             )
             return cleaned_data
 
-        # La unidad real se obtiene del catálogo,
-        # nunca del valor enviado por el navegador.
+        # Mantener compatibilidad con los demás módulos.
+        cleaned_data["item"] = item.name
         cleaned_data["unit"] = item.unit
 
         return cleaned_data
 
 
 
+
+
 class GoalForm(GoalScopeMixin, forms.ModelForm):
+    version = forms.CharField(
+        widget=forms.HiddenInput(),
+        required=False,
+    )
     class Meta:
         model = Goal
         fields = [
             "period",
             "employee",
             "position",
+            "measurement_item",
             "item",
             "objective_value",
             "required_evidence_count",
@@ -323,7 +498,10 @@ class GoalForm(GoalScopeMixin, forms.ModelForm):
 
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
-
+        if self.instance.pk and not self.is_bound:
+            self.fields["version"].initial = (
+                self.instance.updated_at.isoformat()
+            )
         periods = Period.objects.filter(
             deleted_at__isnull=True
         )
@@ -341,6 +519,8 @@ class GoalForm(GoalScopeMixin, forms.ModelForm):
         self._apply_scope(user)
         self._configure_evidence_count()
         self._configure_items()
+        _set_text_limit(self.fields["item"], 150, "El ítem")
+        _set_text_limit(self.fields["unit"], 50, "La unidad")
 
 
 class GoalInlineForm(GoalScopeMixin, forms.ModelForm):
@@ -351,6 +531,7 @@ class GoalInlineForm(GoalScopeMixin, forms.ModelForm):
         fields = [
             "employee",
             "position",
+            "measurement_item",
             "item",
             "objective_value",
             "required_evidence_count",
@@ -363,6 +544,8 @@ class GoalInlineForm(GoalScopeMixin, forms.ModelForm):
         self._apply_scope(user)
         self._configure_evidence_count()
         self._configure_items()
+        _set_text_limit(self.fields["item"], 150, "El ítem")
+        _set_text_limit(self.fields["unit"], 50, "La unidad")
 
 
 class MeasurementItemForm(BootstrapMixin, forms.ModelForm):
@@ -391,7 +574,36 @@ class MeasurementItemForm(BootstrapMixin, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._apply_bootstrap()
+        _set_text_limit(self.fields["code"], 20, "El código")
+        _set_text_limit(self.fields["name"], 150, "El nombre")
+        _set_text_limit(
+            self.fields["description"],
+            300,
+            "La descripción",
+        )
+        _set_text_limit(self.fields["unit"], 50, "La unidad")
+        _set_text_limit(self.fields["formula"], 500, "La fórmula")
 
         self.fields["formula"].help_text = (
-            "Obligatoria para ítems porcentuales."
+            "Para ítems porcentuales, fórmula admitida: "
+            + SUPPORTED_PERCENTAGE_FORMULA
         )
+
+    def clean(self):
+        data = super().clean()
+        if data.get("item_type") == MeasurementItem.ItemType.PERCENTAGE:
+            expression = canonical_percentage_formula(data.get("formula"))
+            unchanged_legacy = (
+                self.instance.pk
+                and self.instance.item_type == MeasurementItem.ItemType.PERCENTAGE
+                and data.get("formula") == self.instance.formula
+            )
+            if expression is None and not unchanged_legacy:
+                self.add_error(
+                    "formula",
+                    "La fórmula porcentual admitida actualmente es: "
+                    + SUPPORTED_PERCENTAGE_FORMULA,
+                )
+            elif expression is not None:
+                data["formula"] = expression
+        return data

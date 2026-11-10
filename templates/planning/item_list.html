@@ -1,10 +1,12 @@
 
 {% extends "planning/base.html" %}
-{% load i18n %}
+{% load i18n static %}
 
 {% block titulo %}Catálogo de Ítems - La Serena{% endblock %}
 
 {% block estilos %}
+<link rel="stylesheet" href="{% static 'css/sgr_module_guides.css' %}?v=1">
+<link rel="stylesheet" href="{% static 'css/sgr_autoayuda_dos_modulos.css' %}?v=1">
 <style>
     /* Diseño basado en Indicadores */
 
@@ -135,6 +137,7 @@
         overflow-y: auto;
     }
 </style>
+{% include "planning/_fullwidth_styles.html" %}
 {% endblock %}
 
 
@@ -167,6 +170,10 @@
 
     </section>
 
+
+    {% include "shared/_sgr_autoayuda.html" with help_namespace="planning" help_section="items" only %}
+    <div class="sgr-guide-layout">
+      <div class="sgr-guide-main">
 
     <!-- TARJETAS DE RESUMEN -->
     <div class="row g-3 mb-4">
@@ -208,10 +215,9 @@
 
 
     <!-- TARJETA PRINCIPAL -->
-    <section class="section-card p-3 p-lg-4">
+    <section class="section-card p-3 p-lg-4 sgr-catalog">
 
-        <div class="d-flex flex-wrap justify-content-between
-                    align-items-center gap-3 mb-4">
+        <div class="catalog-toolbar">
 
             <div>
                 <h2 class="h5 fw-bold mb-1">
@@ -223,9 +229,10 @@
                 </p>
             </div>
 
+            <div class="catalog-toolbar-actions">
             {% if perms.planning_measurements.add_measurementitem %}
             <a href="{% url 'planning:item_create' %}"
-               class="btn btn-outline-secondary btn-sm">
+               class="btn btn-success">
 
                 <i class="bi bi-plus-lg me-1"></i>
                 Nuevo ítem
@@ -233,11 +240,13 @@
             </a>
             {% endif %}
 
+                <a href="{% url 'planning:item_export' %}?{{ request.GET.urlencode }}" class="btn btn-outline-secondary"><i class="bi bi-file-earmark-excel me-1"></i>Exportar Excel</a>
+            </div>
         </div>
 
 
         <!-- FILTROS -->
-        <form method="get" class="row g-3 align-items-end mb-4">
+        <form method="get" class="row g-3 align-items-end catalog-filters">
 
             <div class="col-12 col-md-4">
 
@@ -335,7 +344,7 @@
 
 
         <!-- REGISTROS POR PÁGINA -->
-        {% include "planning/_page_size.html" %}
+        {% include "shared/catalog_page_size.html" with page_size_url="planning:set_page_size" page_size_id="items" page_size_options=page_size_options page_size=page_size %}
 
 
         <!-- TABLA DE ÍTEMS -->
@@ -403,20 +412,20 @@
 
                                 <a href="{% url 'planning:item_detail' item.pk %}"
                                    class="btn btn-outline-secondary btn-sm">
-                                    Ver
+                                    <i class="bi bi-eye me-1" aria-hidden="true"></i>Ver
                                 </a>
 
                                 {% if perms.planning_measurements.change_measurementitem %}
 
                                 <a href="{% url 'planning:item_edit' item.pk %}"
                                    class="btn btn-outline-secondary btn-sm">
-                                    Editar
+                                    <i class="bi bi-pencil-square me-1" aria-hidden="true"></i>Modificar
                                 </a>
 
                                 {% endif %}
 
 
-                                {% if user.is_superuser and item.is_active %}
+                                {% if perms.planning_measurements.delete_measurementitem and item.is_active %}
 
                                 <form method="post"
                                       action="{% url 'planning:item_delete' item.pk %}"
@@ -427,7 +436,7 @@
 
                                     <button type="submit"
                                             class="btn btn-outline-danger btn-sm">
-                                        Desactivar
+                                        <i class="bi bi-trash3 me-1" aria-hidden="true"></i>Eliminar
                                     </button>
 
                                 </form>
@@ -460,65 +469,13 @@
         </div>
 
 
-        <!-- PAGINACIÓN -->
-        <div class="d-flex flex-wrap justify-content-between
-                    align-items-center gap-2 mt-3">
-
-            <p class="text-muted small mb-0">
-                {{ page.paginator.count }} ítem(s) encontrado(s)
-            </p>
-
-            {% if page.has_other_pages %}
-
-            <nav aria-label="Paginación de ítems">
-
-                <ul class="pagination pagination-sm mb-0">
-
-                    {% if page.has_previous %}
-                    <li class="page-item">
-
-                        <a class="page-link"
-                           href="?{% if querystring %}{{ querystring }}&amp;{% endif %}page={{ page.previous_page_number }}">
-
-                            Anterior
-
-                        </a>
-
-                    </li>
-                    {% endif %}
-
-                    <li class="page-item disabled">
-
-                        <span class="page-link">
-                            Página {{ page.number }}
-                            de {{ page.paginator.num_pages }}
-                        </span>
-
-                    </li>
-
-                    {% if page.has_next %}
-                    <li class="page-item">
-
-                        <a class="page-link"
-                           href="?{% if querystring %}{{ querystring }}&amp;{% endif %}page={{ page.next_page_number }}">
-
-                            Siguiente
-
-                        </a>
-
-                    </li>
-                    {% endif %}
-
-                </ul>
-
-            </nav>
-
-            {% endif %}
-
-        </div>
+        {% include "shared/catalog_pagination.html" with page_data=page page_querystring=querystring item_label="ítems" %}
 
     </section>
 
+      </div>{# sgr-guide-main #}
+      {% include "planning/_side_guide.html" with section="items" only %}
+    </div>{# sgr-guide-layout #}
 </div>
 
 
@@ -546,11 +503,11 @@ document.addEventListener("DOMContentLoaded", function () {
             const itemName = form.dataset.itemName;
 
             Swal.fire({
-                title: "¿Desactivar ítem?",
-                text: `Se desactivará "${itemName}". No estará disponible para nuevas metas, pero se conservará en las anteriores.`,
+                title: "¿Eliminar ítem?",
+                text: `Se Eliminara "${itemName}". No estará disponible para nuevas metas, pero se conservará en las anteriores.`,
                 icon: "warning",
                 showCancelButton: true,
-                confirmButtonText: "Sí, desactivar",
+                confirmButtonText: "Sí, eliminar",
                 cancelButtonText: "Cancelar",
                 confirmButtonColor: "#a50012",
                 cancelButtonColor: "#6c757d",
@@ -597,4 +554,5 @@ document.addEventListener("DOMContentLoaded", function () {
 </script>
 {% endif %}
 
+<script src="{% static 'js/sgr_autoayuda_dos_modulos.js' %}?v=1" defer></script>
 {% endblock %}

@@ -1,0 +1,897 @@
+{% load static %}
+
+<style>
+    .global-sidebar {
+        position: fixed;
+        top: 74px;
+        left: 0;
+        bottom: 0;
+        z-index: 1040;
+        width: 285px;
+        background: #fff;
+        border: 0;
+        border-right: 1px solid #dfe3e8;
+        border-radius: 0;
+        box-shadow: 0 18px 36px rgba(24, 33, 44, .18);
+        display: flex;
+        flex-direction: column;
+        overflow: visible;
+        transform: translateX(-110%);
+        transition: transform .25s ease;
+    }
+
+    .global-sidebar-close {
+        position: absolute;
+        top: 50%;
+        right: -30px;
+        z-index: 2;
+        align-items: center;
+        background: #fff;
+        border: 0;
+        border: 1px solid #dfe3e8;
+        border-left: 0;
+        border-radius: 0 .8rem .8rem 0;
+        box-shadow: 3px 0 8px rgba(24, 33, 44, .08);
+        color: #9d0b18;
+        display: flex;
+        font-size: 1.65rem;
+        height: 74px;
+        justify-content: center;
+        padding: 0;
+        transform: translateY(-50%);
+        width: 30px;
+    }
+
+    .global-sidebar-close:hover,
+    .global-sidebar-close:focus {
+        background: #fff;
+        color: #750710;
+        outline: 0;
+    }
+
+    .global-sidebar-heading {
+        color: #343434;
+        font-size: 1.45rem;
+        font-weight: 700;
+        margin: 0;
+        padding: 1rem 2.7rem 1rem 1.2rem;
+    }
+
+    .global-sidebar-heading::after {
+        background: #980b17;
+        content: "";
+        display: block;
+        height: 3px;
+        margin-top: .75rem;
+        width: 100%;
+    }
+
+    .global-sidebar .global-sidebar-home-link {
+        font-family: inherit;
+        font-size: 1.1rem;
+        font-weight: 700;
+        letter-spacing: -.02em;
+        line-height: 1.2;
+        margin: .45rem 0 .35rem;
+    }
+
+    .global-sidebar-scroll {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        padding-bottom: 1rem;
+    }
+
+    .global-sidebar.is-open {
+        transform: translateX(0);
+    }
+
+    .global-sidebar-accordion {
+        --bs-accordion-bg: transparent;
+        --bs-accordion-border-color: transparent;
+        --bs-accordion-btn-padding-x: 1.05rem;
+        --bs-accordion-btn-padding-y: .85rem;
+        --bs-accordion-btn-color: #2d2d2d;
+        --bs-accordion-btn-bg: transparent;
+        --bs-accordion-btn-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 16 16'%3E%3Cpath fill='currentColor' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3C/svg%3E");
+        --bs-accordion-btn-icon-width: .9rem;
+        --bs-accordion-btn-active-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 16 16'%3E%3Cpath fill='currentColor' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3E%3C/svg%3E");
+        --bs-accordion-border-width: 0;
+    }
+
+    .global-sidebar .accordion-item {
+        border: 0;
+        background: transparent;
+    }
+
+    .global-sidebar .accordion-header {
+        margin: 0;
+    }
+
+    .global-sidebar .accordion-button {
+        background: transparent;
+        border: 0;
+        border-bottom: 0;
+        border-radius: 0;
+        color: #2e2e2e;
+        font-size: 1.1rem;
+        font-weight: 700;
+        letter-spacing: -.02em;
+        padding: 1rem 1rem .8rem;
+        box-shadow: none;
+        text-align: left;
+    }
+
+    .global-sidebar .accordion-button:focus,
+    .global-sidebar .accordion-button:active {
+        box-shadow: none;
+    }
+
+    .global-sidebar .accordion-button:not(.collapsed) {
+        background: transparent;
+        color: #2e2e2e;
+        box-shadow: none;
+    }
+
+    .global-sidebar .accordion-button::after {
+        display: none;
+    }
+
+    .global-sidebar .accordion-button > span::after {
+        color: #777;
+        content: "\f282";
+        font-family: "bootstrap-icons";
+        font-size: .75rem;
+        margin-left: .55rem;
+    }
+
+    .global-sidebar .accordion-button.collapsed > span::after {
+        content: "\f285";
+    }
+
+    .global-sidebar .accordion-body {
+        background: #f8f8f8;
+        padding: 0.8rem 0.8rem 0.4rem;
+    }
+
+    .global-sidebar-link {
+        display: flex;
+        align-items: center;
+        gap: .7rem;
+        padding: .78rem .8rem;
+        margin: 0.1rem 0;
+        border-radius: .45rem;
+        color: #2d2d2d;
+        text-decoration: none;
+        font-size: .98rem;
+        font-weight: 600;
+        transition: all .15s ease;
+    }
+
+    .global-sidebar-link:hover {
+        background: #fbe2e5;
+        color: #a60a17;
+        text-decoration: none;
+    }
+
+    .global-sidebar-link.active {
+        background: #b00818;
+        color: #fff;
+        font-weight: 600;
+        box-shadow: none;
+    }
+
+    .global-sidebar-link.active:hover {
+        color: #fff;
+    }
+
+    .global-sidebar-link i {
+        width: 1.15rem;
+        text-align: center;
+        font-size: 1rem;
+    }
+
+    .global-sidebar-link.active i {
+        color: #fff;
+    }
+
+    @media (max-width: 991.98px) {
+        .global-sidebar {
+            width: min(285px, 88vw);
+        }
+    }
+
+    @media (max-width: 767.98px) {
+        .global-sidebar { top: 70px; }
+    }
+
+    /* Personalización visual compartida del menú de los tres trazos. */
+    .global-sidebar {
+        background: #fff;
+        isolation: isolate;
+    }
+    .global-sidebar-heading {
+        flex: 0 0 auto;
+        background: #fff;
+        position: relative;
+        z-index: 1;
+        padding-bottom: .68rem;
+        font-size: 1.16rem;
+    }
+    .global-sidebar .global-sidebar-home-link {
+        flex: 0 0 auto;
+        position: relative;
+        z-index: 1;
+        background: #fff;
+        margin: .15rem .8rem .4rem;
+        font-size: .96rem;
+    }
+    /* Menú de base: deja visible una fotografía grande, sin desplazarla.
+       Al desplegar apartados, el listado se extiende sólo hasta la MITAD
+       de esa fotografía y el resto de accesos se recorre con scroll. */
+    .global-sidebar {
+        --sgr-menu-base-height: clamp(205px, 27vh, 275px);
+        --sgr-menu-expanded-height: clamp(300px, 52vh, 480px);
+        --sgr-photo-top: 335px;
+    }
+    .global-sidebar-scroll {
+        position: relative;
+        z-index: 2;
+        flex: 0 0 var(--sgr-menu-base-height);
+        height: var(--sgr-menu-base-height);
+        min-height: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+        background: #fff;
+        overscroll-behavior: contain;
+        scrollbar-width: thin;
+        scrollbar-color: #aeb6c4 #f6f7fa;
+        transition: flex-basis .26s ease, height .26s ease,
+                    background-color .26s ease, box-shadow .26s ease;
+    }
+    .global-sidebar-scroll::-webkit-scrollbar { width: 7px; }
+    .global-sidebar-scroll::-webkit-scrollbar-thumb {
+        background: #adb7c5;
+        border-radius: 999px;
+    }
+    .global-sidebar-scroll::-webkit-scrollbar-track { background: #f3f5fa; }
+
+    /* La fotografía permanece fija detrás de los enlaces desplegados. */
+    .global-sidebar-photo {
+        position: absolute;
+        z-index: 0;
+        top: var(--sgr-photo-top);
+        bottom: 0;
+        left: 0;
+        right: 0;
+        min-height: 0;
+        overflow: hidden;
+        border-top: 1px solid #e5eaf2;
+        background-color: #e9eef6;
+        background-image: url("{% static 'img/sgr_inicio/lateral_manana.webp' %}");
+        background-repeat: no-repeat;
+        background-position: center 45%;
+        background-size: cover;
+        pointer-events: none;
+    }
+    .global-sidebar-photo::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(180deg, rgba(255,255,255,.10), transparent 36%);
+    }
+    body[data-sgr-time="tarde"] .global-sidebar-photo {
+        background-image: url("{% static 'img/sgr_inicio/lateral_tarde.webp' %}");
+    }
+    body[data-sgr-time="noche"] .global-sidebar-photo {
+        background-image: url("{% static 'img/sgr_inicio/lateral_noche.webp' %}");
+    }
+
+    /* Al expandir: cristal esmerilado sobre la mitad SUPERIOR de la foto.
+       Lo demás sigue nítido y la barra permite bajar por todos los módulos. */
+    .global-sidebar.is-menu-expanded .global-sidebar-scroll {
+        flex-basis: var(--sgr-menu-expanded-height);
+        height: var(--sgr-menu-expanded-height);
+        background: rgba(255,255,255,.79);
+        -webkit-backdrop-filter: blur(10px);
+        backdrop-filter: blur(10px);
+        box-shadow: 0 8px 18px rgba(18,27,52,.11);
+    }
+    .global-sidebar-accordion .accordion-button {
+        background: #fff;
+        font-size: .97rem;
+        padding: .72rem .85rem;
+    }
+    .global-sidebar-accordion .accordion-button:not(.collapsed) {
+        background: #fff6f7;
+        color: #870d1c;
+    }
+    .global-sidebar-accordion .accordion-body { background: #f8f9fc; }
+    .global-sidebar-accordion .global-sidebar-link {
+        font-size: .89rem;
+        padding: .58rem .72rem;
+    }
+    .global-sidebar-accordion .accordion-button > span { min-width: 0; }
+    .global-sidebar.is-menu-expanded .global-sidebar-accordion .accordion-button {
+        background: rgba(255,255,255,.65);
+    }
+    .global-sidebar.is-menu-expanded .global-sidebar-accordion .accordion-button:not(.collapsed) {
+        background: rgba(255,239,243,.81);
+    }
+    .global-sidebar.is-menu-expanded .global-sidebar-accordion .accordion-body {
+        background: rgba(249,250,253,.68);
+    }
+    .global-sidebar.is-menu-expanded .global-sidebar-accordion .global-sidebar-link:hover {
+        background: rgba(255,231,235,.90);
+    }
+
+    @media (max-height: 650px) {
+        .global-sidebar { --sgr-menu-base-height: clamp(155px, 33vh, 210px); }
+        .global-sidebar-heading { padding-top: .65rem; }
+    }
+    @media (max-height: 440px) {
+        .global-sidebar { --sgr-menu-base-height: 120px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .global-sidebar-scroll { transition: none; }
+    }
+
+    /* SGR: lateral SIEMPRE visible en escritorio. No se coloca encima de los módulos. */
+    @media (min-width: 992px) {
+        body:has(.global-sidebar) { --sgr-sidebar-width: 270px; }
+        body:has(.global-sidebar) .global-page-content { padding-left: var(--sgr-sidebar-width); }
+        body:has(.global-sidebar) .site-footer { margin-left: var(--sgr-sidebar-width); }
+        .global-sidebar {
+            width: var(--sgr-sidebar-width, 270px);
+            top: var(--sgr-topbar-height, 82px);
+            transform: translateX(0) !important;
+            box-shadow: 2px 0 12px rgba(23,34,50,.08);
+            z-index: 1020;
+        }
+        .global-sidebar-close, .global-sidebar-toggle, .global-sidebar-backdrop {
+            display: none !important;
+        }
+        body.sidebar-open { overflow: auto !important; }
+    }
+    /* En móvil/tablet el menú conserva el botón y la apertura original. */
+    @media (max-width: 991.98px) {
+        .global-sidebar { top: var(--sgr-topbar-height, 74px); }
+        body .global-page-content { padding-left: 0; }
+    }
+    /* La imagen permanece en su sitio al expandir cualquier apartado. */
+    .global-sidebar-photo {
+        background-position: center center;
+        filter: none;
+    }
+    /* Difuminado REAL sobre la mitad SUPERIOR de la foto, no un velo sólido.
+       Está en la propia foto, por lo que se ve también detrás de submenús. */
+    .global-sidebar-photo::after {
+        content: "";
+        position: absolute;
+        top: 0; left: 0; right: 0; height: 50%;
+        background: rgba(247,249,254,.34);
+        -webkit-backdrop-filter: blur(19px) saturate(.8);
+        backdrop-filter: blur(19px) saturate(.8);
+        opacity: 0;
+        transition: opacity .20s ease;
+        pointer-events: none;
+    }
+    .global-sidebar.is-menu-expanded .global-sidebar-photo::after { opacity: 1; }
+    /* Fondo claro con suficiente transparencia para apreciar el faro difuminado. */
+    .global-sidebar.is-menu-expanded .global-sidebar-scroll {
+        background: rgba(251,252,255,.20);
+        -webkit-backdrop-filter: blur(10px);
+        backdrop-filter: blur(10px);
+    }
+    .global-sidebar.is-menu-expanded .global-sidebar-accordion .accordion-button {
+        background: rgba(255,255,255,.16);
+    }
+    .global-sidebar.is-menu-expanded .global-sidebar-accordion .accordion-button:not(.collapsed) {
+        background: rgba(255,241,246,.35);
+    }
+    .global-sidebar.is-menu-expanded .global-sidebar-accordion .accordion-body {
+        background: rgba(250,252,255,.18);
+    }
+    .global-sidebar.is-menu-expanded .global-sidebar-accordion .global-sidebar-link:not(.active) {
+        background: rgba(255,255,255,.28);
+    }
+    .global-sidebar.is-menu-expanded .global-sidebar-accordion .global-sidebar-link:hover:not(.active) {
+        background: rgba(255,238,242,.88);
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .global-sidebar-photo::after { transition: none; }
+    }
+
+
+    /* SGR · LATERAL SIN COSTURAS. Mismo comportamiento que la simulación aprobada.
+       Una única foto cubre TODA la columna; una capa blanca se desvanece progresivamente
+       de arriba a abajo. Nunca se reubica la imagen al abrir menús. */
+    .global-sidebar {
+        --sgr-nav-top: 65px;
+        --sgr-frame-height: 325px;
+        overflow: hidden;
+        isolation: isolate;
+        background: #fff;
+    }
+    .global-sidebar-heading { display: none !important; }
+    .global-sidebar-photo {
+        position: absolute;
+        inset: 0;
+        width: 100%; height: 100%;
+        min-height: 0;
+        z-index: 0;
+        border: 0 !important;
+        background-color: #e9edf6;
+        background-position: center bottom !important;
+        background-size: cover !important;
+        background-repeat: no-repeat;
+        filter: none !important;
+        transform: none !important;
+        pointer-events: none;
+    }
+    /* NO usar una foto distinta y desenfocada por mitades: causaba una línea horizontal. */
+    .global-sidebar-photo::before { display: none !important; }
+    .global-sidebar-photo::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background-image: none !important;
+        background: linear-gradient(to bottom,
+            #fff 0%,
+            rgba(255,255,255,.995) 17%,
+            rgba(255,255,255,.98) 27%,
+            rgba(255,255,255,.92) 39%,
+            rgba(255,255,255,.66) 50%,
+            rgba(255,255,255,.30) 60%,
+            rgba(255,255,255,0) 76%) !important;
+        clip-path: none !important;
+        -webkit-clip-path: none !important;
+        filter: none !important;
+        opacity: 1 !important;
+        transition: none !important;
+    }
+    /* El cristal es la capa continua DETRÁS de los enlaces: borra el corte recto. */
+    .global-sidebar-glass {
+        position: absolute;
+        z-index: 1;
+        inset: 0 0 auto;
+        height: var(--sgr-frame-height);
+        pointer-events: none;
+        background: linear-gradient(to bottom,
+            #fff 0%, #fff 48%,
+            rgba(255,255,255,.93) 65%,
+            rgba(255,255,255,.60) 84%,
+            rgba(255,255,255,.12) 100%);
+        -webkit-backdrop-filter: blur(5px);
+        backdrop-filter: blur(5px);
+        -webkit-mask-image: linear-gradient(to bottom,
+            #000 0%, #000 70%, rgba(0,0,0,.65) 85%, transparent 100%);
+        mask-image: linear-gradient(to bottom,
+            #000 0%, #000 70%, rgba(0,0,0,.65) 85%, transparent 100%);
+        transition: height .28s ease, backdrop-filter .25s ease;
+    }
+    .global-sidebar.is-menu-expanded .global-sidebar-glass {
+        -webkit-backdrop-filter: blur(11px);
+        backdrop-filter: blur(11px);
+    }
+    .global-sidebar .global-sidebar-home-link {
+        position: relative; z-index: 4;
+        display: flex; align-items: center;
+        min-height: 44px;
+        margin: 9px 12px 7px;
+        padding: 9px 13px;
+        width: auto;
+        border-radius: 9px;
+        background: transparent;
+        font-size: .98rem;
+        font-weight: 700;
+    }
+    .global-sidebar .global-sidebar-home-link.active,
+    .global-sidebar .global-sidebar-home-link.active:hover {
+        background: #ad0918; color: #fff;
+    }
+    .global-sidebar-scroll,
+    .global-sidebar.is-menu-expanded .global-sidebar-scroll {
+        position: absolute;
+        z-index: 3;
+        top: var(--sgr-nav-top);
+        left: 0; right: 0; bottom: auto;
+        width: 100%;
+        height: calc(var(--sgr-frame-height) - var(--sgr-nav-top));
+        max-height: calc(100% - var(--sgr-nav-top));
+        min-height: 0;
+        flex: none !important;
+        margin: 0;
+        padding: 0 0 46px;
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        background: transparent !important;
+        box-shadow: none !important;
+        -webkit-backdrop-filter: none !important;
+        backdrop-filter: none !important;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(145,152,171,.66) transparent;
+        transition: none;
+        /* El borde inferior del contenido se desvanece, sin afectar a la foto. */
+        -webkit-mask-image: linear-gradient(to bottom,black 0%,black calc(100% - 16px),rgba(0,0,0,.72) 100%);
+        mask-image: linear-gradient(to bottom,black 0%,black calc(100% - 16px),rgba(0,0,0,.72) 100%);
+    }
+    .global-sidebar-accordion .accordion-button,
+    .global-sidebar.is-menu-expanded .global-sidebar-accordion .accordion-button {
+        background: transparent !important;
+        font-size: .97rem;
+        padding: .61rem .85rem;
+    }
+    .global-sidebar-accordion .accordion-button:not(.collapsed),
+    .global-sidebar.is-menu-expanded .global-sidebar-accordion .accordion-button:not(.collapsed) {
+        color: #8f1021;
+        background: rgba(255,240,244,.38) !important;
+    }
+    .global-sidebar-accordion .accordion-body,
+    .global-sidebar.is-menu-expanded .global-sidebar-accordion .accordion-body {
+        background: transparent !important;
+        padding: .28rem .5rem .45rem;
+    }
+    .global-sidebar-accordion .global-sidebar-link,
+    .global-sidebar.is-menu-expanded .global-sidebar-accordion .global-sidebar-link:not(.active) {
+        padding: .51rem .67rem;
+        font-size: .89rem;
+        background: rgba(255,255,255,.22);
+    }
+    .global-sidebar-accordion .global-sidebar-link.active {
+        background: #b00818;
+    }
+    .global-sidebar-accordion .global-sidebar-link:hover:not(.active) {
+        background: rgba(255,245,247,.76) !important;
+    }
+    .global-sidebar-scroll::-webkit-scrollbar { width: 6px; }
+    .global-sidebar-scroll::-webkit-scrollbar-thumb {
+        background: rgba(145,152,171,.66); border-radius: 10px;
+    }
+    .global-sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
+    @media (max-height: 600px) {
+        .global-sidebar .global-sidebar-home-link { margin-top: 5px; margin-bottom: 4px; }
+        .global-sidebar-accordion .accordion-button { padding-top: .49rem; padding-bottom: .49rem; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .global-sidebar-glass, .global-sidebar-scroll { transition: none !important; }
+    }
+
+    /* CORRECCIÓN REAL: el pseudo-elemento antiguo medía 50% y recortaba la foto.
+       El desenfoque y la transición comparten ahora la altura COMPLETA. */
+    .global-sidebar-glass {
+        display: none !important;
+        -webkit-backdrop-filter: none !important;
+        backdrop-filter: none !important;
+    }
+    .global-sidebar-photo {
+        inset: 0 !important;
+        top: 0 !important;
+        height: 100% !important;
+        background-position: center bottom !important;
+        background-size: cover !important;
+        border: none !important;
+    }
+    /* Copia desenfocada de la MISMA foto, que se fusiona con la foto nítida. */
+    .global-sidebar-photo::before {
+        display: block !important;
+        content: "";
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 1;
+        background-image: inherit;
+        background-repeat: no-repeat;
+        background-size: cover;
+        background-position: center bottom;
+        filter: blur(5px);
+        -webkit-mask-image: linear-gradient(to bottom,
+            #000 0%, #000 18%, rgba(0,0,0,.78) 32%,
+            rgba(0,0,0,.34) 48%, transparent 67%);
+        mask-image: linear-gradient(to bottom,
+            #000 0%, #000 18%, rgba(0,0,0,.78) 32%,
+            rgba(0,0,0,.34) 48%, transparent 67%);
+        pointer-events: none;
+    }
+    /* Velo blanco degradado de extremo a extremo, sin rectángulos ni cortes. */
+    .global-sidebar-photo::after,
+    .global-sidebar.is-menu-expanded .global-sidebar-photo::after {
+        content: "";
+        position: absolute;
+        inset: 0 !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        width: 100% !important;
+        height: 100% !important;  /* ANTES heredaba 50%: causaba la línea */
+        display: block !important;
+        z-index: 2;
+        background-image: none !important;
+        background: linear-gradient(to bottom,
+            #fff 0%, #fff 11%, rgba(255,255,255,.98) 21%,
+            rgba(255,255,255,.90) 31%, rgba(255,255,255,.64) 42%,
+            rgba(255,255,255,.36) 52%, rgba(255,255,255,.12) 63%,
+            rgba(255,255,255,0) 76%) !important;
+        clip-path: none !important;
+        -webkit-clip-path: none !important;
+        -webkit-backdrop-filter: none !important;
+        backdrop-filter: none !important;
+        filter: none !important;
+        -webkit-mask-image: none !important;
+        mask-image: none !important;
+        opacity: 1 !important;
+        pointer-events: none !important;
+    }
+    /* No se crea un nuevo panel al abrir módulos. Sólo crece la lista. */
+    .global-sidebar-scroll,
+    .global-sidebar.is-menu-expanded .global-sidebar-scroll {
+        background: transparent !important;
+        -webkit-backdrop-filter: none !important;
+        backdrop-filter: none !important;
+        box-shadow: none !important;
+    }
+</style>
+
+<aside class="global-sidebar" aria-label="Navegación general del sistema">
+    <button type="button" class="global-sidebar-close" aria-label="Cerrar menú">
+        <i class="bi bi-chevron-left"></i>
+    </button>
+    <h2 class="global-sidebar-heading">Navegación</h2>
+        <a class="global-sidebar-link global-sidebar-home-link{% if request.resolver_match.url_name == 'home' or request.resolver_match.url_name == 'index' %} active{% endif %}" href="{% url 'home' %}"><i class="bi bi-house-door"></i> Inicio</a>
+        <div class="global-sidebar-glass" aria-hidden="true"></div>
+        <div class="global-sidebar-scroll">
+            <div class="accordion global-sidebar-accordion" id="globalSidebarAccordion">
+        {% if perms.planning_measurements.view_period or perms.planning_measurements.view_goal or perms.planning_measurements.view_measurementitem %}
+        <div class="accordion-item">
+            <h2 class="accordion-header">
+                <button class="accordion-button {% if request.resolver_match.namespace != 'planning' %}collapsed{% endif %}"
+                        type="button"
+                        data-bs-toggle="collapse"
+                        data-bs-target="#globalSidebarPlanning"
+                        aria-expanded="{% if request.resolver_match.namespace == 'planning' %}true{% else %}false{% endif %}"
+                        aria-controls="globalSidebarPlanning">
+                    <span class="d-inline-flex align-items-center gap-2"><i class="bi bi-calendar3"></i> Planificación</span>
+                </button>
+            </h2>
+            <div id="globalSidebarPlanning" class="accordion-collapse collapse {% if request.resolver_match.namespace == 'planning' %}show{% endif %}">
+                <div class="accordion-body">
+                    {% if perms.planning_measurements.view_period %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'period_list' or request.resolver_match.url_name == 'period_create' or request.resolver_match.url_name == 'period_edit' %} active{% endif %}" href="{% url 'planning:period_list' %}"><i class="bi bi-calendar-range"></i> Períodos</a>
+                    {% endif %}
+                    {% if perms.planning_measurements.view_goal %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'goal_list' or request.resolver_match.url_name == 'goal_create' or request.resolver_match.url_name == 'goal_edit' %} active{% endif %}" href="{% url 'planning:goal_list' %}"><i class="bi bi-bullseye"></i> Metas</a>
+                    {% endif %}
+                    {% if perms.planning_measurements.view_measurementitem %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'item_list' or request.resolver_match.url_name == 'item_create' or request.resolver_match.url_name == 'item_edit' or request.resolver_match.url_name == 'item_detail' %} active{% endif %}" href="{% url 'planning:item_list' %}"><i class="bi bi-card-checklist"></i> Ítems</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if perms.organization.view_employee or perms.accounts.view_userprofile or perms.organization.view_delegation or perms.organization.view_positionfunction or perms.organization.view_organizationrole %}
+        <div class="accordion-item">
+            <h2 class="accordion-header">
+                <button class="accordion-button {% if request.resolver_match.namespace != 'organization' %}collapsed{% endif %}"
+                        type="button"
+                        data-bs-toggle="collapse"
+                        data-bs-target="#globalSidebarOrganization"
+                        aria-expanded="{% if request.resolver_match.namespace == 'organization' %}true{% else %}false{% endif %}"
+                        aria-controls="globalSidebarOrganization">
+                    <span class="d-inline-flex align-items-center gap-2"><i class="bi bi-people"></i> Organización</span>
+                </button>
+            </h2>
+            <div id="globalSidebarOrganization" class="accordion-collapse collapse {% if request.resolver_match.namespace == 'organization' %}show{% endif %}">
+                <div class="accordion-body">
+                    {% if perms.organization.view_employee %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'employee_list' %} active{% endif %}" href="{% url 'organization:employee_list' %}"><i class="bi bi-person-lines-fill"></i> Empleados</a>
+                    {% endif %}
+                    {% if perms.accounts.view_userprofile %}
+                    {% endif %}
+                    {% if perms.organization.view_delegation %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'delegation_list' %} active{% endif %}" href="{% url 'organization:delegation_list' %}"><i class="bi bi-building"></i> Delegaciones</a>
+                    {% endif %}
+                    {% if perms.organization.view_positionfunction %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'position_list' %} active{% endif %}" href="{% url 'organization:position_list' %}"><i class="bi bi-person-badge"></i> Cargos y funciones</a>
+                    {% endif %}
+                    {% if perms.organization.view_organizationrole %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'role_list' %} active{% endif %}" href="{% url 'organization:role_list' %}"><i class="bi bi-shield-lock"></i> Roles y permisos</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        {% if perms.citizen_registry.view_citizen or perms.registration_validation.view_activity or perms.registration_validation.view_evidence or perms.registration_validation.view_validation or perms.registration_validation.view_service or perms.registration_validation.view_activitytype or perms.registration_validation.view_attentiontype or perms.registration_validation.view_subattention or perms.registration_validation.view_attentionentry %}
+        <div class="accordion-item">
+            <h2 class="accordion-header">
+                <button class="accordion-button {% if request.resolver_match.namespace != 'registration' and request.resolver_match.namespace != 'citizen_registry' %}collapsed{% endif %}"
+                        type="button"
+                        data-bs-toggle="collapse"
+                        data-bs-target="#globalSidebarRegistration"
+                        aria-expanded="{% if request.resolver_match.namespace == 'registration' or request.resolver_match.namespace == 'citizen_registry' %}true{% else %}false{% endif %}"
+                        aria-controls="globalSidebarRegistration">
+                    <span class="d-inline-flex align-items-center gap-2"><i class="bi bi-clipboard-check"></i> Registro y validación</span>
+                </button>
+            </h2>
+            <div id="globalSidebarRegistration" class="accordion-collapse collapse {% if request.resolver_match.namespace == 'registration' or request.resolver_match.namespace == 'citizen_registry' %}show{% endif %}">
+                <div class="accordion-body">
+                    {% if perms.citizen_registry.view_citizen %}
+                        <a class="global-sidebar-link{% if request.resolver_match.namespace == 'citizen_registry' %} active{% endif %}" href="{% url 'citizen_registry:list' %}"><i class="bi bi-people"></i> Ciudadanos</a>
+                    {% endif %}
+
+                    {% if perms.registration_validation.view_activity %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'activity_list' or request.resolver_match.url_name == 'activity_create' or request.resolver_match.url_name == 'activity_update' %} active{% endif %}" href="{% url 'registration:activity_list' %}"><i class="bi bi-list-check"></i> Actividades</a>
+                    {% endif %}
+                    {% if perms.registration_validation.view_evidence %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'evidence_list' or request.resolver_match.url_name == 'evidence_create' or request.resolver_match.url_name == 'evidence_update' %} active{% endif %}" href="{% url 'registration:evidence_list' %}"><i class="bi bi-file-earmark-check"></i> Evidencias</a>
+                    {% endif %}
+                    {% if perms.registration_validation.view_validation %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'validation_list' or request.resolver_match.url_name == 'validation_create' or request.resolver_match.url_name == 'validation_update' %} active{% endif %}" href="{% url 'registration:validation_list' %}"><i class="bi bi-patch-check"></i> Validaciones</a>
+                    {% endif %}
+                    {% if perms.registration_validation.view_service %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'service_list' or request.resolver_match.url_name == 'service_create' or request.resolver_match.url_name == 'service_update' %} active{% endif %}" href="{% url 'registration:service_list' %}"><i class="bi bi-gear-wide-connected"></i> Servicios</a>
+                    {% endif %}
+                    {% if perms.registration_validation.view_activitytype %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'activity_type_list' or request.resolver_match.url_name == 'activity_type_create' or request.resolver_match.url_name == 'activity_type_update' %} active{% endif %}" href="{% url 'registration:activity_type_list' %}"><i class="bi bi-clipboard-data"></i> Tipos de actividad</a>
+                    {% endif %}
+                    {% if perms.registration_validation.view_attentiontype %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'attention_type_list' %} active{% endif %}" href="{% url 'registration:attention_type_list' %}"><i class="bi bi-card-checklist"></i> Tipos de atención</a>
+                    {% endif %}
+                    {% if perms.registration_validation.view_subattention %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'sub_attention_list' %} active{% endif %}" href="{% url 'registration:sub_attention_list' %}"><i class="bi bi-diagram-3"></i> Subatenciones</a>
+                    {% endif %}
+                    {% if perms.registration_validation.view_attentionentry %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'attention_entry_list' %} active{% endif %}" href="{% url 'registration:attention_entry_list' %}"><i class="bi bi-journal-check"></i> Ingreso de atención</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if perms.municipal_events.view_municipalevent or perms.municipal_events.view_campaign or perms.municipal_events.view_enrollment or perms.municipal_events.view_giftdelivery %}
+        <div class="accordion-item">
+            <h2 class="accordion-header">
+                <button class="accordion-button {% if request.resolver_match.namespace != 'municipal_events' %}collapsed{% endif %}"
+                        type="button" data-bs-toggle="collapse" data-bs-target="#globalSidebarCampaigns"
+                        aria-expanded="{% if request.resolver_match.namespace == 'municipal_events' %}true{% else %}false{% endif %}"
+                        aria-controls="globalSidebarCampaigns">
+                    <span class="d-inline-flex align-items-center gap-2"><i class="bi bi-gift"></i> Eventos y campañas</span>
+                </button>
+            </h2>
+            <div id="globalSidebarCampaigns" class="accordion-collapse collapse {% if request.resolver_match.namespace == 'municipal_events' %}show{% endif %}">
+                <div class="accordion-body">
+                    {% if perms.municipal_events.view_municipalevent %}
+                    <a class="global-sidebar-link{% if request.resolver_match.url_name == 'event_list' %} active{% endif %}" href="{% url 'municipal_events:event_list' %}"><i class="bi bi-calendar-event"></i> Eventos</a>
+                    {% endif %}
+                    {% if perms.municipal_events.view_campaign %}
+                    <a class="global-sidebar-link{% if request.resolver_match.url_name == 'campaign_list' %} active{% endif %}" href="{% url 'municipal_events:campaign_list' %}"><i class="bi bi-gift"></i> Campañas</a>
+                    {% endif %}
+                    {% if perms.municipal_events.view_enrollment %}
+                    <a class="global-sidebar-link{% if request.resolver_match.url_name == 'enrollment_list' %} active{% endif %}" href="{% url 'municipal_events:enrollment_list' %}"><i class="bi bi-person-vcard"></i> Inscripciones</a>
+                    {% endif %}
+                    {% if perms.municipal_events.view_giftdelivery and perms.municipal_events.view_enrollment %}
+                    <a class="global-sidebar-link{% if request.resolver_match.url_name == 'delivery_list' %} active{% endif %}" href="{% url 'municipal_events:delivery_list' %}"><i class="bi bi-box-seam"></i> Entregas</a>
+                    {% endif %}
+                    {% if perms.municipal_events.view_enrollment %}
+                    <a class="global-sidebar-link{% if request.resolver_match.url_name == 'history_list' %} active{% endif %}" href="{% url 'municipal_events:history_list' %}"><i class="bi bi-clock-history"></i> Historial</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if perms.monitoring_traceability.view_indicator or perms.monitoring_traceability.view_commitment or perms.monitoring_traceability.view_audit %}
+        <div class="accordion-item">
+            <h2 class="accordion-header">
+                <button class="accordion-button {% if request.resolver_match.namespace != 'monitoring' %}collapsed{% endif %}"
+                        type="button"
+                        data-bs-toggle="collapse"
+                        data-bs-target="#globalSidebarMonitoring"
+                        aria-expanded="{% if request.resolver_match.namespace == 'monitoring' %}true{% else %}false{% endif %}"
+                        aria-controls="globalSidebarMonitoring">
+                    <span class="d-inline-flex align-items-center gap-2"><i class="bi bi-graph-up-arrow"></i> Monitoreo y trazabilidad</span>
+                </button>
+            </h2>
+            <div id="globalSidebarMonitoring" class="accordion-collapse collapse {% if request.resolver_match.namespace == 'monitoring' %}show{% endif %}">
+                <div class="accordion-body">
+                    {% if perms.monitoring_traceability.view_indicator %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'executive_dashboard' %} active{% endif %}" href="{% url 'monitoring:executive_dashboard' %}"><i class="bi bi-speedometer2"></i> Resumen ejecutivo</a>
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'activity_control' %} active{% endif %}" href="{% url 'monitoring:activity_control' %}"><i class="bi bi-person-check"></i> Control de actividad</a>
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'indicator_list' %} active{% endif %}" href="{% url 'monitoring:indicator_list' %}"><i class="bi bi-bar-chart-line"></i> Indicadores</a>
+                    {% endif %}
+                    {% if perms.monitoring_traceability.view_commitment %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'commitment_list' %} active{% endif %}" href="{% url 'monitoring:commitment_list' %}"><i class="bi bi-people"></i> Compromisos</a>
+                    {% endif %}
+                    {% if perms.monitoring_traceability.view_audit %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'audit_list' %} active{% endif %}" href="{% url 'monitoring:audit_list' %}"><i class="bi bi-shield-check"></i> Auditoría</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if user.is_superuser %}
+        <div class="accordion-item">
+            <h2 class="accordion-header">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#globalSidebarAccess" aria-expanded="false" aria-controls="globalSidebarAccess">
+                    <span class="d-inline-flex align-items-center gap-2"><i class="bi bi-shield-lock"></i> Accesos</span>
+                </button>
+            </h2>
+            <div id="globalSidebarAccess" class="accordion-collapse collapse">
+                <div class="accordion-body">
+                    <a class="global-sidebar-link{% if request.resolver_match.url_name == 'access_home' %} active{% endif %}" href="{% url 'accounts:access_home' %}"><i class="bi bi-sliders"></i> Gestión de accesos</a>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+            </div>
+        </div>
+    <div class="global-sidebar-photo" role="presentation" aria-hidden="true"></div>
+</aside>
+<script>
+/* Horario institucional único, disponible en todos los módulos del SGR. */
+(function () {
+    'use strict';
+    function actualizarTemaSGR() {
+        let hora;
+        try {
+            const partes = new Intl.DateTimeFormat('es-CL', {
+                timeZone: 'America/Santiago', hour: '2-digit', hourCycle: 'h23'
+            }).formatToParts(new Date());
+            const valor = partes.find(p => p.type === 'hour');
+            hora = valor ? Number(valor.value) : new Date().getHours();
+        } catch (error) {
+            hora = new Date().getHours();
+        }
+        document.body.dataset.sgrTime = hora >= 7 && hora < 14 ? 'manana'
+            : hora >= 14 && hora < 19 ? 'tarde' : 'noche';
+    }
+    actualizarTemaSGR();
+    window.setInterval(actualizarTemaSGR, 60000);
+    document.addEventListener('visibilitychange', function () {
+        if (!document.hidden) actualizarTemaSGR();
+    });
+})();
+</script>
+
+<script>
+/* Ajusta sólo la altura del listado; la fotografía nunca se mueve. */
+(function () {
+    'use strict';
+    const sidebar = document.querySelector('.global-sidebar');
+    if (!sidebar) return;
+    const list = sidebar.querySelector('.global-sidebar-scroll');
+    const accordion = sidebar.querySelector('#globalSidebarAccordion');
+    const home = sidebar.querySelector('.global-sidebar-home-link');
+    if (!list || !accordion || !home) return;
+
+    function refresh() {
+        const H = sidebar.clientHeight;
+        const topbar = document.querySelector('.topbar');
+        if (topbar) {
+            document.documentElement.style.setProperty('--sgr-topbar-height',
+                Math.round(topbar.getBoundingClientRect().height) + 'px');
+        }
+        if (!H) return;
+        const top = Math.max(47, Math.round(home.getBoundingClientRect().bottom - sidebar.getBoundingClientRect().top + 3));
+        // El alto del área navegable NO depende de cuántos grupos estén abiertos:
+        // así no salta el límite del scroll al desplegar un acordeón.
+        const desired = Math.max(top + 105, Math.min(H - 12, Math.round(H * .63)));
+        sidebar.style.setProperty('--sgr-nav-top', top + 'px');
+        sidebar.style.setProperty('--sgr-frame-height', desired + 'px');
+        const expanded = Boolean(accordion.querySelector('.accordion-collapse.show, .accordion-collapse.collapsing'));
+        sidebar.classList.toggle('is-menu-expanded', expanded);
+    }
+    accordion.addEventListener('show.bs.collapse', refresh);
+    accordion.addEventListener('shown.bs.collapse', refresh);
+    accordion.addEventListener('hide.bs.collapse', refresh);
+    accordion.addEventListener('hidden.bs.collapse', refresh);
+    window.addEventListener('resize', refresh, {passive: true});
+    window.addEventListener('load', refresh);
+    // La plantilla ya puede abrir el acordeón del módulo activo en el primer render.
+    refresh();
+})();
+</script>

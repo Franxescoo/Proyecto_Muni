@@ -1,0 +1,32 @@
+/* Guías de uso de Planificación y Eventos y Campañas.
+   No afecta a ningún otro módulo. */
+.sgr-guide-layout {min-width:0;}
+.sgr-guide-main {min-width:0;}
+.sgr-guide-rail {display:none; min-width:0;}
+.sgr-guide-card {
+  background:#fff; border:1px solid #e8e4e5; border-top:4px solid #a60a17;
+  border-radius:14px; padding:17px 16px; box-shadow:0 6px 20px rgba(40,21,29,.07);
+  color:#263344; line-height:1.6;
+}
+.sgr-guide-card-heading {display:flex; align-items:flex-start; gap:10px;}
+.sgr-guide-icon {display:inline-grid; place-items:center; flex:none; width:34px; height:34px;
+  background:#fff0f1; color:#a60a17; border-radius:10px; font-size:18px;}
+.sgr-guide-card-text {min-width:0; overflow-wrap:anywhere;}
+.sgr-guide-card-text .fw-bold {font-size:14px;}
+.sgr-guide-card-text p {font-size:12px; margin:10px 0;}
+.sgr-guide-card-text p:last-child {margin-bottom:0;}
+.sgr-guide-help-trigger {position:fixed; right:16px; bottom:26px; z-index:1030;
+  background:#a60a17; color:#fff; border:1px solid #fff; border-radius:99px;
+  font-size:13px; font-weight:700; padding:10px 17px;
+  box-shadow:0 6px 24px rgba(73,24,32,.25);}
+.sgr-guide-help-trigger:hover,.sgr-guide-help-trigger:focus-visible {background:#780916; color:#fff;}
+.sgr-guide-offcanvas {--bs-offcanvas-width:min(92vw,370px);}
+.sgr-guide-offcanvas .offcanvas-header {background:#a60a17; color:#fff;}
+.sgr-guide-offcanvas .btn-close {filter:invert(1) grayscale(100%) brightness(200%);}
+.sgr-guide-offcanvas .offcanvas-body {background:#f7f8fa; padding:16px;}
+.sgr-guide-offcanvas .sgr-guide-card {box-shadow:none;}
+@media (min-width: 1500px) {
+  .sgr-guide-layout {display:grid; grid-template-columns:minmax(0,1fr) 254px; gap:18px; align-items:start;}
+  .sgr-guide-rail {display:block; position:sticky; top:90px; align-self:start;}
+  .sgr-guide-help-mobile {display:none;}
+}

@@ -49,11 +49,20 @@ SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "django-insecure-solo-desarrollo-loc
 DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() == "true"
 
 ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",")
+    if origin.strip()
+]
 
 
 # Application definition
 
 INSTALLED_APPS = [
+    "institutional_mail",
+    "daphne",
+    "channels",
+    "websocket",
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -66,6 +75,9 @@ INSTALLED_APPS = [
     'registration_validation',
     'core',
     'accounts',
+    'citizen_requests',
+    'citizen_registry',
+    'municipal_events',
 ]
 
 MIDDLEWARE = [
@@ -74,8 +86,10 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'accounts.delegation_context.ActiveDelegationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'monitoring_traceability.audit_context.AuditUserMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -90,12 +104,21 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'accounts.delegation_context.session_context',
             ],
         },
     },
 ]
 
 WSGI_APPLICATION = 'config.wsgi.application'
+ASGI_APPLICATION = "config.asgi.application"
+
+
+CHANNEL_LAYERS = {
+"default": {
+"BACKEND": "channels.layers.InMemoryChannelLayer",
+}
+}
 
 
 # Database
@@ -126,9 +149,10 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/6.1/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'es-cl'
 
-TIME_ZONE = 'UTC'
+# Los instantes se conservan en UTC (USE_TZ=True); Django los muestra en hora local chilena.
+TIME_ZONE = 'America/Santiago'
 
 USE_I18N = True
 
@@ -138,7 +162,7 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [
     BASE_DIR / "static",
@@ -150,11 +174,42 @@ MEDIA_ROOT = BASE_DIR / "media"
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
 
-MAILERS = {
-    'default': {
-        'BACKEND': 'django.core.mail.backends.console.EmailBackend',
-    },
-}
+EMAIL_HOST = os.getenv("EMAIL_HOST", "")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True").lower() == "true"
+EMAIL_USE_SSL = os.getenv("EMAIL_USE_SSL", "False").lower() == "true"
+DEFAULT_FROM_EMAIL = os.getenv(
+    "DEFAULT_FROM_EMAIL",
+    EMAIL_HOST_USER or "webmaster@localhost",
+)
+MAILER_BACKEND = os.getenv("MAILER_BACKEND", "django").lower()
+PHPMAILER_PHP = os.getenv("PHPMAILER_PHP", "php")
+PHPMAILER_SCRIPT = os.getenv(
+    "PHPMAILER_SCRIPT",
+    str(BASE_DIR / "phpmailer" / "send_recovery.php"),
+)
+PASSWORD_RESET_DOMAIN = os.getenv("PASSWORD_RESET_DOMAIN", "127.0.0.1:8000")
+PASSWORD_RESET_SITE_NAME = os.getenv(
+    "PASSWORD_RESET_SITE_NAME",
+    "Municipalidad de La Serena",
+)
+PASSWORD_RESET_USE_HTTPS = (
+    os.getenv("PASSWORD_RESET_USE_HTTPS", "False").lower() == "true"
+)
+
+PUBLIC_PORTAL_URL = os.getenv("PUBLIC_PORTAL_URL", "").strip()
+
+if os.getenv("DJANGO_BEHIND_PROXY", "False").lower() == "true":
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# Use SMTP when credentials are configured; keep console output for local
+# development without credentials.
+if EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "home"

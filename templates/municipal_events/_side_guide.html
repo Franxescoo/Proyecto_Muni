@@ -1,0 +1,20 @@
+{# Solo presentación. Ayuda visible a la derecha en escritorio; offcanvas en pantallas estrechas. #}
+<aside class="sgr-guide-rail" aria-label="Instrucciones de Eventos y Campañas">
+  {% include "municipal_events/_context_guidance.html" %}
+</aside>
+<div class="sgr-guide-help-mobile">
+  <button type="button" class="btn sgr-guide-help-trigger"
+          data-bs-toggle="offcanvas" data-bs-target="#sgrEventsHelp"
+          aria-controls="sgrEventsHelp" aria-label="Abrir instrucciones de Eventos y Campañas">
+    <i class="bi bi-lightbulb me-1" aria-hidden="true"></i> Ayuda
+  </button>
+  <div class="offcanvas offcanvas-end sgr-guide-offcanvas" tabindex="-1"
+       id="sgrEventsHelp" aria-labelledby="sgrEventsHelpTitle">
+    <div class="offcanvas-header">
+      <h5 class="offcanvas-title" id="sgrEventsHelpTitle">Guía de Eventos y Campañas</h5>
+      <button type="button" class="btn-close" data-bs-dismiss="offcanvas"
+              aria-label="Cerrar instrucciones"></button>
+    </div>
+    <div class="offcanvas-body">{% include "municipal_events/_context_guidance.html" %}</div>
+  </div>
+</div>

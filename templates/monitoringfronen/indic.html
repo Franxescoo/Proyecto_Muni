@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load i18n %}
+{% load audit_extras %}
 
 {% block titulo %}Indicadores · Monitoreo y trazabilidad{% endblock %}
 
@@ -34,19 +35,7 @@
 {% block top_links %}{% endblock %}
 
 {% block sidebar %}
-<aside class="workspace-sidebar" aria-label="Navegación de monitoreo y trazabilidad">
-    <div class="workspace-sidebar-header">
-        <i class="bi bi-list" aria-hidden="true"></i>
-        <strong>Monitoreo y<br>trazabilidad</strong>
-        <i class="bi bi-chevron-down" aria-hidden="true"></i>
-    </div>
-    <nav class="nav flex-column">
-        <a class="nav-link" href="{% url 'home' %}"><i class="bi bi-house-door"></i><span>Inicio</span></a>
-        <a class="nav-link active" href="{% url 'monitoring:indicator_list' %}"><i class="bi bi-bar-chart-line"></i><span>Indicadores</span></a>
-        <a class="nav-link" href="{% url 'monitoring:commitment_list' %}"><i class="bi bi-handshake"></i><span>Compromisos</span></a>
-        <a class="nav-link" href="{% url 'monitoring:audit_list' %}"><i class="bi bi-shield-check"></i><span>Auditoría</span></a>
-    </nav>
-</aside>
+    {% include "shared/global_sidebar.html" %}
 {% endblock %}
 
 {% block contenido %}
@@ -84,7 +73,7 @@
                 <tbody>
                 {% for indicator in indicators %}
                 <tr>
-                    <td class="fw-semibold">{{ indicator.goal.item|default:"Sin meta" }}</td>
+                    <td class="fw-semibold">{{ indicator.goal.item|visual_es|default:"Sin meta" }}</td>
                     <td>{{ indicator.employee|default:"Sin responsable" }}</td>
                     <td class="text-end">{{ indicator.expected_value|default_if_none:"—" }}</td>
                     <td class="text-end">{{ indicator.approved_evidences|default:"0" }}</td>

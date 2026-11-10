@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+
+{% block titulo %}Mi perfil · Sistema de Gestión de Resultados{% endblock %}
+
+{% block contenido %}
+<div class="container-fluid py-4">
+    <div class="profile-page-header mb-4">
+        <div>
+            <div class="small text-uppercase fw-semibold opacity-75 mb-2">Cuenta personal</div>
+            <h1 class="h3 mb-2 fw-bold">Mi perfil</h1>
+            <p class="mb-0">Consulta la información asociada a tu cuenta y a tu registro de empleado.</p>
+        </div>
+        <i class="bi bi-person-vcard display-5 opacity-75" aria-hidden="true"></i>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-12 col-lg-4">
+            <section class="profile-card profile-identity h-100">
+                <div class="profile-avatar">
+                    {% if profile and profile.profile_photo %}
+                        <img src="{{ profile.profile_photo.url }}" alt="Foto de {{ user.get_full_name|default:user.username }}">
+                    {% else %}
+                        <i class="bi bi-person-fill" aria-hidden="true"></i>
+                    {% endif %}
+                </div>
+                <h2 class="h4 mb-1">{{ user.get_full_name|default:user.username }}</h2>
+                <p class="text-muted mb-3">@{{ user.username }}</p>
+                <span class="profile-status">
+                    <i class="bi bi-check-circle me-1" aria-hidden="true"></i>
+                    {% if user.is_active %}Cuenta activa{% else %}Cuenta inactiva{% endif %}
+                </span>
+                <form method="post" action="{% url 'accounts:profile_password_request' %}" class="mt-4 w-100">
+                    {% csrf_token %}
+                    <button class="btn btn-outline-danger w-100" type="submit">
+                        <i class="bi bi-key me-1" aria-hidden="true"></i>Cambiar contraseña
+                    </button>
+                </form>
+                <small class="text-muted mt-2">Te enviaremos un código de 6 dígitos a tu correo institucional.</small>
+            </section>
+        </div>
+
+        <div class="col-12 col-lg-8">
+            <section class="profile-card h-100">
+                <h2 class="h5 fw-bold mb-3"><i class="bi bi-person-lines-fill me-2"></i>Información de contacto</h2>
+                <div class="row g-3">
+                    <div class="col-12 col-md-6">
+                        <span class="profile-label">Correo electrónico</span>
+                        <div>{{ user.email|default:"No registrado" }}</div>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <span class="profile-label">Teléfono</span>
+                        <div>{% if profile and profile.phone %}{{ profile.phone }}{% else %}No registrado{% endif %}</div>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <span class="profile-label">RUT</span>
+                        <div>{% if employee and employee.rut %}{{ employee.rut }}{% else %}No registrado{% endif %}</div>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <span class="profile-label">Dirección</span>
+                        <div>{% if employee and employee.address %}{{ employee.address }}{% else %}No registrada{% endif %}</div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <div class="col-12">
+            <section class="profile-card">
+                <h2 class="h5 fw-bold mb-3"><i class="bi bi-briefcase me-2"></i>Información laboral</h2>
+                {% if employee %}
+                    <div class="row g-3">
+                        <div class="col-12 col-md-4"><span class="profile-label">Nombre registrado</span><div>{{ employee.name }}</div></div>
+                        <div class="col-12 col-md-4"><span class="profile-label">Cargo</span><div>{{ employee.position.position_name|default:"No asignado" }}</div></div>
+                        <div class="col-12 col-md-4"><span class="profile-label">Delegación principal</span><div>{{ employee.delegation.name|default:"No asignada" }}</div></div>
+                        <div class="col-12"><span class="profile-label">Funciones</span><div>{{ employee.roles|default:"No registradas" }}</div></div>
+                    </div>
+                {% else %}
+                    <p class="text-muted mb-0">Tu cuenta aún no está vinculada a un empleado.</p>
+                {% endif %}
+            </section>
+        </div>
+
+        <div class="col-12">
+            <section class="profile-card">
+                <h2 class="h5 fw-bold mb-3"><i class="bi bi-shield-check me-2"></i>Roles y delegaciones</h2>
+                <div class="row g-3">
+                    <div class="col-12 col-lg-6">
+                        <span class="profile-label">Roles asignados</span>
+                        <div class="d-flex flex-wrap gap-2">
+                            {% for group in user.groups.all %}
+                                <span class="profile-chip">{{ group.name }}</span>
+                            {% empty %}
+                                <span class="text-muted">Sin roles asignados</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="col-12 col-lg-6">
+                        <span class="profile-label">Delegaciones autorizadas</span>
+                        <div class="d-flex flex-wrap gap-2">
+                            {% if user.is_superuser %}
+                                <span class="profile-chip">Acceso global</span>
+                            {% else %}
+                                {% for delegation in authorized_delegations %}
+                                    <span class="profile-chip">{{ delegation.name }}</span>
+                                {% empty %}
+                                    <span class="text-muted">Sin delegaciones autorizadas</span>
+                                {% endfor %}
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block estilos %}
+<style>
+    .profile-page-header { align-items: center; background: linear-gradient(135deg, #a60a17, #760710); border-radius: .75rem; color: #fff; display: flex; justify-content: space-between; padding: 1.5rem 1.75rem; }
+    .profile-page-header p { color: rgba(255,255,255,.78); }
+    .profile-card { background: #fff; border: 1px solid #e5e7eb; border-radius: .75rem; box-shadow: 0 4px 16px rgba(24,33,44,.06); padding: 1.35rem; }
+    .profile-identity { align-items: center; display: flex; flex-direction: column; justify-content: center; text-align: center; }
+    .profile-avatar { align-items: center; background: #fff1f2; border: 4px solid #f4d5d9; border-radius: 50%; color: #a60a17; display: flex; height: 108px; justify-content: center; margin-bottom: 1rem; overflow: hidden; width: 108px; }
+    .profile-avatar img { height: 100%; object-fit: cover; width: 100%; }
+    .profile-avatar i { font-size: 3.5rem; }
+    .profile-status { background: #dff5e9; border-radius: 999px; color: #147a49; font-size: .82rem; font-weight: 600; padding: .4rem .75rem; }
+    .profile-label { color: #6c757d; display: block; font-size: .75rem; font-weight: 700; margin-bottom: .25rem; text-transform: uppercase; }
+    .profile-chip { background: #fbe5e8; border-radius: 999px; color: #8b0a18; font-size: .82rem; font-weight: 600; padding: .4rem .7rem; }
+    @media (max-width: 575.98px) { .profile-page-header { padding: 1.25rem; } .profile-page-header > i { display: none; } }
+</style>
+{% endblock %}

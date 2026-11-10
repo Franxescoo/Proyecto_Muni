@@ -245,7 +245,7 @@ class ActivityAdmin(
 
 
 @admin.action(
-    description="Archive selected evidence",
+    description="Archivar las evidencias seleccionadas",
     permissions=["change"],
 )
 def archive_evidences(
