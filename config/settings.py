@@ -117,13 +117,13 @@ ASGI_APPLICATION = "config.asgi.application"
 # Utiliza Redis en producción (AWS) para manejar las conexiones del chat
 if os.getenv("DJANGO_DEBUG", "True").lower() == "false":
     CHANNEL_LAYERS = {
-        "default": {
-            "BACKEND": "channels_redis.core.RedisChannelLayer",
-            "CONFIG": {
-                "hosts": [("127.0.0.1", 6379)],
-            },
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [{"address": "redis://127.0.0.1:6379", "socket_timeout": 30}],
         },
-    }
+    },
+}
 else:
     CHANNEL_LAYERS = {
         "default": {
