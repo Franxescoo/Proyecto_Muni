@@ -6,3 +6,5 @@ requests==2.32.4
 Pillow==12.3.0
 PyMySQL==1.2.3
 gunicorn
+channels>=4.0.0
+daphne>=4.0.0
