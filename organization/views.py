@@ -1,6 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
-from django.contrib.auth.models import Group
+from django.contrib.auth.models import Group, Permission
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db.models import Count, Q
@@ -29,6 +29,7 @@ from .models import (
     OrganizationRole,
 )
 from .exports import role_delegations, workbook_response
+from .permission_labels import catalog_permission_queryset
 
 from django.db import IntegrityError
 
@@ -437,10 +438,17 @@ def _role_target(user, pk, action):
 
 @login_required
 def role_list(request):
+    catalog_permission_ids = catalog_permission_queryset(
+        Permission.objects.all()
+    ).values("pk")
     groups = _role_groups_for(request.user).select_related(
         "organization_role__delegation"
     ).annotate(
-        permission_count=Count("permissions", distinct=True),
+        permission_count=Count(
+            "permissions",
+            filter=Q(permissions__pk__in=catalog_permission_ids),
+            distinct=True,
+        ),
         account_count=Count("user", distinct=True),
         employee_count=Count("assigned_employees", distinct=True),
     ).order_by("name")
