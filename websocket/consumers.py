@@ -38,3 +38,28 @@ class ChatConsumer(JsonWebsocketConsumer):
             self.close(code=4403)
             return
         self.send_json(event["payload"])
+
+
+class UpdatesConsumer(JsonWebsocketConsumer):
+    group_name = "sgr_updates"
+
+    def connect(self):
+        user = self.scope.get("user")
+        if user is None or not user.is_authenticated:
+            self.close()
+            return
+        async_to_sync(self.channel_layer.group_add)(
+            self.group_name, self.channel_name
+        )
+        self.accept()
+
+    def disconnect(self, close_code):
+        async_to_sync(self.channel_layer.group_discard)(
+            self.group_name, self.channel_name
+        )
+
+    def receive_json(self, content, **kwargs):
+        return
+
+    def data_changed(self, event):
+        self.send_json(event["payload"])
