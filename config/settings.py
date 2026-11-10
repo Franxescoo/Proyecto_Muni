@@ -114,11 +114,23 @@ WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = "config.asgi.application"
 
 
-CHANNEL_LAYERS = {
-"default": {
-"BACKEND": "channels.layers.InMemoryChannelLayer",
-}
-}
+# Utiliza Redis en producción (AWS) para manejar las conexiones del chat
+if os.getenv("DJANGO_DEBUG", "True").lower() == "false":
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {
+                "hosts": [("127.0.0.1", 6379)],
+            },
+        },
+    }
+else:
+    # Usado para pruebas locales en tu computadora
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer",
+        },
+    }
 
 
 # Database

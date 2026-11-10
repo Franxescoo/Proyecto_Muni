@@ -93,3 +93,4 @@ yarl==1.24.5
 holidays==0.106
 PyMySQL==1.2.3
 openpyxl==3.1.5
+channels-redis>=4.2.0
