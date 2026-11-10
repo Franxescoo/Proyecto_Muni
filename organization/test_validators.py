@@ -17,6 +17,6 @@ class RutValidationTests(SimpleTestCase):
         with self.assertRaises(ValidationError):
             normalize_rut("123456789-5")
 
-    def test_rejects_letters(self):
-        with self.assertRaises(ValidationError):
-            normalize_rut("12.345.678-K")
+    def test_accepts_uppercase_and_lowercase_k_verifier(self):
+        self.assertEqual(normalize_rut("16.666.666-K"), "16.666.666-K")
+        self.assertEqual(normalize_rut("16.666.666-k"), "16.666.666-K")

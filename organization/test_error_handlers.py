@@ -40,3 +40,11 @@ class ErrorHandlerTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Volver al inicio")
         self.assertContains(response, "Volver atrás")
+
+    @override_settings(DEBUG=True)
+    def test_unknown_module_route_uses_custom_template_in_debug(self):
+        response = self.client.get("/planning/ruta-que-no-existe/")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertTemplateUsed(response, "organization/errors/404.html")
+        self.assertContains(response, "Página no encontrada", status_code=404)

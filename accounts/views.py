@@ -18,6 +18,7 @@ from .forms import (
     AccountEditForm,
     EmployeeForm,
     PositionForm,
+    ProfilePhotoForm,
     ProfileLinkForm,
 )
 from .models import UserProfile
@@ -41,6 +42,19 @@ RECOVERY_SESSION_KEY = "password_recovery_code_id"
 RECOVERY_VERIFIED_SESSION_KEY = "password_recovery_verified"
 PROFILE_PASSWORD_SESSION_KEY = "profile_password_code_id"
 PROFILE_PASSWORD_VERIFIED_SESSION_KEY = "profile_password_verified"
+
+
+def _get_or_create_user_profile(user):
+    profile = UserProfile.objects.filter(
+        user=user,
+        deleted_at__isnull=True,
+    ).first()
+    if profile:
+        return profile
+    return UserProfile.objects.create(
+        user=user,
+        employee_code=f"user-{user.pk}",
+    )
 
 
 def password_reset_request(request):
@@ -155,6 +169,48 @@ def profile_view(request):
                 if profile
                 else []
             ),
+        },
+    )
+
+
+@login_required
+def profile_photo_update(request):
+    profile = _get_or_create_user_profile(request.user)
+
+    form = ProfilePhotoForm(
+        request.POST or None,
+        request.FILES or None,
+        instance=profile,
+    )
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "Tu foto de perfil se actualizó correctamente.")
+        return redirect("accounts:profile")
+
+    profile_context = (
+        UserProfile.objects
+        .filter(pk=profile.pk)
+        .select_related(
+            "employee",
+            "employee__delegation",
+            "employee__position",
+            "delegation",
+        )
+        .prefetch_related("authorized_delegations", "user__groups")
+        .first()
+    )
+    return render(
+        request,
+        "accounts/profile.html",
+        {
+            "profile": profile_context,
+            "employee": profile_context.employee if profile_context else None,
+            "authorized_delegations": (
+                profile_context.authorized_delegations.all()
+                if profile_context
+                else []
+            ),
+            "photo_form": form,
         },
     )
 

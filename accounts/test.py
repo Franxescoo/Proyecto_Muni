@@ -1,11 +1,14 @@
 
 from datetime import date
+from io import BytesIO
 import re
 
+from PIL import Image
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
 from django.core.management import call_command
 from django.core import mail
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.test import override_settings
 from django.urls import reverse
@@ -620,3 +623,41 @@ class ProfilePasswordChangeTests(TestCase):
         self.assertNotContains(response, 'name="rut"')
         self.assertNotContains(response, 'name="address"')
         self.assertContains(response, "Cambiar contraseña")
+
+    def test_profile_photo_can_be_updated_by_owner(self):
+        image_buffer = BytesIO()
+        Image.new("RGB", (1, 1), color="red").save(image_buffer, format="PNG")
+        image = SimpleUploadedFile(
+            "perfil.png",
+            image_buffer.getvalue(),
+            content_type="image/png",
+        )
+        response = self.client.post(
+            reverse("accounts:profile_photo_update"),
+            {"profile_photo": image},
+        )
+
+        self.assertRedirects(response, reverse("accounts:profile"))
+        self.assertTrue(
+            UserProfile.objects.get(user=self.user).profile_photo.name
+        )
+
+    def test_profile_photo_creates_missing_profile(self):
+        UserProfile.objects.filter(user=self.user).delete()
+        image_buffer = BytesIO()
+        Image.new("RGB", (1, 1), color="blue").save(image_buffer, format="PNG")
+
+        response = self.client.post(
+            reverse("accounts:profile_photo_update"),
+            {
+                "profile_photo": SimpleUploadedFile(
+                    "perfil.png",
+                    image_buffer.getvalue(),
+                    content_type="image/png",
+                )
+            },
+        )
+
+        self.assertRedirects(response, reverse("accounts:profile"))
+        profile = UserProfile.objects.get(user=self.user)
+        self.assertTrue(profile.profile_photo.name)

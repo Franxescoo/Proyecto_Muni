@@ -151,3 +151,11 @@ if settings.DEBUG:
         settings.MEDIA_URL,
         document_root=settings.MEDIA_ROOT,
     )
+
+urlpatterns.append(
+    path(
+        "<path:unmatched_path>",
+        error_views.unknown_route,
+        name="unknown_route",
+    )
+)
