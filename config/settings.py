@@ -121,6 +121,10 @@ if os.getenv("DJANGO_DEBUG", "True").lower() == "false":
             "BACKEND": "channels_redis.core.RedisChannelLayer",
             "CONFIG": {
                 "hosts": [("127.0.0.1", 6379)],
+                "capacity": 1500,
+                "expiry": 60,
+                # Evita el TimeoutError de lectura con asyncio
+                "symmetric_encryption_keys": [SECRET_KEY],
             },
         },
     }
