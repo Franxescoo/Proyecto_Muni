@@ -23,6 +23,32 @@
                         <i class="bi bi-person-fill" aria-hidden="true"></i>
                     {% endif %}
                 </div>
+                <form id="profile-photo-form" method="post" action="{% url 'accounts:profile_photo_update' %}" enctype="multipart/form-data" class="profile-photo-form w-100">
+                    {% csrf_token %}
+                    <label class="btn btn-sm btn-outline-secondary w-100" for="profile-photo-input">
+                        <i class="bi bi-camera me-1" aria-hidden="true"></i>Cambiar foto
+                    </label>
+                    <input id="profile-photo-input" class="visually-hidden" type="file" name="profile_photo" accept="image/jpeg,image/png,image/webp">
+                    <div id="profile-photo-editor" class="profile-photo-editor d-none" aria-label="Editor de foto de perfil">
+                        <div class="profile-photo-canvas-wrap">
+                            <canvas id="profile-photo-canvas" width="320" height="320"></canvas>
+                        </div>
+                        <div class="profile-photo-controls">
+                            <label for="profile-photo-zoom">Tamaño</label>
+                            <input id="profile-photo-zoom" type="range" min="1" max="3" step=".01" value="1">
+                            <label for="profile-photo-x">Posición horizontal</label>
+                            <input id="profile-photo-x" type="range" min="-1" max="1" step=".01" value="0">
+                            <label for="profile-photo-y">Posición vertical</label>
+                            <input id="profile-photo-y" type="range" min="-1" max="1" step=".01" value="0">
+                            <small class="text-muted">Ajusta el encuadre antes de guardar.</small>
+                        </div>
+                    </div>
+                    {% if photo_form and photo_form.profile_photo.errors %}
+                        <div class="text-danger small mt-2">{{ photo_form.profile_photo.errors|striptags }}</div>
+                    {% endif %}
+                    <button id="profile-photo-submit" class="btn btn-sm btn-danger w-100 mt-2" type="submit" disabled>Guardar foto</button>
+                    <small class="text-muted d-block mt-2">JPG, PNG o WebP · máximo 5 MB.</small>
+                </form>
                 <h2 class="h4 mb-1">{{ user.get_full_name|default:user.username }}</h2>
                 <p class="text-muted mb-3">@{{ user.username }}</p>
                 <span class="profile-status">
@@ -123,9 +149,79 @@
     .profile-avatar { align-items: center; background: #fff1f2; border: 4px solid #f4d5d9; border-radius: 50%; color: #a60a17; display: flex; height: 108px; justify-content: center; margin-bottom: 1rem; overflow: hidden; width: 108px; }
     .profile-avatar img { height: 100%; object-fit: cover; width: 100%; }
     .profile-avatar i { font-size: 3.5rem; }
+    .profile-photo-editor { background: #fff8f8; border: 1px solid #f0d9dc; border-radius: .65rem; margin-top: .75rem; padding: .75rem; }
+    .profile-photo-canvas-wrap { background: #252a30; border-radius: 50%; height: 190px; margin: 0 auto .8rem; overflow: hidden; width: 190px; }
+    .profile-photo-canvas-wrap canvas { display: block; height: 100%; width: 100%; }
+    .profile-photo-controls { display: grid; gap: .25rem; text-align: left; }
+    .profile-photo-controls label { color: #596572; font-size: .72rem; font-weight: 700; margin-top: .2rem; }
+    .profile-photo-controls input[type="range"] { accent-color: #a60a17; width: 100%; }
     .profile-status { background: #dff5e9; border-radius: 999px; color: #147a49; font-size: .82rem; font-weight: 600; padding: .4rem .75rem; }
     .profile-label { color: #6c757d; display: block; font-size: .75rem; font-weight: 700; margin-bottom: .25rem; text-transform: uppercase; }
     .profile-chip { background: #fbe5e8; border-radius: 999px; color: #8b0a18; font-size: .82rem; font-weight: 600; padding: .4rem .7rem; }
     @media (max-width: 575.98px) { .profile-page-header { padding: 1.25rem; } .profile-page-header > i { display: none; } }
 </style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const form = document.getElementById("profile-photo-form");
+    const input = document.getElementById("profile-photo-input");
+    const editor = document.getElementById("profile-photo-editor");
+    const canvas = document.getElementById("profile-photo-canvas");
+    const submit = document.getElementById("profile-photo-submit");
+    const zoom = document.getElementById("profile-photo-zoom");
+    const positionX = document.getElementById("profile-photo-x");
+    const positionY = document.getElementById("profile-photo-y");
+    if (!form || !input || !editor || !canvas || !submit || !zoom || !positionX || !positionY) return;
+
+    const context = canvas.getContext("2d");
+    let image = null;
+    let croppedBlob = null;
+
+    function drawPreview() {
+        if (!image) return;
+        const side = Math.min(image.naturalWidth, image.naturalHeight);
+        const scale = Number(zoom.value);
+        const sourceSide = side / scale;
+        const maxX = image.naturalWidth - sourceSide;
+        const maxY = image.naturalHeight - sourceSide;
+        const sourceX = (maxX / 2) + (Number(positionX.value) * maxX / 2);
+        const sourceY = (maxY / 2) + (Number(positionY.value) * maxY / 2);
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(image, sourceX, sourceY, sourceSide, sourceSide, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(function (blob) {
+            croppedBlob = blob;
+        }, "image/jpeg", .9);
+    }
+
+    input.addEventListener("change", function () {
+        const file = input.files[0];
+        if (!file) return;
+        image = new Image();
+        image.onload = function () {
+            zoom.value = "1";
+            positionX.value = "0";
+            positionY.value = "0";
+            editor.classList.remove("d-none");
+            submit.disabled = false;
+            drawPreview();
+        };
+        image.src = URL.createObjectURL(file);
+    });
+
+    [zoom, positionX, positionY].forEach(function (control) {
+        control.addEventListener("input", drawPreview);
+    });
+
+    form.addEventListener("submit", function (event) {
+        if (!croppedBlob || !window.DataTransfer) return;
+        event.preventDefault();
+        const transfer = new DataTransfer();
+        transfer.items.add(new File([croppedBlob], "perfil-recortado.jpg", {type: "image/jpeg"}));
+        input.files = transfer.files;
+        form.submit();
+    });
+});
+</script>
 {% endblock %}

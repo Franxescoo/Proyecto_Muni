@@ -25,6 +25,10 @@ def error_preview(request, error_code):
     )
 
 
+def unknown_route(request, unmatched_path):
+    return page_not_found(request, Http404(unmatched_path))
+
+
 def bad_request(request, exception):
     return render(
         request,

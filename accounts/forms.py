@@ -15,6 +15,7 @@ from organization.permission_labels import (
 from accounts.permissions import allowed_delegation_ids
 from django.db.models import Q
 from django.conf import settings
+from django.core.exceptions import ValidationError
 
 from organization.models import (
     Delegation,
@@ -26,6 +27,26 @@ from .models import UserProfile
 from registration_validation.models import Service
 from planning_measurements.models import MeasurementItem
 from organization.validators import normalize_rut
+
+
+class ProfilePhotoForm(forms.ModelForm):
+    """Permite al usuario actualizar únicamente su propia foto de perfil."""
+
+    class Meta:
+        model = UserProfile
+        fields = ["profile_photo"]
+        labels = {"profile_photo": "Nueva foto de perfil"}
+        widgets = {
+            "profile_photo": forms.ClearableFileInput(
+                attrs={"accept": "image/jpeg,image/png,image/webp"}
+            ),
+        }
+
+    def clean_profile_photo(self):
+        photo = self.cleaned_data.get("profile_photo")
+        if photo and photo.size > 5 * 1024 * 1024:
+            raise ValidationError("La foto no puede superar los 5 MB.")
+        return photo
 
 
 class UsuarioOCorreoAuthenticationForm(AuthenticationForm):

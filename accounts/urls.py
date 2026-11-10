@@ -8,6 +8,11 @@ app_name = "accounts"
 urlpatterns = [
     path("profile/", views.profile_view, name="profile"),
     path(
+        "profile/photo/",
+        views.profile_photo_update,
+        name="profile_photo_update",
+    ),
+    path(
         "profile/password/request/",
         views.profile_password_request,
         name="profile_password_request",

@@ -509,10 +509,10 @@ class EmployeeForm(AccountsEmployeeForm):
         self.apply_bootstrap()
 
         self.fields["rut"].widget.attrs["maxlength"] = "12"
-        self.fields["rut"].widget.attrs["pattern"] = r"[0-9.\-]+"
+        self.fields["rut"].widget.attrs["pattern"] = r"[0-9.\-Kk\s]+"
         self.fields["address"].widget.attrs["maxlength"] = "200"
         self.fields["roles"].widget.attrs["maxlength"] = "1000"
-        self.fields["rut"].widget.attrs["inputmode"] = "numeric"
+        self.fields["rut"].widget.attrs["inputmode"] = "text"
         self.fields["rut"].widget.attrs["autocomplete"] = "off"
 
     def clean_name(self):
