@@ -7,29 +7,40 @@ Integrantes del equipo
 - Lucas Rojas
 - Lucas Godoy
 - Marcos Olivares
-Funcionalidades y alcance de la segunda entrega
-Los seis mantenedores principales solicitados para esta entrega son:
-Mantenedor	Funcionalidades revisadas
-Delegaciones	Crear, consultar, modificar y cambiar estado; búsqueda, filtros y exportación.
-Roles y permisos	Crear, consultar y modificar roles; asignar permisos y delegaciones autorizadas.
-Usuarios	Gestionar cuentas, perfiles, roles, delegaciones autorizadas y estado.
-Ítems	Gestionar los ítems utilizados por la planificación y las metas.
-Tipos de Atención	Gestionar el catálogo de tipos de atención y sus estados.
-Subatenciones	Gestionar las subatenciones y asociarlas a un tipo de atención.
+Funcionalidades y alcance actual
+El sistema incluye mantenedores y módulos para:
+- Organización: delegaciones, funcionarios, cargos, roles y permisos.
+- Cuentas: usuarios, perfiles, roles y delegaciones autorizadas.
+- Ciudadanos y solicitudes ciudadanas.
+- Planificación y mediciones: períodos, metas e ítems.
+- Registro y validación: actividades, evidencias, validaciones,
+  atenciones, servicios y subatenciones.
+- Monitoreo y trazabilidad: indicadores, compromisos y auditoría.
+- Eventos municipales: eventos, ediciones, campañas, beneficiarios,
+  inscripciones, participantes y entregas.
+- Mensajería institucional y chat en tiempo real.
 
-
-Los seis mantenedores fueron revisados manualmente durante el desarrollo; las verificaciones abarcan operaciones habituales, búsquedas, filtros y exportación a Excel según cada pantalla. Los resultados y evidencias concretos se registran en el plan de pruebas, que es un entregable separado.
+Los listados se actualizan automáticamente cuando otro usuario crea, modifica
+o elimina información de negocio. El refresco se realiza mediante WebSockets y
+se aplaza si la persona está escribiendo, tiene un modal abierto o la pestaña
+no está visible.
 
 La aplicación también dispone de inicio y cierre de sesión, identificación de usuario y rol, delegación activa, y un módulo de Ingreso de Atención, que registra información del solicitante, tipo y subatención, delegación, responsable y fecha/hora. El acceso a estas funciones depende de los permisos de la cuenta.
 
 En integración: el flujo de recuperación de contraseña mediante código está a cargo de otro integrante y no se declara terminado hasta que se incorpore y verifique.
 
-Existen además funciones de empleados, cargos y funciones, períodos, metas, actividades, evidencias, validaciones, indicadores, compromisos y auditoría. Su presencia en el repositorio no implica que todas las funcionalidades previstas para entregas posteriores estén finalizadas.
+El acceso a cada función depende de los permisos de la cuenta y del contexto
+de delegación activa. Los cambios de relaciones ManyToMany relevantes también
+publican actualizaciones en tiempo real.
 Tecnologías utilizadas
 - Lenguaje: Python 3.13.
 - Framework: Django 6.1.
+- Servidor ASGI: Daphne 4.2.1.
+- Comunicación en tiempo real: Channels 4.3.2 y WebSockets.
 - Interfaz: plantillas de Django, Bootstrap 5, CSS y JavaScript.
 - Base de datos: SQLite para el entorno local; configuración disponible para MySQL.
+- Channel layer: InMemoryChannelLayer en desarrollo y Redis mediante
+  channels-redis en producción.
 - Configuración: python-dotenv y variables de entorno.
 - Control de versiones: Git y GitHub.
 - Dependencias: requirements.txt (entorno de desarrollo) y requirements-aws.txt (servidor).
@@ -55,6 +66,21 @@ monitoring_traceability — Monitoreo y trazabilidad
 Gestiona indicadores, compromisos, observaciones y auditoría.
 
 Modelos principales: Indicator, Commitment, CommitmentComment y Audit.
+municipal_events — Eventos municipales
+Gestiona eventos, ediciones, campañas, beneficiarios, participantes,
+inscripciones y entregas.
+
+Modelos principales: MunicipalEvent, EventEdition, Campaign, Beneficiary,
+Enrollment, GiftDelivery y EventParticipation.
+citizen_registry — Registro de ciudadanos
+Gestiona ciudadanos, sus datos de contacto, estado y vínculos con solicitudes.
+
+Modelo principal: Citizen. Los registros de CitizenAudit son históricos y no
+disparan refrescos de listados.
+citizen_requests — Solicitudes ciudadanas
+Gestiona solicitudes, seguimiento, asignación y derivación.
+institutional_mail — Mensajería institucional
+Gestiona los mensajes internos y sus estados de lectura y notificación.
 accounts — Cuentas y perfiles
 Gestiona información complementaria de los usuarios, roles asignados, delegaciones autorizadas y el contexto de delegación activa.
 core — Elementos comunes
@@ -97,6 +123,16 @@ python manage.py runserver
 Abrir http://127.0.0.1:8000/ e iniciar sesión con una cuenta habilitada por el equipo. Las operaciones de administración institucional se realizan desde la interfaz propia del SGR, según el rol y los permisos del usuario; no requieren utilizar una cuenta superusuario de Django.
 
 Con DJANGO_DEBUG=False, runserver no sirve automáticamente todos los archivos estáticos; en el despliegue real estos deben publicarse mediante el servicio de archivos estáticos configurado para producción.
+
+Para probar explícitamente la aplicación ASGI y los WebSockets en desarrollo:
+
+```text
+python -m daphne -b 127.0.0.1 -p 8000 config.asgi:application
+```
+
+La ruta de actualizaciones en tiempo real es `/ws/updates/` y la del chat es
+`/ws/chat/`. En desarrollo se usa `InMemoryChannelLayer`, por lo que todas las
+conexiones deben pertenecer al mismo proceso.
 Datos de demostración y usuarios de prueba
 El repositorio contiene un comando de carga de datos para el entorno de pruebas:
 python manage.py seed
@@ -125,7 +161,11 @@ Comprobaciones disponibles en el proyecto:
 python manage.py check
 python manage.py makemigrations --check --dry-run
 python manage.py test
-Para la segunda entrega, el equipo ha comprobado manualmente los seis mantenedores y ha ejecutado pruebas automatizadas. El plan de pruebas en Excel, con sus casos, resultados esperados, resultados obtenidos y evidencias, se entrega por separado.
+python manage.py test websocket
+El proyecto cuenta con pruebas automatizadas y verificaciones manuales de los
+mantenedores y módulos principales. El plan de pruebas en Excel, con sus casos,
+resultados esperados, resultados obtenidos y evidencias, se entrega por
+separado.
 
 Las pruebas que no se hayan ejecutado o las funciones pendientes de integración deben quedar identificadas como tales; no se consideran aprobadas solo por estar documentadas.
 Repositorio y trabajo colaborativo
@@ -133,14 +173,32 @@ El proyecto utiliza Git para conservar el historial de cambios y facilitar el de
 Rama → Commit → Push → Pull Request → Revisión → Merge
 Esto permite organizar el aporte de los integrantes y vincular los cambios con las tareas y los casos de prueba. La versión evaluada debe corresponder al código efectivamente entregado.
 Despliegue y versión de entrega
-El repositorio incluye el flujo .github/workflows/deploy.yml, configurado para actualizar el servidor AWS desde la rama main. Dicho flujo contempla instalar dependencias, ejecutar comprobaciones, aplicar migraciones, recopilar archivos estáticos y reiniciar el servicio.
+El repositorio incluye el flujo `.github/workflows/deploy.yml`, configurado
+para actualizar el servidor AWS desde la rama `main`. Dicho flujo contempla
+instalar dependencias, ejecutar comprobaciones, aplicar migraciones, recopilar
+archivos estáticos y reiniciar el servicio configurado en el servidor.
+
+Para que el chat y las actualizaciones globales funcionen en AWS, el servicio
+de aplicación debe ejecutarse con la aplicación ASGI
+`config.asgi:application`, mediante Daphne o un servidor ASGI equivalente. El
+proxy o balanceador debe aceptar WebSockets y Redis debe estar disponible para
+`channels-redis`. Con `DJANGO_DEBUG=False`, la configuración actual utiliza
+Redis en `redis://127.0.0.1:6379`; si Redis se ejecuta en otro host, esa
+configuración debe ajustarse antes del despliegue.
 
 La existencia del flujo no acredita por sí sola que el despliegue final haya sido verificado. Antes de presentar la entrega, el equipo debe confirmar la versión desplegada y conservar la URL de evaluación y la referencia de commit correspondiente, sin incluir credenciales en la documentación pública.
 
 Las migraciones necesarias se mantienen versionadas dentro de las aplicaciones Django.
 Estado actual y próximos pasos
-- Revisado para la segunda entrega: seis mantenedores, inicio de sesión, perfiles y permisos, y delegación activa; el plan de pruebas y los diagramas se trabajan como entregables separados.
-- Pendiente de integración/verificación: recuperación de contraseña mediante código, a cargo de otro integrante.
-- Por verificar antes de presentar: que el código final, los diagramas, el plan de pruebas y la versión disponible en AWS correspondan al mismo incremento.
-- Tercera entrega: manual detallado de instalación y despliegue, de acuerdo con la planificación del equipo.
-Este README reúne la información del documento original y las actualizaciones de la segunda entrega. No contiene credenciales ni datos personales reales.
+- La aplicación cuenta con actualización global de listados mediante WebSockets
+  para los modelos de negocio conectados a `websocket/live.py`.
+- Las pruebas específicas de esta integración se ejecutan con
+  `python manage.py test websocket`.
+- Antes de presentar una versión en AWS, verificar que el servicio use ASGI,
+  que Redis esté disponible y que el commit desplegado corresponda a la rama 
+  evaluada.
+- Mantener fuera del repositorio las credenciales, claves, archivos `.env` y
+  bases de datos con información privada.
+
+Este README documenta el estado actual del proyecto y no contiene
+credenciales ni datos personales reales.
