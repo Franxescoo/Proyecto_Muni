@@ -140,7 +140,10 @@
         }
         function connect() {
             const scheme = location.protocol === "https:" ? "wss:" : "ws:";
-            try { socket = new WebSocket(scheme + "//" + location.host + "/ws/chat/"); }
+            try { 
+                socket = new WebSocket(scheme + "//" + location.host + "/ws/chat/"); 
+                window.chatSocket = socket; // <--- Expone el socket globalmente
+            }
             catch (error) {
                 connectionStatus("Sin conexión en tiempo real", "bg-danger");
                 scheduleReconnect();
