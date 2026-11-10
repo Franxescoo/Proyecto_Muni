@@ -19,6 +19,7 @@ from .models import (
     MAX_EVIDENCE_FILES,
     MAX_EVIDENCE_TOTAL_SIZE,
     EVIDENCE_ALLOWED_EXTENSIONS,
+    validate_evidence_file_link,
 )
 
 # ---------------------------------------------------------
@@ -44,6 +45,8 @@ class BootstrapMixin:
 def _set_text_limit(field, limit, label):
     """Aplica el límite tanto al formulario como al control HTML."""
     field.widget.attrs["maxlength"] = limit
+    if field.required:
+        field.error_messages["required"] = "Este campo es obligatorio."
     field.validators = [
         validator
         for validator in field.validators
@@ -55,6 +58,12 @@ def _set_text_limit(field, limit, label):
             message=f"{label} no puede superar los {limit} caracteres.",
         )
     )
+
+
+def _set_form_text_limits(form, limits):
+    for field_name, limit, label in limits:
+        _set_text_limit(form.fields[field_name], limit, label)
+
 
 # ---------------------------------------------------------
 # Campos para múltiples archivos
@@ -210,6 +219,15 @@ class ActivityForm(BootstrapMixin, forms.ModelForm):
             self.instance.pk is None
         )
 
+        _set_form_text_limits(
+            self,
+            (
+                ("request_problem", 2000, "La solicitud o problema"),
+                ("action", 2000, "La acción realizada"),
+                ("contact", 150, "El contacto"),
+                ("phone", 20, "El teléfono"),
+            ),
+        )
         self._apply_bootstrap()
 
     def clean(self):
@@ -351,7 +369,26 @@ class EvidenceForm(BootstrapMixin, forms.ModelForm):
                     deleted_at__isnull=True,
                 )
             )
+        _set_form_text_limits(
+            self,
+            (
+                ("code", 100, "El código"),
+                ("file_link", 500, "El enlace de evidencia"),
+                ("review_status", 50, "El estado de revisión"),
+            ),
+        )
         self._apply_bootstrap()
+
+    def clean_file_link(self):
+        file_link = (self.cleaned_data.get("file_link") or "").strip()
+        try:
+            validate_evidence_file_link(file_link)
+        except forms.ValidationError as exc:
+            raise forms.ValidationError(
+                exc.messages,
+                code="invalid",
+            ) from exc
+        return file_link
 
     def clean(self):
         cleaned_data = super().clean()
@@ -465,6 +502,11 @@ class EvidenceForm(BootstrapMixin, forms.ModelForm):
 
 
 class ValidationForm(BootstrapMixin, forms.ModelForm):
+    version = forms.IntegerField(
+        label="Versión",
+        min_value=1,
+        widget=forms.NumberInput(attrs={"min": 1}),
+    )
     date = forms.DateTimeField(
         label="Fecha y hora",
         input_formats=["%Y-%m-%dT%H:%M"],
@@ -517,6 +559,8 @@ class ValidationForm(BootstrapMixin, forms.ModelForm):
 
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
+        if self.instance.pk and self.instance.version < 1:
+            self.fields["version"].min_value = None
         evidences = (
             Evidence.objects
             .filter(
@@ -559,6 +603,14 @@ class ValidationForm(BootstrapMixin, forms.ModelForm):
         self.fields["observation"].required = False
         self.fields["version"].help_text = (
             "Número de versión de la validación."
+        )
+        _set_form_text_limits(
+            self,
+            (
+                ("decision", 50, "La decisión"),
+                ("observation", 1000, "La observación"),
+                ("result", 100, "El resultado"),
+            ),
         )
         self._apply_bootstrap()
 
@@ -644,12 +696,13 @@ class ActivityTypeForm(BootstrapMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["description"].required = False
         self._apply_bootstrap()
-        _set_text_limit(self.fields["code"], 50, "El código")
-        _set_text_limit(self.fields["name"], 150, "El nombre")
-        _set_text_limit(
-            self.fields["description"],
-            300,
-            "La descripción",
+        _set_form_text_limits(
+            self,
+            (
+                ("code", 50, "El código"),
+                ("name", 150, "El nombre"),
+                ("description", 300, "La descripción"),
+            ),
         )
 
     def clean_code(self):
@@ -745,12 +798,13 @@ class ServiceForm(BootstrapMixin, forms.ModelForm):
         self.fields["description"].required = False
 
         self._apply_bootstrap()
-        _set_text_limit(self.fields["code"], 50, "El código")
-        _set_text_limit(self.fields["name"], 150, "El nombre")
-        _set_text_limit(
-            self.fields["description"],
-            300,
-            "La descripción",
+        _set_form_text_limits(
+            self,
+            (
+                ("code", 50, "El código"),
+                ("name", 150, "El nombre"),
+                ("description", 300, "La descripción"),
+            ),
         )
 
     def clean_code(self):
@@ -842,6 +896,14 @@ class AttentionTypeForm(BootstrapMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["description"].required = False
         self._apply_bootstrap()
+        _set_form_text_limits(
+            self,
+            (
+                ("code", 50, "El código"),
+                ("name", 150, "El nombre"),
+                ("description", 300, "La descripción"),
+            ),
+        )
 
     def clean_code(self):
         code = self.cleaned_data["code"].strip()
@@ -941,6 +1003,13 @@ class SubAttentionForm(BootstrapMixin, forms.ModelForm):
         self.fields["attention_type"].help_text = (
             "Solo se pueden crear nuevas asociaciones "
             "con tipos de atención activos y no eliminados."
+        )
+        _set_form_text_limits(
+            self,
+            (
+                ("code", 50, "El código"),
+                ("name", 150, "El nombre"),
+            ),
         )
         self._apply_bootstrap()
 
@@ -1054,6 +1123,13 @@ class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
 
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
+        _set_form_text_limits(
+            self,
+            (
+                ("closing_observation", 1000, "La observación"),
+                ("citizen_rut", 16, "El RUT"),
+            ),
+        )
         existing = bool(self.instance.pk)
         if existing:
             self.fields["status"].required = False  # Formularios anteriores siguen siendo válidos.
@@ -1174,6 +1250,17 @@ class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
             self.fields[field_name].error_messages["invalid_choice"] = (
                 "Selecciona una opción válida de la lista."
             )
+        _set_form_text_limits(
+            self,
+            (
+                ("requester", 150, "El nombre del solicitante"),
+                ("requester_email", 254, "El correo electrónico"),
+                ("requester_phone", 25, "El teléfono"),
+                ("address", 250, "La dirección"),
+                ("subject", 160, "El asunto"),
+                ("description", 4000, "La descripción"),
+            ),
+        )
         # registration_date se genera automáticamente en el modelo.
         self._apply_bootstrap()
 

@@ -6,7 +6,7 @@ from django.contrib.auth.mixins import (
 )
 from django.contrib.auth.views import redirect_to_login
 from django.core.exceptions import PermissionDenied
-from django.db import transaction
+from django.db import DatabaseError, transaction
 from django.db.models import Q
 from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
@@ -20,6 +20,7 @@ from django.views.generic import (
     ListView,
     UpdateView,
 )
+from monitoring_traceability.models import Audit
 from citizen_requests.models import CitizenRequest, RequestEvent
 from citizen_requests.notifications import send_request_state_notification
 from citizen_requests.tracking import tracking_stages
@@ -2627,42 +2628,219 @@ def _notify_attention_state(citizen_request, state_label, *, initial=False):
 
 
 def _sync_request_status(attention, actor, previous_status, observation):
-    """Propaga al seguimiento el cambio real, con evento y aviso por correo."""
+    """Propaga los cambios de estado al seguimiento ciudadano."""
     citizen_request = CitizenRequest.objects.select_for_update().filter(
         attention_entry=attention,
     ).first()
+
     if citizen_request is None:
         citizen_request = _create_internal_request(attention, actor)
-        _notify_attention_state(citizen_request, "En gestión" if attention.status == "IN_PROGRESS" else attention.get_status_display(), initial=True)
+
+        # Si la atención ya fue resuelta o declarada no procedente,
+        # registrar el evento aunque el seguimiento se cree ahora.
+        if attention.status in ("RESOLVED", "REJECTED"):
+            RequestEvent.objects.create(
+                request=citizen_request,
+                actor=actor,
+                observation=(
+                    f"Estado de atención: {previous_status} → "
+                    f"{attention.get_status_display()}. {observation}"
+                ),
+                previous_status=citizen_request.status,
+                new_status=attention.status,
+            )
+
+        state_label = (
+            "En gestión"
+            if attention.status == "IN_PROGRESS"
+            else attention.get_status_display()
+        )
+        _notify_attention_state(
+            citizen_request,
+            state_label,
+            initial=True,
+        )
         return
+
     old_request_status = citizen_request.status
-    # No reemplazar los datos originales, tampoco en solicitudes manuales.
-    # En particular, el correo original sigue siendo el destinatario verificado
-    # hasta que exista un proceso autorizado de cambio de correo.
-    citizen_request.status = "CLOSED" if attention.status == "CLOSED" else "IN_PROGRESS"
+
+    # La solicitud conserva el estado administrativo de gestión
+    # mientras la atención se encuentre resuelta, pero no cerrada.
+    citizen_request.status = (
+        "CLOSED"
+        if attention.status == "CLOSED"
+        else "IN_PROGRESS"
+    )
     citizen_request.save()
 
     transition_from = old_request_status
-    # Cerrar desde "En gestión" significa confirmar la solución; si fue
-    # "No procede", el cierre NO se marca falsamente como resuelto.
-    if attention.status == "CLOSED" and previous_status not in ("Resuelta", "No procede"):
+
+    # Al cerrar una atención que aún no tenía resolución registrada,
+    # dejar constancia de la solución antes del cierre administrativo.
+    if (
+        attention.status == "CLOSED"
+        and previous_status not in ("Resuelta", "No procede")
+    ):
         RequestEvent.objects.create(
-            request=citizen_request, actor=actor,
-            observation=f"Resolución confirmada al cerrar la atención. {observation}",
-            previous_status=transition_from, new_status="RESOLVED",
+            request=citizen_request,
+            actor=actor,
+            observation=(
+                "Resolución confirmada al cerrar la atención. "
+                f"{observation}"
+            ),
+            previous_status=transition_from,
+            new_status="RESOLVED",
         )
         transition_from = "RESOLVED"
 
     RequestEvent.objects.create(
-        request=citizen_request, actor=actor,
-        observation=f"Estado de atención: {previous_status} → {attention.get_status_display()}. {observation}",
+        request=citizen_request,
+        actor=actor,
+        observation=(
+            f"Estado de atención: {previous_status} → "
+            f"{attention.get_status_display()}. {observation}"
+        ),
         previous_status=transition_from,
-        new_status=(attention.status if attention.status in ("RESOLVED", "REJECTED", "CLOSED") else "IN_PROGRESS"),
+        new_status=(
+            attention.status
+            if attention.status in ("RESOLVED", "REJECTED", "CLOSED")
+            else "IN_PROGRESS"
+        ),
     )
-    label = "En gestión (reabierta)" if old_request_status == "CLOSED" and attention.status == "IN_PROGRESS" else (
-        "En gestión" if attention.status == "IN_PROGRESS" else attention.get_status_display()
+
+    label = (
+        "En gestión (reabierta)"
+        if (
+            old_request_status == "CLOSED"
+            and attention.status == "IN_PROGRESS"
+        )
+        else (
+            "En gestión"
+            if attention.status == "IN_PROGRESS"
+            else attention.get_status_display()
+        )
     )
     _notify_attention_state(citizen_request, label)
+
+
+RESOLVE_ATTENTION_PERMISSION = (
+    "registration_validation.change_attentionentry"
+)
+RESOLVABLE_ATTENTION_STATUSES = {
+    "NEW",
+    "PENDING",
+    "IN_PROGRESS",
+}
+
+
+@login_required
+@require_POST
+def resolve_attention_entry(request, attention_entry_id):
+    """Registra la resolución de una atención y su auditoría."""
+    if not request.user.has_perm(RESOLVE_ATTENTION_PERMISSION):
+        raise PermissionDenied(
+            "No tienes permiso para registrar resoluciones de atención."
+        )
+
+    active_delegation_id = getattr(
+        request.user,
+        "sgr_active_delegation_id",
+        None,
+    )
+    if active_delegation_id is None:
+        raise PermissionDenied(
+            "Debes tener una delegación activa para registrar resoluciones."
+        )
+
+    allowed_ids = allowed_delegation_ids(
+        request.user,
+        RESOLVE_ATTENTION_PERMISSION,
+        active_only=False,
+    )
+    if (
+        allowed_ids is not None
+        and active_delegation_id not in allowed_ids
+    ):
+        raise PermissionDenied(
+            "No tienes autorización para registrar resoluciones "
+            "en la delegación activa."
+        )
+
+    try:
+        with transaction.atomic():
+            attention_entry = get_object_or_404(
+                scoped_attention_entries(
+                    request.user,
+                    RESOLVE_ATTENTION_PERMISSION,
+                )
+                .select_for_update()
+                .filter(delegation_id=active_delegation_id),
+                pk=attention_entry_id,
+            )
+
+            if attention_entry.status not in RESOLVABLE_ATTENTION_STATUSES:
+                messages.error(
+                    request,
+                    "No se puede registrar una resolución "
+                    "desde el estado actual.",
+                )
+                return redirect("registration:attention_entry_list")
+
+            profile = getattr(request.user, "profile", None)
+            employee = getattr(profile, "employee", None)
+            if (
+                profile is None
+                or profile.deleted_at is not None
+                or employee is None
+                or employee.delegation_id != attention_entry.delegation_id
+            ):
+                raise PermissionDenied(
+                    "Tu perfil debe tener un funcionario asociado "
+                    "a la delegación de la atención para registrar "
+                    "la resolución y su auditoría."
+                )
+
+            previous_status = attention_entry.status
+            previous_status_label = attention_entry.get_status_display()
+
+            attention_entry.status = "RESOLVED"
+            attention_entry.save(
+                update_fields=("status", "updated_at")
+            )
+
+            Audit.objects.create(
+                user=employee,
+                event="Resolución de atención",
+                entity="AttentionEntry",
+                object_identifier=str(attention_entry.pk),
+                previous_value={"status": previous_status},
+                new_value={
+                    "status": "RESOLVED",
+                    "resolved_by": request.user.get_username(),
+                    "resolved_by_user_id": request.user.pk,
+                },
+            )
+
+            _sync_request_status(
+                attention_entry,
+                request.user,
+                previous_status_label,
+                "Resolución registrada por funcionario.",
+            )
+
+    except DatabaseError:
+        messages.error(
+            request,
+            "No se pudo registrar la resolución ni guardar "
+            "la auditoría. No se guardaron los cambios.",
+        )
+        return redirect("registration:attention_entry_list")
+
+    messages.success(
+        request,
+        "La resolución se registró correctamente.",
+    )
+    return redirect("registration:attention_entry_list")
 
 
 

@@ -1,4 +1,3 @@
-
 from django.urls import path
 
 from .views import (
@@ -27,6 +26,7 @@ from .views import (
     attention_entry_detail,
     AttentionEntryListView,
     AttentionEntryUpdateView,
+    resolve_attention_entry,
     ActivityTypeCreateView,
     ActivityTypeDeleteView,
     ActivityTypeListView,
@@ -125,55 +125,49 @@ urlpatterns = [
         ValidationDeleteView.as_view(),
         name="validation_delete",
     ),
+
     # -----------------------------------------------------
     # Servicios
     # -----------------------------------------------------
-
     path(
         "services/",
         ServiceListView.as_view(),
         name="service_list",
     ),
-
     path(
         "services/new/",
         ServiceCreateView.as_view(),
         name="service_create",
     ),
-
     path(
         "services/<int:service_id>/edit/",
         ServiceUpdateView.as_view(),
         name="service_update",
     ),
-
     path(
         "services/<int:service_id>/delete/",
         ServiceDeleteView.as_view(),
         name="service_delete",
     ),
+
     # -----------------------------------------------------
     # Tipos de actividad
     # -----------------------------------------------------
-
     path(
         "activity-types/",
         ActivityTypeListView.as_view(),
         name="activity_type_list",
     ),
-
     path(
         "activity-types/new/",
         ActivityTypeCreateView.as_view(),
         name="activity_type_create",
     ),
-
     path(
         "activity-types/<int:activity_type_id>/edit/",
         ActivityTypeUpdateView.as_view(),
         name="activity_type_update",
     ),
-
     path(
         "activity-types/<int:activity_type_id>/delete/",
         ActivityTypeDeleteView.as_view(),
@@ -183,7 +177,11 @@ urlpatterns = [
     # -----------------------------------------------------
     # Tipo de Atención
     # -----------------------------------------------------
-    path("attention-types/exportar/", attention_type_export, name="attention_type_export"),
+    path(
+        "attention-types/exportar/",
+        attention_type_export,
+        name="attention_type_export",
+    ),
     path(
         "attention-types/",
         AttentionTypeListView.as_view(),
@@ -208,7 +206,11 @@ urlpatterns = [
     # -----------------------------------------------------
     # Sub Atención
     # -----------------------------------------------------
-    path("sub-attentions/exportar/", sub_attention_export, name="sub_attention_export"),
+    path(
+        "sub-attentions/exportar/",
+        sub_attention_export,
+        name="sub_attention_export",
+    ),
     path(
         "sub-attentions/",
         SubAttentionListView.as_view(),
@@ -231,7 +233,7 @@ urlpatterns = [
     ),
 
     # -----------------------------------------------------
-    # Ingreso de Atención - NUEVO
+    # Ingreso de Atención
     # -----------------------------------------------------
     path(
         "attention-entries/",
@@ -257,5 +259,10 @@ urlpatterns = [
         "attention-entries/<int:attention_entry_id>/delete/",
         AttentionEntryDeleteView.as_view(),
         name="attention_entry_delete",
+    ),
+    path(
+        "attention-entries/<int:attention_entry_id>/resolve/",
+        resolve_attention_entry,
+        name="attention_entry_resolve",
     ),
 ]

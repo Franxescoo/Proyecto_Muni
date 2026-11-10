@@ -140,7 +140,11 @@
                             selected
                             {% endif %}>
 
-                        {{ status }}
+                        {% if status|lower == "pending" or status|lower == "pendiente" %}
+                            Pendiente
+                        {% else %}
+                            {{ status }}
+                        {% endif %}
 
                     </option>
 
@@ -278,13 +282,13 @@
                             {% if evidence.review_status|lower == "pending" or evidence.review_status|lower == "pendiente" %}
 
                             <span class="status status-yellow">
-                                {{ evidence.review_status }}
+                                {{ evidence.review_status_label }}
                             </span>
 
                             {% else %}
 
                             <span class="status status-muted">
-                                {{ evidence.review_status }}
+                                {{ evidence.review_status_label }}
                             </span>
 
                             {% endif %}
@@ -373,7 +377,8 @@
                                 <!-- Enlace opcional -->
                                 {% if evidence.file_link %}
 
-                                <a href="{{ evidence.file_link }}"
+                                {% if evidence.safe_file_link %}
+                                <a href="{{ evidence.safe_file_link }}"
                                    target="_blank"
                                    rel="noopener noreferrer"
                                    class="btn btn-sm btn-light border"
@@ -384,6 +389,12 @@
                                     Ver enlace
 
                                 </a>
+                                {% else %}
+                                <span class="text-muted small"
+                                      title="El enlace guardado no es seguro.">
+                                    Enlace no disponible por seguridad
+                                </span>
+                                {% endif %}
 
                                 {% endif %}
 
@@ -679,4 +690,3 @@
 {% endif %}
 
 {% endblock %}
-
