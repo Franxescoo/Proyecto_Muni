@@ -3,12 +3,18 @@
 import uuid
 from unittest.mock import patch
 
+from asgiref.sync import async_to_sync
+from channels.testing import WebsocketCommunicator
+from channels.db import database_sync_to_async
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
 
 from accounts.models import UserProfile
+from citizen_registry.models import Citizen
 from organization.models import Delegation
+from config.asgi import application
+from .consumers import UpdatesConsumer
 from .models import ChatMessage, ChatReadState
 
 
@@ -149,3 +155,70 @@ class ChatApiTests(TestCase):
         incremental = self.client.get(self.history_url + f"?after={recent[-2]['id']}").json()["messages"]
         self.assertEqual(len(incremental), 1)
         self.assertEqual(incremental[0]["message"], "103")
+
+
+class UpdatesWebsocketTests(TransactionTestCase):
+    reset_sequences = True
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="updates_user", password="testpass"
+        )
+
+    def communicator(self, user=None):
+        headers = [(b"host", b"127.0.0.1")]
+        if user is not None:
+            consumer_application = UpdatesConsumer.as_asgi()
+
+            async def authenticated_application(scope, receive, send):
+                scope = dict(scope, user=user)
+                return await consumer_application(scope, receive, send)
+
+            return WebsocketCommunicator(
+                authenticated_application, "/ws/updates/", headers=headers
+            )
+        return WebsocketCommunicator(application, "/ws/updates/", headers=headers)
+
+    def test_authenticated_user_receives_delegation_change(self):
+        communicator = self.communicator(self.user)
+        async def receive_change():
+            connected, _ = await communicator.connect()
+            self.assertTrue(connected)
+            await database_sync_to_async(Delegation.objects.create)(
+                name="Actualizada", status="Active", scope="Urbano"
+            )
+            payload = await communicator.receive_json_from()
+            await communicator.disconnect()
+            return payload
+
+        payload = async_to_sync(receive_change)()
+        self.assertEqual(
+            payload,
+            {"type": "data_changed", "model": "organization.delegation"},
+        )
+
+    def test_authenticated_user_receives_citizen_change(self):
+        communicator = self.communicator(self.user)
+
+        async def receive_change():
+            connected, _ = await communicator.connect()
+            self.assertTrue(connected)
+            await database_sync_to_async(Citizen.objects.create)(
+                rut="12.345.678-5",
+                full_name="Ciudadano de prueba",
+                address="Domicilio de prueba",
+            )
+            payload = await communicator.receive_json_from()
+            await communicator.disconnect()
+            return payload
+
+        payload = async_to_sync(receive_change)()
+        self.assertEqual(
+            payload,
+            {"type": "data_changed", "model": "citizen_registry.citizen"},
+        )
+
+    def test_anonymous_user_is_rejected(self):
+        communicator = self.communicator()
+        connected, _ = async_to_sync(communicator.connect)()
+        self.assertFalse(connected)
