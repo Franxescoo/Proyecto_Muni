@@ -120,14 +120,11 @@ if os.getenv("DJANGO_DEBUG", "True").lower() == "false":
         "default": {
             "BACKEND": "channels_redis.core.RedisChannelLayer",
             "CONFIG": {
-                "hosts": [("unix:///var/run/redis6/redis.sock", 6379)],
-                "capacity": 1500,
-                "expiry": 60,
+                "hosts": [("127.0.0.1", 6379)],
             },
         },
     }
 else:
-    # Usado para pruebas locales en tu computadora
     CHANNEL_LAYERS = {
         "default": {
             "BACKEND": "channels.layers.InMemoryChannelLayer",
