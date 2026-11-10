@@ -93,11 +93,22 @@ class UnifiedCatalogTests(TestCase):
         })
         self.assertRedirects(response, next_url)
         self.assertEqual(self.client.get(next_url).context["roles"].paginator.per_page, 10)
+
         response = self.client.post(reverse("organization:set_page_size"), {
             "page_size": "999", "next": next_url
         })
         self.assertRedirects(response, next_url)
         self.assertEqual(self.client.get(next_url).context["roles"].paginator.per_page, 10)
+
+    def test_page_size_closes_open_employee_modal(self):
+        next_url = reverse("organization:employee_list") + "?modal=create"
+        response = self.client.post(reverse("organization:set_page_size"), {
+            "page_size": "10", "next": next_url,
+        })
+        self.assertRedirects(
+            response,
+            reverse("organization:employee_list"),
+        )
 
     def test_page_links_preserve_filtered_commune(self):
         Delegation.objects.bulk_create([

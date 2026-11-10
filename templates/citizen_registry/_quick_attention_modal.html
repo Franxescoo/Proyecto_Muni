@@ -1,0 +1,12 @@
+{% if perms.citizen_registry.add_citizen and citizen_form and not form.instance.pk %}
+<div class="modal fade" id="citizenQuickModal" tabindex="-1" aria-labelledby="citizenQuickTitle" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
+    <div class="modal-header" style="background:#a50b1f;color:white"><h2 class="modal-title h5" id="citizenQuickTitle">Agregar ciudadano · Registro interno</h2><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+    <form id="citizenQuickForm" action="{% url 'citizen_registry:create' %}" method="post">{% csrf_token %}<div class="modal-body">
+      <div class="alert alert-info small">El ciudadano se registrará una sola vez por RUT. Los datos sensibles solo estarán disponibles para usuarios autorizados.</div>
+      {% include "citizen_registry/_form_fields.html" %}
+      <div class="alert alert-danger d-none mt-2" id="citizenQuickErrors" role="alert"></div>
+    </div><div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-danger" type="submit">Guardar y seleccionar</button></div></form>
+  </div></div>
+</div>
+{% endif %}

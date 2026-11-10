@@ -1,6 +1,7 @@
 import json
 
 from django import forms
+from django.core.validators import MaxLengthValidator
 from accounts.permissions import allowed_delegation_ids
 
 from organization.models import Employee, PositionFunction
@@ -8,12 +9,16 @@ from organization.models import Employee, PositionFunction
 from .models import Goal, Period, MeasurementItem
 
 from .working_days import calculate_computable_days
+from .measurement_rules import (SUPPORTED_PERCENTAGE_FORMULA, canonical_percentage_formula)
+from .parameter_history import compliance_cap_value
+import re
+from decimal import Decimal
 
 
 class BootstrapMixin:
     """Agrega las clases de Bootstrap a los campos."""
 
-    
+
     def _apply_bootstrap(self):
         for field in self.fields.values():
             if isinstance(field.widget, forms.CheckboxInput):
@@ -26,10 +31,35 @@ class BootstrapMixin:
             field.widget.attrs["class"] = css
 
 
+def _set_text_limit(field, limit, label):
+    """Aplica el mismo límite en la validación del servidor y el HTML."""
+    field.widget.attrs["maxlength"] = limit
+    field.validators = [
+        validator
+        for validator in field.validators
+        if not isinstance(validator, MaxLengthValidator)
+    ]
+    field.validators.append(
+        MaxLengthValidator(
+            limit,
+            message=f"{label} no puede superar los {limit} caracteres.",
+        )
+    )
+
+
 
 
 
 class PeriodForm(BootstrapMixin, forms.ModelForm):
+
+    compliance_cap = forms.DecimalField(
+        label="Tope de cumplimiento (%)",
+        required=False,
+        min_value=Decimal("100"), max_value=Decimal("300"),
+        max_digits=6, decimal_places=2,
+        initial=Decimal("150"),
+        help_text="Valor inicial 150 %. Configurable entre 100 y 300 %.",
+    )
 
     status = forms.ChoiceField(
         label="Estado",
@@ -63,6 +93,15 @@ class PeriodForm(BootstrapMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
 
         self._apply_bootstrap()
+        self.fields["compliance_cap"].initial = Decimal(
+            compliance_cap_value(self.instance.thresholds if self.instance.pk else "")
+        )
+        _set_text_limit(self.fields["thresholds"], 255, "Los umbrales")
+        _set_text_limit(
+            self.fields["parameters_version"],
+            50,
+            "La versión de parámetros",
+        )
 
         # El administrador no ingresa manualmente los días.
         self.fields["computable_days"].required = False
@@ -77,8 +116,69 @@ class PeriodForm(BootstrapMixin, forms.ModelForm):
             "excluyendo feriados de Chile."
         )
 
+
+    def clean_thresholds(self):
+        valor = self.cleaned_data["thresholds"].strip()
+
+        # Conservar configuraciones históricas sin modificar.
+        if self.instance.pk and valor == self.instance.thresholds:
+            return valor
+
+        patron = (
+            r"Verde\s*:\s*(\d+(?:\.\d+)?)\s*,\s*"
+            r"Amarillo\s*:\s*(\d+(?:\.\d+)?)\s*,\s*"
+            r"Rojo\s*:\s*(\d+(?:\.\d+)?)"
+            r"(?:\s*,\s*(?:Tope|Max)\s*:\s*\d+(?:[.,]\d+)?)?"
+        )
+
+        resultado = re.fullmatch(
+            patron, valor, flags=re.IGNORECASE
+        )
+
+        if not resultado:
+            raise forms.ValidationError(
+                "Utiliza el formato: "
+                "Verde: 100, Amarillo: 80, Rojo: 60."
+            )
+
+        verde, amarillo, rojo = (
+            Decimal(numero)
+            for numero in resultado.groups()[:3]
+        )
+
+        if not (0 <= rojo < amarillo < verde <= 100):
+            raise forms.ValidationError(
+                "Los umbrales deben estar entre 0 y 100, "
+                "cumpliendo: Verde > Amarillo > Rojo."
+            )
+
+        return valor
+
+
     def clean(self):
         cleaned_data = super().clean()
+
+        # Mantiene un tope explícito y legible para el servicio de
+        # Monitoreo existente, sin modificar ese módulo.
+        threshold_string = cleaned_data.get("thresholds", "")
+        threshold_valid = re.fullmatch(
+            r"\s*Verde\s*:\s*\d+(?:\.\d+)?\s*,\s*"
+            r"Amarillo\s*:\s*\d+(?:\.\d+)?\s*,\s*"
+            r"Rojo\s*:\s*\d+(?:\.\d+)?"
+            r"(?:\s*,\s*(?:Tope|Max)\s*:\s*\d+(?:[.,]\d+)?)?\s*",
+            threshold_string, re.I,
+        )
+        if threshold_valid and "compliance_cap" in cleaned_data:
+            cap = cleaned_data["compliance_cap"]
+            if cap is None:
+                cap = Decimal(compliance_cap_value(threshold_string))
+            base = re.sub(
+                r"\s*,\s*(?:Tope|Max)\s*:\s*\d+(?:[.,]\d+)?\s*$",
+                "", threshold_string, flags=re.I,
+            )
+            cleaned_data["thresholds"] = (
+                base.rstrip() + f", Tope: {cap:.2f}"
+            )
 
         start_date = cleaned_data.get("start_date")
         end_date = cleaned_data.get("end_date")
@@ -194,8 +294,8 @@ class GoalScopeMixin(BootstrapMixin):
 
         # El servidor obtiene el cargo real del funcionario.
         return position
-    
-    
+
+
     def _configure_items(self):
         """Carga los ítems por ID y conserva los datos históricos."""
 
@@ -222,7 +322,35 @@ class GoalScopeMixin(BootstrapMixin):
         field.required = not bool(self.instance.pk)
         field.empty_label = "Seleccione un ítem"
         field.widget.attrs["class"] = "form-select"
-        
+
+        # Ítems permitidos según el cargo del funcionario.
+        cargos = PositionFunction.objects.filter(
+            pk__in=self.fields["employee"].queryset.values_list(
+                "position_id", flat=True
+            )
+        ).prefetch_related("catalog_items")
+
+        items_por_cargo = {
+            str(cargo.pk): [
+                str(item.pk)
+                for item in cargo.catalog_items.all()
+            ]
+            for cargo in cargos
+        }
+
+        field.widget.attrs["data-items-by-position"] = json.dumps(
+            items_por_cargo
+        )
+
+        # Conserva el ítem de una meta histórica.
+        field.widget.attrs["data-original-item"] = str(
+            self.instance.measurement_item_id or ""
+        )
+        field.widget.attrs["data-original-employee"] = str(
+            self.instance.employee_id or ""
+        )
+
+
         # Identifica visualmente los ítems históricos desactivados.
         field.label_from_instance = lambda item: (
             f"{item.code} - {item.name}"
@@ -293,6 +421,25 @@ class GoalScopeMixin(BootstrapMixin):
             and self.instance.measurement_item_id == item.pk
         )
 
+        empleado = cleaned_data.get("employee")
+
+        misma_meta = (
+            es_historico
+            and empleado is not None
+            and self.instance.employee_id == empleado.pk
+        )
+
+        if empleado and not misma_meta:
+            if not empleado.position.catalog_items.filter(
+                pk=item.pk
+            ).exists():
+                self.add_error(
+                    "measurement_item",
+                    "Este ítem no corresponde al cargo del funcionario."
+                )
+                return cleaned_data
+
+
         if (
             item.deleted_at is not None or not item.is_active
         ) and not es_historico:
@@ -331,6 +478,10 @@ class GoalScopeMixin(BootstrapMixin):
 
 
 class GoalForm(GoalScopeMixin, forms.ModelForm):
+    version = forms.CharField(
+        widget=forms.HiddenInput(),
+        required=False,
+    )
     class Meta:
         model = Goal
         fields = [
@@ -347,7 +498,10 @@ class GoalForm(GoalScopeMixin, forms.ModelForm):
 
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
-
+        if self.instance.pk and not self.is_bound:
+            self.fields["version"].initial = (
+                self.instance.updated_at.isoformat()
+            )
         periods = Period.objects.filter(
             deleted_at__isnull=True
         )
@@ -365,6 +519,8 @@ class GoalForm(GoalScopeMixin, forms.ModelForm):
         self._apply_scope(user)
         self._configure_evidence_count()
         self._configure_items()
+        _set_text_limit(self.fields["item"], 150, "El ítem")
+        _set_text_limit(self.fields["unit"], 50, "La unidad")
 
 
 class GoalInlineForm(GoalScopeMixin, forms.ModelForm):
@@ -388,6 +544,8 @@ class GoalInlineForm(GoalScopeMixin, forms.ModelForm):
         self._apply_scope(user)
         self._configure_evidence_count()
         self._configure_items()
+        _set_text_limit(self.fields["item"], 150, "El ítem")
+        _set_text_limit(self.fields["unit"], 50, "La unidad")
 
 
 class MeasurementItemForm(BootstrapMixin, forms.ModelForm):
@@ -416,7 +574,36 @@ class MeasurementItemForm(BootstrapMixin, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._apply_bootstrap()
+        _set_text_limit(self.fields["code"], 20, "El código")
+        _set_text_limit(self.fields["name"], 150, "El nombre")
+        _set_text_limit(
+            self.fields["description"],
+            300,
+            "La descripción",
+        )
+        _set_text_limit(self.fields["unit"], 50, "La unidad")
+        _set_text_limit(self.fields["formula"], 500, "La fórmula")
 
         self.fields["formula"].help_text = (
-            "Obligatoria para ítems porcentuales."
+            "Para ítems porcentuales, fórmula admitida: "
+            + SUPPORTED_PERCENTAGE_FORMULA
         )
+
+    def clean(self):
+        data = super().clean()
+        if data.get("item_type") == MeasurementItem.ItemType.PERCENTAGE:
+            expression = canonical_percentage_formula(data.get("formula"))
+            unchanged_legacy = (
+                self.instance.pk
+                and self.instance.item_type == MeasurementItem.ItemType.PERCENTAGE
+                and data.get("formula") == self.instance.formula
+            )
+            if expression is None and not unchanged_legacy:
+                self.add_error(
+                    "formula",
+                    "La fórmula porcentual admitida actualmente es: "
+                    + SUPPORTED_PERCENTAGE_FORMULA,
+                )
+            elif expression is not None:
+                data["formula"] = expression
+        return data

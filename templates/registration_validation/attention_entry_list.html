@@ -1,5 +1,6 @@
-
 {% extends "registration_validation/base.html" %}
+{% load static %}
+{% load municipal_campaigns %}
 {% block titulo %}Ingreso de Atención | Registro y validación{% endblock %}
 
 {% block contenido %}
@@ -133,6 +134,14 @@
                 </select>
             </div>
 
+            <div class="col-12 col-md-6 col-lg-3">
+                <label for="filterAttentionStatus" class="filter-label">Estado</label>
+                <select id="filterAttentionStatus" name="status" class="form-select">
+                    <option value="active" {% if selected_status != "closed" and selected_status != "all" %}selected{% endif %}>Activas y resueltas</option>
+                    <option value="closed" {% if selected_status == "closed" %}selected{% endif %}>Cerradas</option>
+                    <option value="all" {% if selected_status == "all" %}selected{% endif %}>Todas</option>
+                </select>
+            </div>
             <div class="col-12 col-lg-2">
                 <div class="d-flex gap-2">
                     <button
@@ -216,6 +225,7 @@
                         <th scope="col">Delegación</th>
                         <th scope="col">Funcionario responsable</th>
                         <th scope="col">Fecha</th>
+                        <th scope="col">Estado</th>
                         <th scope="col" class="text-end">Acciones</th>
                     </tr>
                 </thead>
@@ -225,7 +235,7 @@
                     <tr>
                         <td>
                             <div class="fw-semibold">
-                                {{ entry.requester }}
+                                {% if entry.citizen_id %}{{ entry.citizen.full_name }}{% else %}{{ entry.requester }}{% endif %}
                             </div>
                             <div
                                 class="small text-muted text-truncate"
@@ -270,9 +280,31 @@
                             </div>
                         </td>
 
+                        <td><span class="badge {% if entry.status == 'CLOSED' %}text-bg-secondary{% elif entry.status == 'RESOLVED' %}text-bg-success{% else %}text-bg-primary{% endif %}">{{ entry.get_status_display }}</span></td>
                         <td>
                             <div class="d-flex flex-wrap justify-content-end gap-2">
-                                {% if perms.registration_validation.change_attentionentry %}
+                                {% if perms.registration_validation.view_attentionentry %}
+                                <button
+                                    type="button"
+                                    class="btn btn-sm btn-outline-secondary"
+                                    data-view-attention-id="{{ entry.attention_entry_id }}"
+                                    title="Ver ingreso"
+                                >
+                                    <i class="bi bi-eye"></i>
+                                    <span class="ms-1">Ver</span>
+                                </button>
+                                {% endif %}
+
+                                {% if entry.status != 'CLOSED' %}
+                                {% campaign_link entry as campaign_url %}
+                                {% if campaign_url %}
+                                <a href="{{ campaign_url }}" class="btn btn-sm btn-outline-success" title="Inscribir beneficiarios en una campaña abierta del tipo de atención">
+                                    <i class="bi bi-gift"></i><span class="ms-1">Inscribir en campaña</span>
+                                </a>
+                                {% endif %}
+
+                                {% endif %}
+                                {% if perms.registration_validation.change_attentionentry and entry.status != 'CLOSED' %}
                                 <a
                                     href="{% url 'registration:attention_entry_update' entry.attention_entry_id %}"
                                     class="btn btn-sm btn-outline-primary"
@@ -285,7 +317,42 @@
                                 </a>
                                 {% endif %}
 
-                                {% if perms.registration_validation.delete_attentionentry %}
+                                {% if perms.registration_validation.change_attentionentry %}
+                                {% if entry.status == 'NEW' or entry.status == 'PENDING' or entry.status == 'IN_PROGRESS' %}
+                                <form
+                                    method="post"
+                                    action="{% url 'registration:attention_entry_resolve' entry.attention_entry_id %}"
+                                    class="js-resolve-attention-entry m-0"
+                                >
+                                    {% csrf_token %}
+                                    <button
+                                        type="submit"
+                                        class="btn btn-sm btn-outline-success"
+                                        data-name="{{ entry.requester }}"
+                                        title="Registrar resolución"
+                                    >
+                                        <i class="bi bi-check-circle"></i>
+                                        <span class="ms-1">Registrar resolución</span>
+                                    </button>
+                                </form>
+                                {% endif %}
+                                {% endif %}
+
+                                {% if perms.registration_validation.change_attentionentry and entry.status == 'CLOSED' %}
+                                <form method="post" action="{% url 'registration:attention_entry_update' entry.attention_entry_id %}" class="m-0">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="reopen">
+                                    <button class="btn btn-sm btn-outline-primary" type="submit">Reabrir</button>
+                                </form>
+                                {% endif %}
+                                {% if perms.registration_validation.change_attentionentry and entry.citizen_request.followup_email_paused %}
+                                <form method="post" action="{% url 'registration:attention_entry_update' entry.attention_entry_id %}" class="m-0">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="resend_email_verification">
+                                    <button class="btn btn-sm btn-outline-warning" type="submit" title="El correo está pendiente de verificar">Reenviar verificación</button>
+                                </form>
+                                {% endif %}
+                                {% if perms.registration_validation.delete_attentionentry and entry.status == 'CLOSED' %}
                                 <form
                                     method="post"
                                     action="{% url 'registration:attention_entry_delete' entry.attention_entry_id %}"
@@ -317,7 +384,7 @@
 
                     {% empty %}
                     <tr>
-                        <td colspan="7" class="text-center py-5">
+                        <td colspan="8" class="text-center py-5">
                             <i class="bi bi-inbox fs-2 text-muted"></i>
                             <p class="fw-semibold mt-2 mb-1">
                                 No se encontraron ingresos de atención
@@ -350,8 +417,11 @@
 >
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content">
-            <form method="post" novalidate>
+            <form method="post" novalidate id="attentionEntryEditForm" data-is-edit="{% if form.instance.pk %}true{% else %}false{% endif %}" data-original-rut="{% if form.instance.citizen_id %}{{ form.instance.citizen.rut }}{% endif %}" data-original-name="{% if form.instance.citizen_id %}{{ form.instance.citizen.full_name }}{% endif %}">
                 {% csrf_token %}
+                {% if citizen_request %}
+                <input type="hidden" name="citizen_request" value="{{ citizen_request.pk }}">
+                {% endif %}
 
                 <div class="modal-header">
                     <div class="sgr-modal-title-block">
@@ -385,6 +455,18 @@
                         Los campos marcados con * son obligatorios.
                     </p>
 
+                    {% if citizen_request %}
+                    <div class="alert alert-light border mb-4">
+                        <div class="fw-semibold mb-2">Datos de referencia de la solicitud ciudadana</div>
+                        <div class="row g-2 small">
+                            <div class="col-md-6"><strong>Correo:</strong> {{ citizen_request.requester_email|default:"—" }}</div>
+                            <div class="col-md-6"><strong>Teléfono:</strong> {{ citizen_request.requester_phone|default:"—" }}</div>
+                            <div class="col-md-6"><strong>Asunto:</strong> {{ citizen_request.subject }}</div>
+                            <div class="col-md-6"><strong>Dirección:</strong> {{ citizen_request.address }}</div>
+                        </div>
+                    </div>
+                    {% endif %}
+
                     {% if form.non_field_errors %}
                     <div class="alert alert-danger" role="alert">
                         {% for error in form.non_field_errors %}
@@ -394,6 +476,14 @@
                     {% endif %}
 
                     <div class="row g-3">
+                        {% include "citizen_registry/_quick_attention.html" %}
+                        {{ form.confirm_citizen_change }}
+                        {% if form.instance.pk and form.instance.citizen_request.followup_email_paused %}
+                          <div class="alert alert-warning small mt-2">Correo de seguimiento pendiente de verificar. Los avisos están suspendidos hasta confirmar el nuevo correo.
+                            <button type="submit" form="resendFollowupVerification" class="btn btn-sm btn-outline-danger ms-2">Reenviar verificación</button>
+                          </div>
+                        {% endif %}
+                        <div class="col-12"><p class="small text-muted mb-0">Nombre, correo, teléfono y dirección son de solo lectura. Para corregirlos, entra al mantenedor Ciudadanos.</p></div>
                         <!-- SOLICITANTE -->
                         <div class="col-12">
                             <label
@@ -410,6 +500,47 @@
                             <div class="text-danger small mt-1">
                                 {{ error }}
                             </div>
+                            {% endfor %}
+                        </div>
+
+                        <!-- DATOS DE CONTACTO -->
+                        <div class="col-12 col-md-6">
+                            <label for="{{ form.requester_email.id_for_label }}" class="form-label fw-semibold">
+                                Correo electrónico
+                            </label>
+                            {{ form.requester_email }}
+                            {% for error in form.requester_email.errors %}
+                            <div class="text-danger small mt-1">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                            <label for="{{ form.requester_phone.id_for_label }}" class="form-label fw-semibold">
+                                Teléfono
+                            </label>
+                            {{ form.requester_phone }}
+                            {% for error in form.requester_phone.errors %}
+                            <div class="text-danger small mt-1">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                            <label for="{{ form.address.id_for_label }}" class="form-label fw-semibold">
+                                Dirección
+                            </label>
+                            {{ form.address }}
+                            {% for error in form.address.errors %}
+                            <div class="text-danger small mt-1">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="col-12 col-md-6">
+                            <label for="{{ form.subject.id_for_label }}" class="form-label fw-semibold">
+                                Asunto
+                            </label>
+                            {{ form.subject }}
+                            {% for error in form.subject.errors %}
+                            <div class="text-danger small mt-1">{{ error }}</div>
                             {% endfor %}
                         </div>
 
@@ -521,6 +652,29 @@
                         </div>
                     </div>
 
+                    {% if form.instance.pk %}
+                    <div class="alert alert-secondary border mt-4 mb-0">
+                        <strong>Código de seguimiento del caso:</strong>
+                        {{ form.instance.citizen_request.tracking_code|default:form.instance.tracking_code|default:"No registrado" }}
+                        <span class="small text-muted ms-2">(solo lectura)</span>
+                    </div>
+                    {% endif %}
+
+                    {% if form.instance.pk %}
+                    <div class="row g-3 mt-2">
+                        <div class="col-12 col-md-6">
+                            <label for="{{ form.status.id_for_label }}" class="form-label fw-semibold">Estado de la atención</label>
+                            {{ form.status }}
+                            {% for error in form.status.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                        </div>
+                        <div class="col-12">
+                            <label for="{{ form.closing_observation.id_for_label }}" class="form-label fw-semibold">Observación del cambio de estado</label>
+                            {{ form.closing_observation }}
+                            <div class="form-text">Obligatoria al marcar Resuelta, Cerrada o No procede. Cerrar desde En gestión confirma que se resolvió; para cerrar sin solución, registra primero No procede.</div>
+                            {% for error in form.closing_observation.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
                     <!-- DATOS AUTOMÁTICOS -->
                     <div class="alert alert-light border mt-4 mb-0">
                         <i class="bi bi-info-circle me-2"></i>
@@ -559,9 +713,16 @@
                     </button>
                 </div>
             </form>
+            {% if form.instance.pk and form.instance.citizen_request.followup_email_paused %}
+            <form id="resendFollowupVerification" method="post" action="{% url 'registration:attention_entry_update' form.instance.pk %}">
+                {% csrf_token %}<input type="hidden" name="action" value="resend_email_verification">
+            </form>
+            {% endif %}
         </div>
     </div>
 </div>
+
+{% include "citizen_registry/_quick_attention_modal.html" %}
 
 <!-- DATOS PARA DESPLEGABLES DEPENDIENTES -->
 <!-- Estos datos provienen de las opciones permitidas
@@ -597,6 +758,64 @@ document.addEventListener("DOMContentLoaded", function () {
     // ABRIR EL MODAL
     // ========================================
     {% if open_modal %}
+    const citizenForm = document.getElementById("attentionEntryEditForm");
+    if (citizenForm && citizenForm.dataset.isEdit === "true") {
+        citizenForm.addEventListener("submit", async function (event) {
+            const chosen = citizenForm.querySelector("#id_citizen_rut");
+            const confirmField = citizenForm.querySelector("#id_confirm_citizen_change");
+            if (!chosen || !confirmField) return;
+
+            const normalizar = (rut) => (rut || "").replace(/[.\s]/g, "").toUpperCase();
+            const rutAnterior = citizenForm.dataset.originalRut || "";
+            const rutNuevo = chosen.value.trim();
+            if (!rutNuevo || normalizar(rutNuevo) === normalizar(rutAnterior)) {
+                confirmField.value = "";
+                return;
+            }
+            // La segunda presentación envía el formulario después de confirmar.
+            if (confirmField.value === "on") return;
+            event.preventDefault();
+
+            if (!window.Swal) {
+                // Si no cargó SweetAlert2, no confirmar el cambio a ciegas.
+                let aviso = citizenForm.querySelector(".js-rut-confirm-warning");
+                if (!aviso) {
+                    aviso = document.createElement("div");
+                    aviso.className = "alert alert-warning js-rut-confirm-warning";
+                    aviso.setAttribute("role", "alert");
+                    aviso.textContent = "No se pudo cargar la confirmación de cambio de RUT. Recarga la página y vuelve a intentar.";
+                    citizenForm.prepend(aviso);
+                }
+                return;
+            }
+
+            // Evitar interpretar nombres y RUT como HTML al mostrarlos.
+            const escapar = (valor) => String(valor || "").replace(/[&<>"']/g, (c) => ({
+                "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+            }[c]));
+            const nombreAnterior = citizenForm.dataset.originalName || "Sin ciudadano asociado";
+            const nombreNuevo = citizenForm.querySelector("#id_requester")?.value || "Ciudadano seleccionado";
+            const submitter = event.submitter;
+            const resultado = await Swal.fire({
+                title: "¿Confirmar cambio de ciudadano?",
+                html: `<div class="text-start">` +
+                    `<p><strong>Anterior:</strong> ${escapar(nombreAnterior)} (${escapar(rutAnterior || "Sin RUT")})</p>` +
+                    `<p><strong>Nuevo:</strong> ${escapar(nombreNuevo)} (${escapar(rutNuevo)})</p>` +
+                    `<p class="mb-0">Confirma que comprobaste los antecedentes del caso.</p></div>`,
+                icon: "warning",
+                showCancelButton: true,
+                confirmButtonText: "Sí, cambiar ciudadano",
+                cancelButtonText: "Cancelar",
+                confirmButtonColor: "#a60a17",
+                cancelButtonColor: "#6c757d",
+                reverseButtons: true,
+                focusCancel: true
+            });
+            if (!resultado.isConfirmed) return;
+            confirmField.value = "on";
+            citizenForm.requestSubmit(submitter || undefined);
+        });
+    }
 
     const modalElement =
         document.getElementById("attentionEntryModal");
@@ -708,6 +927,50 @@ document.addEventListener("DOMContentLoaded", function () {
     {% endif %}
 
     // ========================================
+    // CONFIRMACIÓN DE RESOLUCIÓN
+    // ========================================
+    document.querySelectorAll(
+        ".js-resolve-attention-entry"
+    ).forEach(function (form) {
+        form.addEventListener("submit", function (event) {
+            event.preventDefault();
+
+            const button = form.querySelector(
+                "button[type='submit']"
+            );
+            const name = button
+                ? button.dataset.name
+                : "esta atención";
+
+            if (!window.Swal) {
+                if (window.confirm(
+                    "¿Registrar como resuelta la atención de " + name + "?"
+                )) {
+                    form.submit();
+                }
+                return;
+            }
+
+            Swal.fire({
+                title: "¿Registrar resolución?",
+                text:
+                    "La atención de '" + name +
+                    "' cambiará al estado Resuelta.",
+                icon: "question",
+                showCancelButton: true,
+                confirmButtonText: "Sí, registrar resolución",
+                cancelButtonText: "Cancelar",
+                confirmButtonColor: "#198754",
+                reverseButtons: true
+            }).then(function (result) {
+                if (result.isConfirmed) {
+                    form.submit();
+                }
+            });
+        });
+    });
+
+    // ========================================
     // CONFIRMACIÓN DE ELIMINACIÓN
     // ========================================
     document.querySelectorAll(
@@ -781,4 +1044,5 @@ document.addEventListener("DOMContentLoaded", function () {
 
 });
 </script>
+<script src="{% static 'citizen_registry/attention_lookup.js' %}"></script>
 {% endblock %}

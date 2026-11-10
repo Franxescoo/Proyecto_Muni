@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block sidebar %}{% endblock %}
+
+{% block titulo %}Ingresar solicitud · Portal Ciudadano{% endblock %}
+
+{% block public_navigation %}
+<nav class="navbar navbar-expand topbar mb-4 shadow-sm" aria-label="Navegación del portal ciudadano">
+    <div class="container-fluid px-3 px-md-4">
+        <a class="navbar-brand py-0" href="{% url 'citizen_requests:public_portal' %}">
+            <img src="{% static 'img/horizontal-blanco.png' %}" alt="Logo Municipalidad de La Serena" height="55">
+        </a>
+        <a class="btn btn-outline-light ms-auto" href="{% url 'login' %}">
+            <i class="bi bi-box-arrow-in-right me-1" aria-hidden="true"></i>Iniciar sesión
+        </a>
+    </div>
+</nav>
+{% endblock %}
+
+{% block estilos %}
+<link rel="stylesheet" href="{% static 'css/portal_publico_moderno.css' %}">
+<link rel="stylesheet" href="{% static 'css/portal_ciudadano_ajustes.css' %}">
+<style>
+/* Los datos personales verificados deben verse nítidos aun cuando están bloqueados. */
+.portal-request-page fieldset[disabled] .form-control {
+    background: #fff !important;
+    color: #1f2937 !important;
+    -webkit-text-fill-color: #1f2937 !important;
+    border-color: #d6dce4 !important;
+    opacity: 1 !important;
+}
+.portal-request-page .form-control {
+    color: #1f2937;
+    background-color: #fff;
+}
+.portal-request-page input:-webkit-autofill,
+.portal-request-page input:-webkit-autofill:hover,
+.portal-request-page input:-webkit-autofill:focus {
+    -webkit-text-fill-color: #1f2937 !important;
+    -webkit-box-shadow: 0 0 0 1000px #fff inset !important;
+    box-shadow: 0 0 0 1000px #fff inset !important;
+}
+</style>
+{% endblock %}
+
+{% block contenido %}
+<div class="public-portal portal-inner portal-request-page">
+    <div class="portal-shell">
+        <a class="portal-back mb-3" href="{% url 'citizen_requests:public_portal' %}"><i class="bi bi-arrow-left" aria-hidden="true"></i>Volver al Portal Ciudadano</a>
+        <header class="portal-page-header mb-4">
+            <span class="portal-page-eyebrow"><i class="bi bi-buildings me-2" aria-hidden="true"></i>Atención ciudadana digital</span>
+            <h1><i class="bi bi-pencil-square me-2" aria-hidden="true"></i>Ingresar solicitud</h1>
+            <p>Verifica tu RUT con el correo registrado para completar tu solicitud de forma segura y recibir un código de seguimiento.</p>
+        </header>
+
+        <section class="portal-form-card p-3 p-md-4 p-lg-5">
+            <h2 class="h5 fw-bold mb-2">Identifica tu registro de ciudadano</h2>
+            <p class="text-secondary small mb-4">Primero verifica tu RUT. Por seguridad, tus datos se mostrarán únicamente después de validar el código enviado al correo que tienes registrado en la municipalidad.</p>
+            {% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
+            {% if notice %}<div class="alert alert-info" role="status">{{ notice }}</div>{% endif %}
+
+            {% if verified_citizen %}
+            <div class="alert alert-success d-flex gap-2 align-items-center"><i class="bi bi-shield-check" aria-hidden="true"></i><span>Identidad verificada. Los datos personales se han recuperado del registro municipal.</span></div>
+            <form method="post" action="{% url 'citizen_requests:public_request_form' %}" class="mb-3">
+                {% csrf_token %}<input type="hidden" name="action" value="restart">
+                <button type="submit" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>Cambiar RUT</button>
+            </form>
+            <fieldset disabled class="border rounded-3 bg-light p-3 mb-4" aria-label="Datos del ciudadano verificado en solo lectura">
+              <legend class="float-none w-auto px-2 fs-6 fw-bold">Datos del solicitante · Solo lectura</legend>
+              <div class="row g-3">
+                <div class="col-md-4"><label class="form-label">RUT</label><input class="form-control" value="{{ verified_citizen.rut }}" disabled></div>
+                <div class="col-md-8"><label class="form-label">Nombre completo</label><input class="form-control" value="{{ verified_citizen.full_name }}" disabled></div>
+                <div class="col-md-4"><label class="form-label">Teléfono</label><input class="form-control" value="{{ verified_citizen.phone }}" disabled></div>
+                <div class="col-md-4"><label class="form-label">Correo electrónico</label><input class="form-control" value="{{ verified_citizen.email }}" disabled></div>
+                <div class="col-md-4"><label class="form-label">Dirección</label><input class="form-control" value="{{ verified_citizen.address }}" disabled></div>
+              </div>
+            </fieldset>
+            <h3 class="h6 fw-bold mb-3">Datos de tu solicitud</h3>
+            {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+            <form method="post" action="{% url 'citizen_requests:register_public_request' %}">
+                {% csrf_token %}<input type="hidden" name="portal_form" value="1">
+                <div class="row g-3">
+                  {% for field in form %}
+                    <div class="col-12"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }} <span class="text-danger">*</span></label>
+                      {{ field }}
+                      {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                    </div>
+                  {% endfor %}
+                </div>
+                <div class="d-flex flex-wrap gap-3 align-items-center mt-4">
+                  <button type="submit" class="portal-btn"><i class="bi bi-send" aria-hidden="true"></i>Registrar solicitud</button>
+                  <span class="small text-secondary"><i class="bi bi-shield-check me-1" aria-hidden="true"></i>Recibirás tu código de seguimiento por correo.</span>
+                </div>
+            </form>
+            {% else %}
+            <form method="post" action="{% url 'citizen_requests:public_request_form' %}">
+              {% csrf_token %}<input type="hidden" name="action" value="identify">
+              <label class="form-label fw-semibold" for="publicCitizenRut">RUT del ciudadano</label>
+              <div class="row g-2 align-items-end">
+                <div class="col-md-8"><input type="text" id="publicCitizenRut" name="rut" class="form-control" placeholder="12.345.678-5" maxlength="16" autocomplete="off" required></div>
+                <div class="col-md-4"><button type="submit" class="portal-btn w-100"><i class="bi bi-envelope-check" aria-hidden="true"></i>Verificar RUT</button></div>
+              </div>
+            </form>
+            {% if pending_verification %}
+            <div class="border-top mt-4 pt-4">
+              <h3 class="h6 fw-bold">Código de verificación</h3>
+              <p class="text-secondary small">Escribe el código de seis dígitos enviado a tu correo registrado. Caduca en 10 minutos.</p>
+              <form method="post" action="{% url 'citizen_requests:public_request_form' %}">
+                {% csrf_token %}<input type="hidden" name="action" value="verify">
+                <div class="row g-2 align-items-end">
+                  <div class="col-md-8"><label class="form-label" for="publicCitizenCode">Código recibido</label>
+                    <input class="form-control" id="publicCitizenCode" type="text" name="code" maxlength="6" pattern="[0-9]{6}" inputmode="numeric" autocomplete="one-time-code" required></div>
+                  <div class="col-md-4"><button type="submit" class="portal-btn w-100"><i class="bi bi-check-circle" aria-hidden="true"></i>Confirmar código</button></div>
+                </div>
+              </form>
+            </div>
+            {% endif %}
+            <p class="small text-secondary mt-4 mb-0"><i class="bi bi-info-circle me-1" aria-hidden="true"></i>Si no estás registrado o tus datos están desactualizados, comunícate con la municipalidad. Un funcionario podrá revisar tu ficha.</p>
+            {% endif %}
+        </section>
+        <aside class="portal-info-panel" aria-label="Información de la solicitud">
+            <span class="portal-info-icon"><i class="bi bi-shield-check" aria-hidden="true"></i></span>
+            <div>
+                <strong>Un trámite claro y seguro.</strong>
+                <p>Tus datos personales se obtienen del registro de Ciudadanos, sin modificarlos desde el portal. Recibirás un código de seguimiento al completar tu solicitud.</p>
+            </div>
+        </aside>
+    </div>
+</div>
+{% endblock %}

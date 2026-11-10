@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% load static %}
+{% block titulo %}Gestión de ciudadanos · SGR{% endblock %}
+{% block estilos %}<style>
+.cr-hero{background:linear-gradient(110deg,#750613,#ad1129);color:white;border-radius:13px;padding:24px 28px;margin-bottom:18px}
+.cr-panel{border:1px solid #e6e2e4;border-radius:13px;background:white;box-shadow:0 7px 25px rgba(32,42,63,.06);padding:20px}
+.cr-table thead{background:#f8f1f2;color:#6b3340;font-size:.79rem;text-transform:uppercase}
+.cr-table tbody tr:nth-child(even){background:#fff5f6}.cr-table tbody tr:hover{background:#ffe9ed}
+.cr-table td,.cr-table th{vertical-align:middle;padding:13px}
+.cr-modal-title{background:#a40a20;color:white}.cr-modal-title .btn-close{filter:invert(1)}
+.cr-panel input,.cr-panel select,.modal input,.modal select{color:#1f2937!important;-webkit-text-fill-color:#1f2937}
+</style>{% endblock %}
+{% block contenido %}
+<div class="container-fluid px-2 px-md-4 pb-4">
+  <div class="cr-hero d-flex justify-content-between align-items-center gap-3 flex-wrap">
+    <div><div class="text-uppercase small">Registro y validación</div><h1 class="h3 fw-bold mb-1">Gestión de ciudadanos</h1><p class="mb-0">Registro único de vecinos para Solicitudes, Atención y Regalos.</p></div>
+  </div>
+  <section class="cr-panel">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+      <div><h2 class="h5 fw-bold mb-1">Registro de ciudadanos</h2><p class="small text-secondary mb-0">Consulta y administra vecinos registrados.</p></div>
+      {% if perms.citizen_registry.add_citizen %}
+      <button type="button" class="btn btn-success fw-semibold d-inline-flex gap-2 align-items-center" data-bs-toggle="modal" data-bs-target="#citizenModal" id="newCitizen"><i class="bi bi-person-plus" aria-hidden="true"></i>Agregar ciudadano</button>
+      {% endif %}
+    </div>
+    <form class="row g-2 mb-4 align-items-end" method="get">
+      <div class="col-md-6"><label for="citizenSearch" class="form-label fw-semibold">Buscar por RUT, nombre o correo</label><input class="form-control" id="citizenSearch" name="q" value="{{ q }}" placeholder="Ej. 12.345.678-5"></div>
+      <div class="col-md-3"><label for="citizenState" class="form-label fw-semibold">Estado</label><select id="citizenState" name="state" class="form-select"><option value="active" {% if state == 'active' %}selected{% endif %}>Activos</option><option value="inactive" {% if state == 'inactive' %}selected{% endif %}>Inactivos</option><option value="all" {% if state == 'all' %}selected{% endif %}>Todos</option></select></div>
+      <div class="col-md-3"><button class="btn btn-dark w-100" type="submit"><i class="bi bi-search me-1"></i> Buscar</button></div>
+    </form>
+    <div class="table-responsive"><table class="table cr-table mb-0"><thead><tr><th>RUT</th><th>Nombre</th><th>Correo</th><th>Teléfono</th><th>Estado</th><th>Acciones</th></tr></thead>
+      <tbody>{% for c in page_obj %}<tr><td>{{ c.rut }}</td><td class="fw-semibold">{{ c.full_name }}</td><td>{{ c.email|default:'—' }}</td><td>{{ c.phone|default:'—' }}</td><td>{% if c.is_active %}<span class="badge text-bg-success">Activo</span>{% else %}<span class="badge text-bg-secondary">Inactivo</span>{% endif %}</td>
+      <td><div class="d-flex gap-1 flex-wrap"><button type="button" class="btn btn-outline-info btn-sm" data-citizen-view="{{ c.pk }}"><i class="bi bi-eye"></i> Ver</button>{% if perms.citizen_registry.change_citizen %}<button type="button" class="btn btn-outline-secondary btn-sm" data-citizen-edit="{{ c.pk }}">Modificar</button>{% if c.is_active %}<button type="button" class="btn btn-outline-danger btn-sm" data-citizen-deactivate="{{ c.pk }}">Desactivar</button>{% else %}<button type="button" class="btn btn-outline-success btn-sm" data-citizen-reactivate="{{ c.pk }}">Reactivar</button>{% endif %}{% endif %}</div></td></tr>{% empty %}<tr><td colspan="6" class="text-center py-5 text-muted">Sin ciudadanos registrados para esta búsqueda.</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% if page_obj.has_other_pages %}<nav class="d-flex gap-2 mt-3" aria-label="Páginas de ciudadanos">{% if page_obj.has_previous %}<a class="btn btn-outline-secondary btn-sm" href="?q={{ q|urlencode }}&state={{ state|urlencode }}&page={{ page_obj.previous_page_number }}">Anterior</a>{% endif %}<span class="small text-muted my-auto">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>{% if page_obj.has_next %}<a class="btn btn-outline-secondary btn-sm" href="?q={{ q|urlencode }}&state={{ state|urlencode }}&page={{ page_obj.next_page_number }}">Siguiente</a>{% endif %}</nav>{% endif %}
+  </section>
+</div>
+<div class="modal fade" id="citizenModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
+  <div class="modal-header cr-modal-title"><h2 class="modal-title fs-5 fw-bold" id="citizenModalTitle">Agregar ciudadano</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+  <div class="modal-body"><div class="alert alert-light border small">Datos personales de acceso restringido. El RUT debe ser único y el folio RSH no se muestra en búsquedas rápidas.</div>
+    <form id="citizenCrudForm" method="post" action="{% url 'citizen_registry:create' %}">{% csrf_token %}
+      {% include "citizen_registry/_form_fields.html" %}
+      <div id="citizenErrors" class="alert alert-danger d-none mt-3" role="alert"></div>
+      <div class="d-flex justify-content-end gap-2 mt-3"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button><button type="submit" class="btn btn-danger" id="citizenSave">Guardar ciudadano</button></div>
+    </form>
+  </div>
+</div></div></div>
+{% endblock %}
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+(function(){
+ const modalEl=document.getElementById('citizenModal'),form=document.getElementById('citizenCrudForm'),title=document.getElementById('citizenModalTitle'),save=document.getElementById('citizenSave'),errors=document.getElementById('citizenErrors');
+ if(!form)return;
+ const createUrl="{% url 'citizen_registry:create' %}",detailBase="{% url 'citizen_registry:detail' 0 %}";
+ const editBase="{% url 'citizen_registry:edit' 0 %}",offBase="{% url 'citizen_registry:deactivate' 0 %}",reactivateBase="{% url 'citizen_registry:reactivate' 0 %}";
+ let mode='create';
+ function url(base,id){return base.replace('/0/',`/${id}/`)}
+ function community(){const on=form.elements.is_neighborhood_member.checked;form.querySelectorAll('[data-community-field]').forEach(row=>{row.style.display=on?'':'none'});form.elements.neighborhood_group.disabled=!on;form.elements.organization_role.disabled=!on;if(!on){form.elements.neighborhood_group.value='';form.elements.organization_role.value='NONE'}}
+ form.elements.is_neighborhood_member.addEventListener('change',community);
+ function showError(text){errors.textContent=text;errors.classList.remove('d-none')}
+ function show(modeNext, citizen){mode=modeNext;form.reset();errors.classList.add('d-none');title.textContent=mode==='create'?'Agregar ciudadano':mode==='view'?'Ver ciudadano (solo lectura)':'Modificar ciudadano';
+  if(citizen){const c=citizen;for(const k of ['rut','full_name','birth_date','phone','email','address','rsh_folio','rsh_bracket','neighborhood_group','organization_role']){if(form.elements[k])form.elements[k].value=c[k]??''}form.elements.is_neighborhood_member.checked=c.is_neighborhood_member;}
+  community();form.querySelectorAll('input,select').forEach(el=>{if(el.name!=='csrfmiddlewaretoken'){el.disabled=mode==='view'||(!form.elements.is_neighborhood_member.checked&&['neighborhood_group','organization_role'].includes(el.name));el.readOnly=mode==='edit'&&el.name==='rut'}});save.classList.toggle('d-none',mode==='view');form.dataset.pk=citizen?.id||'';bootstrap.Modal.getOrCreateInstance(modalEl).show();
+ }
+ document.getElementById('newCitizen')?.addEventListener('click',()=>show('create'));
+ document.querySelectorAll('[data-citizen-view],[data-citizen-edit]').forEach(btn=>btn.addEventListener('click',async()=>{const id=btn.dataset.citizenView||btn.dataset.citizenEdit;const response=await fetch(url(detailBase,id));if(!response.ok){alert('No fue posible consultar el ciudadano');return}show(btn.dataset.citizenView?'view':'edit',(await response.json()).citizen)}));
+ document.querySelectorAll('[data-citizen-deactivate]').forEach(btn=>btn.addEventListener('click',async()=>{const decision=window.Swal
+       ? await Swal.fire({title:'¿Desactivar ciudadano?',text:'Se archivará este ciudadano. Sus solicitudes y atenciones históricas se conservarán.',icon:'warning',showCancelButton:true,confirmButtonText:'Sí, desactivar',cancelButtonText:'Cancelar',confirmButtonColor:'#a60a17',cancelButtonColor:'#6c757d',reverseButtons:true,focusCancel:true})
+       : {isConfirmed:window.confirm('¿Desactivar este ciudadano? Se conservarán sus solicitudes históricas.')};
+     if(!decision.isConfirmed)return;const resp=await fetch(url(offBase,btn.dataset.citizenDeactivate),{method:'POST',headers:{'X-CSRFToken':form.elements.csrfmiddlewaretoken.value}});if(resp.ok)location.reload();else alert('No fue posible desactivar el ciudadano.')}));
+ document.querySelectorAll('[data-citizen-reactivate]').forEach(btn=>btn.addEventListener('click',async()=>{const decision=window.Swal
+       ? await Swal.fire({title:'¿Reactivar ciudadano?',text:'Se recuperará el registro original y sus antecedentes, sin crear otro RUT.',icon:'question',showCancelButton:true,confirmButtonText:'Sí, reactivar',cancelButtonText:'Cancelar',confirmButtonColor:'#138d56',cancelButtonColor:'#6c757d',reverseButtons:true,focusCancel:true})
+       : {isConfirmed:window.confirm('¿Reactivar este ciudadano y recuperar su registro original?')};
+     if(!decision.isConfirmed)return;const resp=await fetch(url(reactivateBase,btn.dataset.citizenReactivate),{method:'POST',headers:{'X-CSRFToken':form.elements.csrfmiddlewaretoken.value}});if(resp.ok)location.reload();else alert('No fue posible reactivar el ciudadano.')}));
+ form.addEventListener('submit',async e=>{e.preventDefault();if(mode==='view')return;const endpoint=mode==='edit'?url(editBase,form.dataset.pk):createUrl;const body=new FormData(form);if(!form.elements.is_neighborhood_member.checked)body.set('organization_role','NONE');
+  const resp=await fetch(endpoint,{method:'POST',headers:{'X-CSRFToken':form.elements.csrfmiddlewaretoken.value,'X-Requested-With':'XMLHttpRequest'},body});const result=await resp.json().catch(()=>({}));if(resp.ok&&result.ok){location.reload();return}const detail=result.errors?Object.entries(result.errors).map(([k,v])=>`${k}: ${v.map(x=>x.message).join(', ')}`).join(' · '):result.error||'Revisa los campos';showError(detail)
+ });
+})();
+</script>{% endblock %}

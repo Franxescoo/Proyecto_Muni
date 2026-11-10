@@ -59,6 +59,10 @@ CSRF_TRUSTED_ORIGINS = [
 # Application definition
 
 INSTALLED_APPS = [
+    "institutional_mail",
+    "daphne",
+    "channels",
+    "websocket",
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -71,6 +75,9 @@ INSTALLED_APPS = [
     'registration_validation',
     'core',
     'accounts',
+    'citizen_requests',
+    'citizen_registry',
+    'municipal_events',
 ]
 
 MIDDLEWARE = [
@@ -82,6 +89,7 @@ MIDDLEWARE = [
     'accounts.delegation_context.ActiveDelegationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'monitoring_traceability.audit_context.AuditUserMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -103,6 +111,14 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'config.wsgi.application'
+ASGI_APPLICATION = "config.asgi.application"
+
+
+CHANNEL_LAYERS = {
+"default": {
+"BACKEND": "channels.layers.InMemoryChannelLayer",
+}
+}
 
 
 # Database
@@ -182,6 +198,9 @@ PASSWORD_RESET_SITE_NAME = os.getenv(
 PASSWORD_RESET_USE_HTTPS = (
     os.getenv("PASSWORD_RESET_USE_HTTPS", "False").lower() == "true"
 )
+
+PUBLIC_PORTAL_URL = os.getenv("PUBLIC_PORTAL_URL", "").strip()
+
 if os.getenv("DJANGO_BEHIND_PROXY", "False").lower() == "true":
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 

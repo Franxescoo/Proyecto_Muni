@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block titulo %}Chat institucional · SGR{% endblock %}
+{% block contenido %}
+<section class="card shadow-sm">
+    <div class="card-body">
+        <h1 class="h4">Chat institucional</h1>
+        <p>El chat está disponible desde la barra superior en todas las páginas del SGR.</p>
+        {% if sgr_active_delegation %}
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#chatInstitucionalModal">Abrir chat de {{ sgr_active_delegation.name }}</button>
+        {% else %}
+        <p class="text-muted">Tu usuario no tiene una delegación activa autorizada.</p>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

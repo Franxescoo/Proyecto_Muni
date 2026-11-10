@@ -1,0 +1,20 @@
+{# Solo presentación. Ayuda visible a la derecha en escritorio; offcanvas en pantallas estrechas. #}
+<aside class="sgr-guide-rail" aria-label="Instrucciones de Planificación">
+  {% include "planning/_context_guidance.html" with section=section only %}
+</aside>
+<div class="sgr-guide-help-mobile">
+  <button type="button" class="btn sgr-guide-help-trigger"
+          data-bs-toggle="offcanvas" data-bs-target="#sgrPlanningHelp"
+          aria-controls="sgrPlanningHelp" aria-label="Abrir instrucciones de Planificación">
+    <i class="bi bi-lightbulb me-1" aria-hidden="true"></i> Ayuda
+  </button>
+  <div class="offcanvas offcanvas-end sgr-guide-offcanvas" tabindex="-1"
+       id="sgrPlanningHelp" aria-labelledby="sgrPlanningHelpTitle">
+    <div class="offcanvas-header">
+      <h5 class="offcanvas-title" id="sgrPlanningHelpTitle">Guía de Planificación</h5>
+      <button type="button" class="btn-close" data-bs-dismiss="offcanvas"
+              aria-label="Cerrar instrucciones"></button>
+    </div>
+    <div class="offcanvas-body">{% include "planning/_context_guidance.html" with section=section only %}</div>
+  </div>
+</div>

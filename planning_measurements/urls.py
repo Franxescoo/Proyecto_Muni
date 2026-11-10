@@ -11,6 +11,7 @@ urlpatterns = [
     path("periods/", views.period_list, name="period_list"),
     path("periods/add/", views.period_create, name="period_create"),
     path("periods/<int:period_id>/", views.period_edit, name="period_edit"),
+    path("periods/<int:period_id>/versions/", views.period_parameter_history, name="period_parameter_history"),
     path("periods/<int:period_id>/delete/", views.period_delete, name="period_delete"),
     path(
         "periods/<int:period_id>/assign-goals/",

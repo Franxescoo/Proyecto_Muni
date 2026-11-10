@@ -1,0 +1,48 @@
+{% load static %}
+{% with code=error_code|default:404 %}
+<section class="muni-error-page" aria-labelledby="muni-error-title">
+    <div class="muni-error-card">
+        <div class="muni-error-inner">
+            <div class="muni-error-visual" aria-hidden="true">
+                <div class="muni-error-code-display">{{ code }}</div>
+                <span class="muni-error-symbol">
+                    {% if code == 400 %}<i class="bi bi-exclamation-lg"></i>
+                    {% elif code == 403 %}<i class="bi bi-shield-lock-fill"></i>
+                    {% elif code == 500 %}<i class="bi bi-gear-wide-connected"></i>
+                    {% else %}<i class="bi bi-search"></i>{% endif %}
+                </span>
+            </div>
+
+            <div class="muni-error-copy">
+                <h1 class="muni-error-title" id="muni-error-title">
+                    {{ error_title|default:"Página no encontrada" }}
+                </h1>
+
+                <p class="muni-error-description">
+                    {% if code == 400 %}
+                        La solicitud no se pudo procesar. Verifique la información e inténtelo nuevamente.
+                    {% elif code == 403 %}
+                        Su cuenta no cuenta con los permisos necesarios para acceder a este contenido.
+                    {% elif code == 500 %}
+                        Ocurrió un problema inesperado en el sistema. Nuestro equipo puede revisar lo sucedido.
+                    {% else %}
+                        La dirección solicitada no existe o el registro ya no está disponible.
+                    {% endif %}
+                </p>
+
+                <div class="muni-error-actions">
+                    <a class="muni-btn-primary" href="{% url 'home' %}">
+                        <i class="bi bi-house-door"></i>
+                        Volver al inicio
+                    </a>
+                    <a class="muni-btn-secondary" href="{% url 'home' %}"
+                       onclick="if (window.history.length > 1) { window.history.back(); return false; }">
+                        <i class="bi bi-arrow-left"></i>
+                        Volver atrás
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endwith %}

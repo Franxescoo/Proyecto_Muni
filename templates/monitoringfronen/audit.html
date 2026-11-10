@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load audit_extras %}
 {% load i18n %}
 
 {% block titulo %}Auditoría · Monitoreo y trazabilidad{% endblock %}
@@ -23,19 +24,7 @@
 {% block top_links %}{% endblock %}
 
 {% block sidebar %}
-<aside class="workspace-sidebar" aria-label="Navegación de monitoreo y trazabilidad">
-    <div class="workspace-sidebar-header">
-        <i class="bi bi-list" aria-hidden="true"></i>
-        <strong>Monitoreo y<br>trazabilidad</strong>
-        <i class="bi bi-chevron-down" aria-hidden="true"></i>
-    </div>
-    <nav class="nav flex-column">
-        <a class="nav-link" href="{% url 'home' %}"><i class="bi bi-house-door"></i><span>Inicio</span></a>
-        <a class="nav-link" href="{% url 'monitoring:indicator_list' %}"><i class="bi bi-bar-chart-line"></i><span>Indicadores</span></a>
-        <a class="nav-link" href="{% url 'monitoring:commitment_list' %}"><i class="bi bi-people"></i><span>Compromisos</span></a>
-        <a class="nav-link active" href="{% url 'monitoring:audit_list' %}"><i class="bi bi-shield-check"></i><span>Auditoría</span></a>
-    </nav>
-</aside>
+    {% include "shared/global_sidebar.html" %}
 {% endblock %}
 
 {% block contenido %}
@@ -57,7 +46,76 @@
         </form>
         <div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr><th>Evento</th><th>Usuario</th><th>Entidad</th><th>Identificador</th><th>Fecha</th><th class="text-end">Detalle</th></tr></thead><tbody>
             {% for audit in audits %}
-            <tr><td><span class="event-icon me-2"><i class="bi bi-clock-history" aria-hidden="true"></i></span><span class="fw-semibold">{{ audit.event|default:"Evento" }}</span></td><td>{{ audit.user|default:"—" }}</td><td>{{ audit.entity|default:"—" }}</td><td><code>{{ audit.object_identifier|default:"—" }}</code></td><td class="text-muted small">{% language 'es' %}{{ audit.event_date|date:"d \d\e F \d\e Y H:i"|default:"—" }}{% endlanguage %}</td><td class="text-end"><button type="button" class="btn btn-sm btn-light border" title="Ver cambios"><i class="bi bi-eye"></i><span class="visually-hidden">Ver cambios</span></button></td></tr>
+            <tr><td><span class="event-icon me-2"><i class="bi bi-clock-history" aria-hidden="true"></i></span><span class="fw-semibold">{{ audit.event|visual_es|default:"Evento" }}</span></td>
+                <td>
+                    {% if audit.entity == "Goal" and audit.new_value.editado_por %}
+                        {{ audit.new_value.editado_por }}
+                    {% else %}
+                        {{ audit.user|default:"—" }}
+                    {% endif %}
+                </td>
+
+                <td>
+                    {{ audit.entity|visual_es|default:"—" }}
+                </td>
+                <td><code>{{ audit.object_identifier|default:"—" }}</code></td><td class="text-muted small">{% language 'es' %}{{ audit.event_date|date:"d \d\e F \d\e Y H:i"|default:"—" }}{% endlanguage %}</td>
+                <td class="text-end">
+                    {% if audit.previous_value or audit.new_value %}
+                    <details class="text-start">
+                        <summary class="btn btn-sm btn-light border">
+                            <i class="bi bi-eye"></i>
+                            Ver cambios
+                        </summary>
+
+                        <div class="border rounded p-3 mt-2 bg-light">
+                            {% if audit.entity == "Goal" and audit.new_value.datos %}
+
+                            {% mostrar_cambios audit.previous_value audit.new_value.datos %}
+
+                            {% if audit.new_value.editado_por %}
+                                <p class="small text-muted mb-0">
+                                    Modificado por: {{ audit.new_value.editado_por }}
+                                </p>
+                            {% endif %}
+
+                            {% elif audit.entity == "Period" and audit.event == "Reopened Period" %}
+
+                            <table class="table table-bordered table-sm mt-2">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Campo</th>
+                                        <th>Antes</th>
+                                        <th>Después</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>Estado del período</td>
+                                        <td>Cerrado</td>
+                                        <td>Activo</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+
+                            <p class="mb-1">
+                                <strong>Motivo:</strong>
+                                {{ audit.new_value.motivo }}
+                            </p>
+
+                            <p class="mb-0">
+                                <strong>Reabierto por:</strong>
+                                {{ audit.new_value.editado_por }}
+                            </p>
+                            {% else %}
+                                {% mostrar_cambios audit.previous_value audit.new_value %}
+                            {% endif %}
+                        </div>
+                    </details>
+                    {% else %}
+                        <span class="text-muted">—</span>
+                    {% endif %}
+                </td>
+            </tr>
             {% empty %}<tr><td colspan="6" class="text-center py-5"><i class="bi bi-journal-check fs-2 text-muted d-block mb-2"></i><span class="text-muted">No hay eventos de auditoría para mostrar.</span></td></tr>
             {% endfor %}
         </tbody></table></div>

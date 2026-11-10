@@ -1,8 +1,10 @@
 from django import forms
+from django.core.validators import MaxLengthValidator
 from accounts.permissions import allowed_delegation_ids
 from django.core.validators import FileExtensionValidator
 from django.db.models import Q
 from organization.models import Delegation, Employee
+from citizen_registry.models import Citizen
 from planning_measurements.models import Goal, Period
 from .models import (
     Activity,
@@ -17,6 +19,7 @@ from .models import (
     MAX_EVIDENCE_FILES,
     MAX_EVIDENCE_TOTAL_SIZE,
     EVIDENCE_ALLOWED_EXTENSIONS,
+    validate_evidence_file_link,
 )
 
 # ---------------------------------------------------------
@@ -37,6 +40,30 @@ class BootstrapMixin:
             else:
                 css_class = "form-control"
             field.widget.attrs["class"] = css_class
+
+
+def _set_text_limit(field, limit, label):
+    """Aplica el límite tanto al formulario como al control HTML."""
+    field.widget.attrs["maxlength"] = limit
+    if field.required:
+        field.error_messages["required"] = "Este campo es obligatorio."
+    field.validators = [
+        validator
+        for validator in field.validators
+        if not isinstance(validator, MaxLengthValidator)
+    ]
+    field.validators.append(
+        MaxLengthValidator(
+            limit,
+            message=f"{label} no puede superar los {limit} caracteres.",
+        )
+    )
+
+
+def _set_form_text_limits(form, limits):
+    for field_name, limit, label in limits:
+        _set_text_limit(form.fields[field_name], limit, label)
+
 
 # ---------------------------------------------------------
 # Campos para múltiples archivos
@@ -192,6 +219,15 @@ class ActivityForm(BootstrapMixin, forms.ModelForm):
             self.instance.pk is None
         )
 
+        _set_form_text_limits(
+            self,
+            (
+                ("request_problem", 2000, "La solicitud o problema"),
+                ("action", 2000, "La acción realizada"),
+                ("contact", 150, "El contacto"),
+                ("phone", 20, "El teléfono"),
+            ),
+        )
         self._apply_bootstrap()
 
     def clean(self):
@@ -333,7 +369,26 @@ class EvidenceForm(BootstrapMixin, forms.ModelForm):
                     deleted_at__isnull=True,
                 )
             )
+        _set_form_text_limits(
+            self,
+            (
+                ("code", 100, "El código"),
+                ("file_link", 500, "El enlace de evidencia"),
+                ("review_status", 50, "El estado de revisión"),
+            ),
+        )
         self._apply_bootstrap()
+
+    def clean_file_link(self):
+        file_link = (self.cleaned_data.get("file_link") or "").strip()
+        try:
+            validate_evidence_file_link(file_link)
+        except forms.ValidationError as exc:
+            raise forms.ValidationError(
+                exc.messages,
+                code="invalid",
+            ) from exc
+        return file_link
 
     def clean(self):
         cleaned_data = super().clean()
@@ -447,6 +502,11 @@ class EvidenceForm(BootstrapMixin, forms.ModelForm):
 
 
 class ValidationForm(BootstrapMixin, forms.ModelForm):
+    version = forms.IntegerField(
+        label="Versión",
+        min_value=1,
+        widget=forms.NumberInput(attrs={"min": 1}),
+    )
     date = forms.DateTimeField(
         label="Fecha y hora",
         input_formats=["%Y-%m-%dT%H:%M"],
@@ -499,6 +559,8 @@ class ValidationForm(BootstrapMixin, forms.ModelForm):
 
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
+        if self.instance.pk and self.instance.version < 1:
+            self.fields["version"].min_value = None
         evidences = (
             Evidence.objects
             .filter(
@@ -541,6 +603,14 @@ class ValidationForm(BootstrapMixin, forms.ModelForm):
         self.fields["observation"].required = False
         self.fields["version"].help_text = (
             "Número de versión de la validación."
+        )
+        _set_form_text_limits(
+            self,
+            (
+                ("decision", 50, "La decisión"),
+                ("observation", 1000, "La observación"),
+                ("result", 100, "El resultado"),
+            ),
         )
         self._apply_bootstrap()
 
@@ -626,6 +696,14 @@ class ActivityTypeForm(BootstrapMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["description"].required = False
         self._apply_bootstrap()
+        _set_form_text_limits(
+            self,
+            (
+                ("code", 50, "El código"),
+                ("name", 150, "El nombre"),
+                ("description", 300, "La descripción"),
+            ),
+        )
 
     def clean_code(self):
         code = self.cleaned_data["code"].strip()
@@ -720,6 +798,14 @@ class ServiceForm(BootstrapMixin, forms.ModelForm):
         self.fields["description"].required = False
 
         self._apply_bootstrap()
+        _set_form_text_limits(
+            self,
+            (
+                ("code", 50, "El código"),
+                ("name", 150, "El nombre"),
+                ("description", 300, "La descripción"),
+            ),
+        )
 
     def clean_code(self):
         code = self.cleaned_data["code"].strip()
@@ -810,6 +896,14 @@ class AttentionTypeForm(BootstrapMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["description"].required = False
         self._apply_bootstrap()
+        _set_form_text_limits(
+            self,
+            (
+                ("code", 50, "El código"),
+                ("name", 150, "El nombre"),
+                ("description", 300, "La descripción"),
+            ),
+        )
 
     def clean_code(self):
         code = self.cleaned_data["code"].strip()
@@ -910,6 +1004,13 @@ class SubAttentionForm(BootstrapMixin, forms.ModelForm):
             "Solo se pueden crear nuevas asociaciones "
             "con tipos de atención activos y no eliminados."
         )
+        _set_form_text_limits(
+            self,
+            (
+                ("code", 50, "El código"),
+                ("name", 150, "El nombre"),
+            ),
+        )
         self._apply_bootstrap()
 
     def clean_code(self):
@@ -957,20 +1058,37 @@ class SubAttentionForm(BootstrapMixin, forms.ModelForm):
 
 
 class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
+    closing_observation = forms.CharField(
+        label="Observación del cambio de estado",
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 2, "placeholder": "Resultado de la gestión"}),
+    )
+    citizen_rut = forms.CharField(label="RUT del ciudadano (búsqueda)", max_length=16, required=False, widget=forms.TextInput(attrs={"class":"form-control", "placeholder":"12.345.678-5", "autocomplete":"off"}))
+    confirm_citizen_change = forms.BooleanField(required=False, widget=forms.HiddenInput(), label="Confirmar cambio de ciudadano")
+
     """Registra solicitudes con relaciones y delegación validadas."""
 
     class Meta:
         model = AttentionEntry
         fields = [
             "requester",
+            "requester_email",
+            "requester_phone",
+            "address",
+            "subject",
             "attention_type",
             "sub_attention",
             "description",
             "delegation",
             "responsible_employee",
+            "status",
         ]
         labels = {
             "requester": "Solicitante",
+            "requester_email": "Correo electrónico",
+            "requester_phone": "Teléfono",
+            "address": "Dirección",
+            "subject": "Asunto",
             "attention_type": "Tipo de atención",
             "sub_attention": "Subatención",
             "description": "Descripción de la solicitud",
@@ -982,6 +1100,21 @@ class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
                 "placeholder": "Nombre de quien realiza la solicitud",
                 "maxlength": 150,
             }),
+            "requester_email": forms.EmailInput(attrs={
+                "placeholder": "correo@ejemplo.cl",
+            }),
+            "requester_phone": forms.TextInput(attrs={
+                "placeholder": "Teléfono de contacto",
+                "maxlength": 25,
+            }),
+            "address": forms.TextInput(attrs={
+                "placeholder": "Dirección",
+                "maxlength": 250,
+            }),
+            "subject": forms.TextInput(attrs={
+                "placeholder": "Asunto de la solicitud",
+                "maxlength": 160,
+            }),
             "description": forms.Textarea(attrs={
                 "rows": 4,
                 "placeholder": "Describe la solicitud de atención",
@@ -990,7 +1123,45 @@ class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
 
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
+        _set_form_text_limits(
+            self,
+            (
+                ("closing_observation", 1000, "La observación"),
+                ("citizen_rut", 16, "El RUT"),
+            ),
+        )
         existing = bool(self.instance.pk)
+        if existing:
+            self.fields["status"].required = False  # Formularios anteriores siguen siendo válidos.
+            self.fields["status"].label = "Estado de la atención"
+            statuses = [
+                ("IN_PROGRESS", "En gestión"), ("RESOLVED", "Resuelta"),
+                ("CLOSED", "Cerrada"), ("REJECTED", "No procede"),
+            ]
+            if self.instance.status not in dict(statuses):
+                statuses.insert(0, (self.instance.status, self.instance.get_status_display()))
+            self.fields["status"].choices = statuses
+        else:
+            self.fields.pop("status", None)
+            self.fields.pop("closing_observation", None)
+        if getattr(self.instance, "citizen_id", None):
+            citizen = self.instance.citizen
+            self.fields["citizen_rut"].initial = citizen.rut
+            # Mostrar información actual del mantenedor Ciudadanos, aunque
+            # la atención guarde una copia histórica anterior.
+            self.initial.update({
+                "requester": citizen.full_name,
+                "requester_email": citizen.email,
+                "requester_phone": citizen.phone,
+                "address": citizen.address,
+            })
+
+        # Solo el RUT permite seleccionar a otro ciudadano. Los datos personales
+        # se editan exclusivamente desde el mantenedor Ciudadanos.
+        for field in ("requester", "requester_email", "requester_phone", "address"):
+            self.fields[field].widget.attrs["readonly"] = "readonly"
+            self.fields[field].help_text = "Se obtiene del RUT. Para corregirlo, modifica Ciudadanos."
+
         self.request_user = user
         # Solo relaciones activas y no archivadas para nuevos registros.
         type_condition = Q(deleted_at__isnull=True, status=True)
@@ -1066,6 +1237,7 @@ class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
                 linked_employee is not None and not existing
                 and (selected_id is None or linked_employee.delegation_id == selected_id)
             ):
+                self.initial["responsible_employee"] = linked_employee.pk
                 self.fields["responsible_employee"].initial = linked_employee.pk
                 self.fields["responsible_employee"].disabled = True
                 self.fields["responsible_employee"].help_text = (
@@ -1078,8 +1250,26 @@ class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
             self.fields[field_name].error_messages["invalid_choice"] = (
                 "Selecciona una opción válida de la lista."
             )
+        _set_form_text_limits(
+            self,
+            (
+                ("requester", 150, "El nombre del solicitante"),
+                ("requester_email", 254, "El correo electrónico"),
+                ("requester_phone", 25, "El teléfono"),
+                ("address", 250, "La dirección"),
+                ("subject", 160, "El asunto"),
+                ("description", 4000, "La descripción"),
+            ),
+        )
         # registration_date se genera automáticamente en el modelo.
         self._apply_bootstrap()
+
+    def clean_citizen_rut(self):
+        from citizen_registry.rut import normalize_rut, validate_rut
+        rut = normalize_rut(self.cleaned_data.get("citizen_rut"))
+        if rut:
+            validate_rut(rut)
+        return rut
 
     def clean_requester(self):
         requester = self.cleaned_data["requester"].strip()
@@ -1095,6 +1285,29 @@ class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
+        # La protección también es del servidor: ignorar datos personales
+        # manipulados en el POST cuando existe un ciudadano vinculado.
+        rut = cleaned_data.get("citizen_rut")
+        citizen = None
+        if rut:
+            citizen = Citizen.objects.filter(rut=rut, is_active=True).first()
+        if citizen is None and getattr(self.instance, "citizen_id", None):
+            citizen = self.instance.citizen
+        if citizen is not None:
+            cleaned_data.update({
+                "requester": citizen.full_name,
+                # Para una atención nacida del portal se mantiene el correo
+                # histórico si el contacto actual del CRUD quedó vacío.
+                "requester_email": (citizen.email or self.instance.requester_email)
+                if self.instance.origin == "CITIZEN" else citizen.email,
+                "requester_phone": citizen.phone,
+                "address": citizen.address,
+            })
+        elif self.instance.pk:
+            # Atenciones históricas sin ciudadano vinculado: permitir modificar
+            # el caso, no sus datos personales almacenados como referencia.
+            for key in ("requester", "requester_email", "requester_phone", "address"):
+                cleaned_data[key] = getattr(self.instance, key)
         attention_type = cleaned_data.get("attention_type")
         sub_attention = cleaned_data.get("sub_attention")
         delegation = cleaned_data.get("delegation")
@@ -1138,6 +1351,14 @@ class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
                 self.add_error(
                     "delegation", "Selecciona una delegación no eliminada."
                 )
+        if self.instance.pk:
+            if self.instance.status == "CLOSED":
+                raise forms.ValidationError("La atención cerrada está protegida. Debe reabrirse primero.")
+            state = cleaned_data.get("status") or self.instance.status
+            cleaned_data["status"] = state
+            if state != self.instance.status and state in ("RESOLVED", "CLOSED", "REJECTED"):
+                if not (cleaned_data.get("closing_observation") or "").strip():
+                    self.add_error("closing_observation", "Indica el resultado de la gestión.")
         user = self.request_user
         if user is not None and not user.is_superuser:
             active = getattr(user, "sgr_active_delegation_id", None)

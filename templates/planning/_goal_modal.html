@@ -11,6 +11,9 @@
 
             <form method="post" action="{{ modal_action }}" novalidate>
                 {% csrf_token %}
+                {% if goal and not readonly %}
+                <input type="hidden" name="version" value="{{ goal.updated_at.isoformat }}">
+                {% endif %}
 
                 <div class="modal-header">
                     <div class="sgr-modal-title-block">
@@ -40,7 +43,7 @@
                         {% if field.name == 'measurement_item' %}
                         <div class="col-12"><div class="sgr-form-section-title sgr-section-break"><span class="sgr-section-icon"><i class="bi bi-bullseye" aria-hidden="true"></i></span><span>Medición y resultados</span></div></div>
                         {% endif %}
-                        <div class="col-md-4 mb-3">
+                        <div class="{% if field.is_hidden %}col-12 d-none{% else %}col-md-4 mb-3{% endif %}">
                             {{ field.label_tag }}
                             {{ field }}
 

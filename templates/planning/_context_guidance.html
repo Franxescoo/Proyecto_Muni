@@ -1,0 +1,21 @@
+{# Orientación de uso: NO son errores ni mensajes de validación de formularios. #}
+<section class="sgr-guide-card" role="note" aria-label="Guía rápida de Planificación">
+  <div class="sgr-guide-card-heading">
+    <span class="sgr-guide-icon"><i class="bi bi-lightbulb" aria-hidden="true"></i></span>
+    <div class="sgr-guide-card-text small lh-base">
+      <div class="fw-bold text-dark mb-1">Guía rápida ·
+        {% if section == 'periods' %}Períodos{% elif section == 'goals' %}Metas{% elif section == 'items' %}Catálogo de Ítems{% endif %}
+      </div>
+      {% if section == 'periods' %}
+        <p class="mb-1 text-secondary">Crea un período para definir el intervalo de planificación. Aquí también puedes revisar su estado, consultar las metas asociadas y gestionar el cierre o la reapertura según tus permisos.</p>
+        <p class="mb-0 text-secondary"><strong class="text-dark">Ten presente:</strong> los días computables se calculan automáticamente de lunes a viernes, excluyendo los feriados de Chile. Las metas solo pueden crearse en períodos activos; al cerrar un período quedan en consulta.</p>
+      {% elif section == 'goals' %}
+        <p class="mb-1 text-secondary">Registra los objetivos de cada funcionario, consulta sus metas y revisa los ponderadores del período. El cargo y la unidad de medida se obtienen de la configuración correspondiente.</p>
+        <p class="mb-0 text-secondary"><strong class="text-dark">Antes de crear una meta:</strong> debe existir un período activo y el funcionario debe tener un cargo con un ítem de medición activo asociado. Antes del cierre, los ponderadores del período deben completar el 100 % según las reglas de planificación.</p>
+      {% elif section == 'items' %}
+        <p class="mb-1 text-secondary">Mantén aquí el catálogo de mediciones que se utiliza al registrar metas: nombre, código, unidad y estado. Los ítems inactivos se conservan para la consulta histórica.</p>
+        <p class="mb-0 text-secondary"><strong class="text-dark">Para usar un ítem en una meta:</strong> debe estar activo y asociado al cargo del funcionario. Crear un ítem en el catálogo no equivale a crear una meta.</p>
+      {% endif %}
+    </div>
+  </div>
+</section>

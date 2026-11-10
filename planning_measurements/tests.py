@@ -17,7 +17,12 @@ from organization.models import (
     PositionFunction,
 )
 
-from .forms import GoalForm, GoalInlineForm, PeriodForm
+from .forms import (
+    GoalForm,
+    GoalInlineForm,
+    MeasurementItemForm,
+    PeriodForm,
+)
 from .models import Goal, Period, MeasurementItem
 from .views import scoped_goals
 from .working_days import calculate_computable_days
@@ -88,6 +93,8 @@ class PlanningTests(TestCase):
             is_active=True,
         )
 
+        self.position.catalog_items.add(self.measurement_item)
+
         self.data = {
             "period": self.period.pk,
             "employee": self.employee.pk,
@@ -142,9 +149,80 @@ class PlanningTests(TestCase):
             "end_date": "2026-12-31",
             "computable_days": 200,
             "status": "Active",
-            "thresholds": "Thresholds",
+            "thresholds": "Verde: 100, Amarillo: 80, Rojo: 60",
             "parameters_version": "1",
         }
+
+    def test_goal_create_renders_list_beneath_modal(self):
+        self.account("add_goal", "view_goal")
+        response = self.client.get(reverse("planning:goal_create"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "planning/goal_list.html")
+        self.assertContains(response, 'id="goalModal"')
+        self.assertContains(response, "Registro de metas")
+        self.assertContains(response, "Nueva meta")
+
+    def test_goal_invalid_post_keeps_validation_inside_list_modal(self):
+        self.account("add_goal", "view_goal")
+        response = self.client.post(reverse("planning:goal_create"), data={})
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "planning/goal_list.html")
+        self.assertContains(response, 'id="goalModal"')
+        self.assertContains(response, "Registro de metas")
+
+    def test_goal_view_and_edit_keep_list_behind_modal(self):
+        self.account("view_goal", "change_goal")
+        goal = self.create_goal()
+        for query in ("", "?view=1"):
+            response = self.client.get(reverse("planning:goal_edit", args=[goal.pk]) + query)
+            self.assertEqual(response.status_code, 200)
+            self.assertTemplateUsed(response, "planning/goal_list.html")
+            self.assertContains(response, 'id="goalModal"')
+            self.assertContains(response, "Registro de metas")
+            if query:
+                self.assertContains(response, "Detalle de la meta")
+            else:
+                self.assertContains(response, 'name="version"')
+
+    def test_text_limits_are_enforced_in_planning_forms(self):
+        item_form = MeasurementItemForm(data={
+            "code": "X" * 21,
+            "name": "Nombre",
+            "description": "",
+            "item_type": MeasurementItem.ItemType.QUANTITATIVE,
+            "unit": "",
+            "formula": "",
+            "is_active": "on",
+        })
+        self.assertFalse(item_form.is_valid())
+        self.assertIn("code", item_form.errors)
+        self.assertEqual(
+            item_form.fields["description"].widget.attrs["maxlength"],
+            300,
+        )
+        self.assertEqual(
+            item_form.fields["formula"].widget.attrs["maxlength"],
+            500,
+        )
+
+        period_form = PeriodForm(data={
+            **self.period_data(),
+            "thresholds": "x" * 256,
+        })
+        self.assertFalse(period_form.is_valid())
+        self.assertIn("thresholds", period_form.errors)
+
+    def test_planning_forms_accept_exact_text_limits(self):
+        item_form = MeasurementItemForm(data={
+            "code": "X" * 20,
+            "name": "N" * 150,
+            "description": "D" * 300,
+            "item_type": MeasurementItem.ItemType.QUANTITATIVE,
+            "unit": "U" * 50,
+            "formula": "F" * 500,
+            "is_active": "on",
+        })
+        self.assertTrue(item_form.is_valid(), item_form.errors)
 
     def inline_data(self):
         data = self.period_data()
@@ -229,6 +307,8 @@ class PlanningTests(TestCase):
             validity_end=date(2026, 12, 31),
         )
 
+        self.position.catalog_items.add(self.measurement_item)
+
         employee = Employee.objects.create(
             name="New",
             delegation=self.delegation,
@@ -236,6 +316,8 @@ class PlanningTests(TestCase):
             roles="Staff",
             status="Active",
         )
+
+        employee.position.catalog_items.add(self.measurement_item)
 
         form = GoalForm(
             {
@@ -357,7 +439,7 @@ class PlanningTests(TestCase):
             "end_date": "2026-01-05",
             "computable_days": 366,
             "status": "Closed",
-        })
+        }, instance=self.period)
 
         self.assertTrue(form.is_valid(), form.errors)
 
@@ -641,9 +723,16 @@ class PlanningTests(TestCase):
             side_effect=RuntimeError("simulated failure"),
         ):
             with self.assertRaises(RuntimeError):
+                data = self.inline_data()
+                # El período de prueba ocupa 2026; este nuevo rango
+                # no debe fallar antes de llegar al guardado de metas.
+                data.update({
+                    "start_date": "2027-01-04",
+                    "end_date": "2027-01-29",
+                })
                 self.client.post(
                     reverse("planning:period_create"),
-                    self.inline_data(),
+                    data,
                 )
 
         self.assertEqual(
@@ -773,6 +862,11 @@ class PeriodWeightCalculationTests(PlanningTests):
             item="Atenciones",
             weight=40,
         )
+        self.create_goal(
+            employee=self.outside,
+            item="Informes",
+            weight=60,
+        )
 
         self.assertIsNone(
             validate_period_weights(self.period)
@@ -856,3 +950,34 @@ class ComputableDaysTests(SimpleTestCase):
                 date(2026, 1, 10),
                 date(2026, 1, 1),
             )
+
+
+class MeasurementItemFormulaTests(TestCase):
+
+    def test_porcentual_sin_formula(self):
+        item = MeasurementItem(
+            code="TEST-PCT-01",
+            name="Solicitudes resueltas",
+            item_type=MeasurementItem.ItemType.PERCENTAGE,
+            unit="%",
+            formula="",
+        )
+
+        with self.assertRaises(ValidationError):
+            item.full_clean()
+
+    def test_porcentual_con_formula(self):
+        item = MeasurementItem(
+            code="TEST-PCT-02",
+            name="Solicitudes resueltas",
+            item_type=MeasurementItem.ItemType.PERCENTAGE,
+            unit="%",
+            formula="(Resueltas / Recibidas) * 100",
+        )
+
+        item.full_clean()
+
+        self.assertEqual(
+            item.item_type,
+            MeasurementItem.ItemType.PERCENTAGE,
+        )

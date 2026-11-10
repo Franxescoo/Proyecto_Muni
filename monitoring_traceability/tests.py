@@ -1,5 +1,7 @@
 from django.test import TestCase
 from datetime import date
+from decimal import Decimal
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
@@ -9,12 +11,17 @@ from django.test import TestCase, RequestFactory
 
 from accounts.models import UserProfile
 from organization.models import Delegation, Employee, PositionFunction
-from planning_measurements.models import Goal, Period
+from planning_measurements.models import Goal, MeasurementItem, Period
 from registration_validation.models import Activity, Evidence, Validation
 
 from .admin import AuditAdmin, CommitmentAdmin, IndicatorAdmin
 from .models import Audit, Commitment, CommitmentComment, Indicator
-from .services import recalculate_indicator_for_goal
+from .services import (
+	_expected_progress,
+	_traffic_light,
+	monitoring_alerts,
+	recalculate_indicator_for_goal,
+)
 
 
 class TraceabilityModelsTest(TestCase):
@@ -160,8 +167,158 @@ class TraceabilityModelsTest(TestCase):
 
 		indicator.refresh_from_db()
 		self.assertEqual(indicator.actual_progress, 1)
-		self.assertEqual(indicator.compliance, 20)
-		self.assertEqual(indicator.weighted_result, 10)
+		self.assertEqual(indicator.compliance, 1)
+		self.assertEqual(indicator.weighted_result, 0.5)
+		self.assertEqual(indicator.traffic_light, "Red")
+
+	def test_traffic_light_uses_configured_compliance_thresholds(self):
+		self.north_goal.period.thresholds = (
+			"Verde: 90, Amarillo: 60, Rojo: 30"
+		)
+		self.north_goal.period.save(update_fields=["thresholds"])
+
+		self.assertEqual(
+			_traffic_light(Decimal("90"), self.north_goal.period),
+			"Green",
+		)
+		self.assertEqual(
+			_traffic_light(Decimal("75"), self.north_goal.period),
+			"Yellow",
+		)
+		self.assertEqual(
+			_traffic_light(Decimal("59.99"), self.north_goal.period),
+			"Red",
+		)
+
+	def test_expected_progress_uses_local_date_and_computable_days(self):
+		period = self.north_goal.period
+
+		with patch(
+			"monitoring_traceability.services.timezone.localdate",
+			return_value=date(2026, 1, 2),
+		):
+			progress = _expected_progress(period)
+
+		self.assertEqual(progress, Decimal("0.40"))
+
+	def test_contradictory_validation_does_not_approve_evidence(self):
+		activity = Activity.objects.create(
+			goal=self.north_goal,
+			author=self.north_employee,
+			date=date(2026, 6, 20),
+			request_problem="Request",
+			action="Action",
+			contact="Contact",
+			phone="555",
+		)
+		evidence = Evidence.objects.create(
+			code="EVID-CONTRADICTORY-001",
+			activity=activity,
+			author=self.north_employee,
+			file_link="evidence/contradictory",
+			date="2026-06-21T10:00:00Z",
+			review_status="Pending",
+		)
+		Validation.objects.create(
+			evidence=evidence,
+			verifier=self.north_employee,
+			decision="Approved",
+			date="2026-06-22T10:00:00Z",
+			result="Rejected",
+		)
+
+		indicator = recalculate_indicator_for_goal(self.north_goal)
+
+		self.assertEqual(indicator.approved_activities, 0)
+		self.assertEqual(indicator.approved_evidences, 0)
+
+	def test_percentage_measurement_uses_approved_activities_once(self):
+		item = MeasurementItem.objects.create(
+			code="PCT-TRACE-001",
+			name="Actividades aprobadas",
+			item_type=MeasurementItem.ItemType.PERCENTAGE,
+			unit="%",
+			formula="(actividades aprobadas / actividades registradas) * 100",
+		)
+		self.north_goal.measurement_item = item
+		self.north_goal.save(update_fields=["measurement_item"])
+
+		for number, approved in ((1, True), (2, False)):
+			activity = Activity.objects.create(
+				goal=self.north_goal,
+				author=self.north_employee,
+				date=date(2026, 6, number + 20),
+				request_problem="Request",
+				action="Action",
+				contact="Contact",
+				phone="555",
+			)
+			evidence = Evidence.objects.create(
+				code=f"EVID-PCT-{number:03d}",
+				activity=activity,
+				author=self.north_employee,
+				file_link=f"evidence/pct-{number}",
+				date="2026-06-21T10:00:00Z",
+				review_status="Pending",
+			)
+			Validation.objects.create(
+				evidence=evidence,
+				verifier=self.north_employee,
+				decision="Approved" if approved else "Rejected",
+				date="2026-06-22T10:00:00Z",
+				result="Approved" if approved else "Rejected",
+			)
+
+		indicator = recalculate_indicator_for_goal(self.north_goal)
+
+		self.assertEqual(indicator.actual_progress, Decimal("50.00"))
+		self.assertEqual(indicator.compliance, Decimal("50.00"))
+
+	def test_future_period_has_no_progress_or_approved_activities(self):
+		period = Period.objects.create(
+			start_date=date(2099, 1, 1),
+			end_date=date(2099, 12, 31),
+			computable_days=261,
+			thresholds="Verde: 90, Amarillo: 60, Rojo: 30",
+			parameters_version="1.0",
+		)
+		goal = Goal.objects.create(
+			period=period,
+			employee=self.north_employee,
+			position=self.north_employee.position,
+			item="Future goal",
+			objective_value=10,
+			unit="unidades",
+			weight=50,
+		)
+
+		indicator = recalculate_indicator_for_goal(goal)
+
+		self.assertEqual(indicator.actual_progress, 0)
+		self.assertEqual(indicator.expected_progress, 0)
+		self.assertEqual(indicator.traffic_light, "Red")
+
+	def test_period_without_computable_days_is_red(self):
+		period = Period.objects.create(
+			start_date=date(2026, 1, 3),
+			end_date=date(2026, 1, 4),
+			computable_days=1,
+			thresholds="Verde: 90, Amarillo: 60, Rojo: 30",
+			parameters_version="1.0",
+		)
+		goal = Goal.objects.create(
+			period=period,
+			employee=self.north_employee,
+			position=self.north_employee.position,
+			item="Weekend goal",
+			objective_value=1,
+			unit="unidades",
+			weight=50,
+		)
+
+		indicator = recalculate_indicator_for_goal(goal)
+
+		self.assertEqual(indicator.expected_progress, 0)
 		self.assertEqual(indicator.traffic_light, "Red")
 
 	def test_multiple_evidences_on_one_activity_count_once(self):
@@ -195,8 +352,8 @@ class TraceabilityModelsTest(TestCase):
 
 		self.assertEqual(indicator.approved_activities, 1)
 		self.assertEqual(indicator.approved_evidences, 2)
-		self.assertEqual(indicator.actual_progress, 2)
-		self.assertEqual(indicator.compliance, 40)
+		self.assertEqual(indicator.actual_progress, 1)
+		self.assertEqual(indicator.compliance, 1)
 
 		for number in range(3, 7):
 			evidence = Evidence.objects.create(
@@ -218,8 +375,8 @@ class TraceabilityModelsTest(TestCase):
 		indicator = recalculate_indicator_for_goal(self.north_goal)
 
 		self.assertEqual(indicator.approved_evidences, 6)
-		self.assertEqual(indicator.actual_progress, 6)
-		self.assertEqual(indicator.compliance, 120)
+		self.assertEqual(indicator.actual_progress, 1)
+		self.assertEqual(indicator.compliance, 1)
 
 	def test_indicator_uses_goal_evidence_requirement(self):
 		self.north_goal.required_evidence_count = 10
@@ -227,7 +384,7 @@ class TraceabilityModelsTest(TestCase):
 
 		indicator = recalculate_indicator_for_goal(self.north_goal)
 
-		self.assertEqual(indicator.expected_value, 10)
+		self.assertEqual(indicator.expected_value, 100)
 		self.assertEqual(indicator.compliance, 0)
 
 	def test_commitment_comments_preserve_author_and_text(self):
@@ -384,7 +541,7 @@ class TraceabilityModelsTest(TestCase):
 			date="2026-06-21T10:00:00Z",
 			result="Approved",
 		)
-		Validation.objects.create(
+		validation = Validation.objects.create(
 			evidence=evidence,
 			verifier=self.north_employee,
 			decision="Rejected",
@@ -396,6 +553,13 @@ class TraceabilityModelsTest(TestCase):
 		indicator = recalculate_indicator_for_goal(self.north_goal)
 
 		self.assertEqual(indicator.approved_activities, 0)
+
+		validation.decision = "Approved"
+		validation.result = "Approved"
+		validation.save(update_fields=["decision", "result"])
+
+		indicator.refresh_from_db()
+		self.assertEqual(indicator.approved_activities, 1)
 
 	def test_indicator_admin_scopes_by_profile_delegation(self):
 		user = get_user_model().objects.create_user(
@@ -416,6 +580,37 @@ class TraceabilityModelsTest(TestCase):
 
 		self.assertEqual(queryset.count(), 1)
 		self.assertEqual(queryset.first().employee_id, self.north_employee.employee_id)
+
+	def test_audit_events_are_immutable(self):
+		audit = Audit.objects.create(
+			user=self.north_employee,
+			event="CREATE",
+			entity="Goal",
+			object_identifier="1",
+			new_value={"item": "Meta"},
+		)
+
+		audit.event = "UPDATE"
+		with self.assertRaises(ValidationError):
+			audit.save()
+		with self.assertRaises(ValidationError):
+			audit.delete()
+
+	def test_monitoring_alerts_counts_operational_risks(self):
+		commitment = Commitment.objects.create(
+			delegation=self.north,
+			responsible=self.north_employee,
+			origin="Origen",
+			requester="Solicitante",
+			territory="Territorio",
+			commitment_date=date(2020, 1, 1),
+			status="Pending",
+		)
+		commitment.refresh_from_db()
+
+		alerts = monitoring_alerts(employees=[self.north_employee])
+
+		self.assertGreaterEqual(alerts["overdue_commitments"], 1)
 
 	def test_commitment_admin_without_profile_sees_nothing(self):
 		user = get_user_model().objects.create_user(
