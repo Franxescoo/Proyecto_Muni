@@ -16,8 +16,10 @@ def serialize_message(message):
         "client_id": str(message.client_id),
         "user_id": message.sender_id,
         "username": message.sender.get_username(),
-        "message": message.message,
+        "message": "" if message.deleted_at else message.message,
         "created_at": message.created_at.isoformat(),
+        "is_edited": bool(message.edited_at),
+        "is_deleted": bool(message.deleted_at),
     }
 
 

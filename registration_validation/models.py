@@ -207,6 +207,14 @@ class Activity(BaseModel):
         blank=True,
         verbose_name="Tipo de actividad",
     )
+    attention = models.ForeignKey(
+        "registration_validation.AttentionEntry",
+        on_delete=models.PROTECT,
+        related_name="activities",
+        null=True,
+        blank=True,
+        verbose_name="Atención asociada",
+    )
 
     date = models.DateField(
         verbose_name="Fecha",

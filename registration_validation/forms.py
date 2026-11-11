@@ -119,6 +119,7 @@ class ActivityForm(BootstrapMixin, forms.ModelForm):
             "goal",
             "author",
             "activity_type",
+            "attention",
             "date",
             "request_problem",
             "action",
@@ -136,6 +137,7 @@ class ActivityForm(BootstrapMixin, forms.ModelForm):
             "phone": "Teléfono",
             "status": "Estado",
             "activity_type": "Tipo de actividad",
+            "attention": "Atención asociada",
         }
         widgets = {
             "date": forms.DateInput(
@@ -193,6 +195,28 @@ class ActivityForm(BootstrapMixin, forms.ModelForm):
             employees = employees.filter(delegation_id__in=permitted)
         self.fields["goal"].queryset = goals
         self.fields["author"].queryset = employees
+        attentions = (
+            AttentionEntry.objects
+            .filter(deleted_at__isnull=True)
+            .select_related("delegation", "citizen")
+            .order_by("-registration_date", "attention_entry_id")
+        )
+        if user is not None and not user.is_superuser:
+            permitted = allowed_delegation_ids(
+                user,
+                "registration_validation.change_activity"
+                if self.instance.pk
+                else "registration_validation.add_activity",
+            )
+            attentions = attentions.filter(delegation_id__in=permitted)
+        self.fields["attention"].queryset = attentions
+        self.fields["attention"].required = True
+        self.fields["attention"].label_from_instance = (
+            lambda attention: (
+                f"{attention.requester} - "
+                f"{attention.subject.strip() if attention.subject else 'Sin asunto'}"
+            )
+        )
 
         # Mostrar solamente tipos de actividad activos
         # y que no estén archivados.
@@ -233,6 +257,25 @@ class ActivityForm(BootstrapMixin, forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
         goal = cleaned_data.get("goal")
+        attention = cleaned_data.get("attention")
+        if attention is None:
+            self.add_error(
+                "attention",
+                "Debes seleccionar una atención existente.",
+            )
+        elif attention.deleted_at is not None:
+            self.add_error(
+                "attention",
+                "La atención seleccionada ya no está disponible.",
+            )
+        author = cleaned_data.get("author")
+        if attention is not None and author is not None:
+            if attention.delegation_id != author.delegation_id:
+                self.add_error(
+                    "attention",
+                    "La atención debe pertenecer a la misma delegación "
+                    "del funcionario autor.",
+                )
         if goal is not None:
             period = goal.period
             if period.deleted_at is not None:

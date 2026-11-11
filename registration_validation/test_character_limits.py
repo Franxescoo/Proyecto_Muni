@@ -131,12 +131,21 @@ class RegistrationCharacterLimitTests(TestCase):
             name="Subatención",
             attention_type=cls.attention_type,
         )
+        cls.attention = AttentionEntry.objects.create(
+            origin="INTERNAL",
+            requester="Solicitante de prueba",
+            attention_type=cls.attention_type,
+            sub_attention=cls.sub_attention,
+            description="Atención de prueba",
+            delegation=cls.delegation,
+        )
 
     def activity_data(self, **overrides):
         data = {
             "goal": self.goal.pk,
             "author": self.employee.pk,
             "activity_type": self.activity_type.pk,
+            "attention": self.attention.pk,
             "date": "2026-06-01",
             "request_problem": "Solicitud",
             "action": "Acción",

@@ -69,6 +69,43 @@ class ChatApiTests(TestCase):
         self.assertEqual(ChatMessage.objects.count(), 1)
 
     @patch("websocket.views.publish_chat_message")
+    def test_sender_can_edit_and_delete_own_message(self, publish):
+        self.login(self.alice)
+        response = self.client.post(self.send_url, {"message": "Original"})
+        message_id = response.json()["message"]["id"]
+
+        response = self.client.post(
+            reverse("websocket:edit", args=[message_id]), {"message": "Editado"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["message"]["message"], "Editado")
+        self.assertTrue(response.json()["message"]["is_edited"])
+
+        response = self.client.post(reverse("websocket:delete", args=[message_id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["message"]["is_deleted"])
+        self.assertEqual(self.client.get(self.history_url).json()["messages"][0]["message"], "")
+        self.assertEqual(publish.call_count, 3)
+
+    @patch("websocket.views.publish_chat_message")
+    def test_sender_cannot_edit_or_delete_other_users_message(self, publish):
+        self.login(self.alice)
+        message_id = self.client.post(
+            self.send_url, {"message": "Privado"}
+        ).json()["message"]["id"]
+        self.login(self.bob)
+        self.assertEqual(
+            self.client.post(
+                reverse("websocket:edit", args=[message_id]), {"message": "No"},
+            ).status_code,
+            404,
+        )
+        self.assertEqual(
+            self.client.post(reverse("websocket:delete", args=[message_id])).status_code,
+            404,
+        )
+
+    @patch("websocket.views.publish_chat_message")
     def test_no_cross_delegation_leakage(self, publish):
         self.login(self.carol)
         self.client.post(self.send_url, {"message": "Secreto sur"})

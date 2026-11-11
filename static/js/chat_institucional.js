@@ -14,6 +14,8 @@
         const myId = Number(modal.dataset.chatUserId);
         const historyUrl = form.dataset.historyUrl;
         const readUrl = form.dataset.readUrl;
+        const editUrlTemplate = form.dataset.editUrlTemplate;
+        const deleteUrlTemplate = form.dataset.deleteUrlTemplate;
         const csrfToken = form.querySelector("[name=csrfmiddlewaretoken]").value;
         let socket = null;
         let socketRetryTimer = null;
@@ -72,13 +74,57 @@
             label.textContent = mine ? "Tú" : data.username || "Funcionario";
             const content = document.createElement("div");
             content.className = "sgr-chat-text";
-            content.textContent = data.message;
+            content.textContent = data.is_deleted ? "Este mensaje fue eliminado" : data.message;
+            if (data.is_deleted) content.classList.add("sgr-chat-deleted");
             const foot = document.createElement("div");
             foot.className = "sgr-chat-meta";
             const time = shortTime(data.created_at);
-            const stateText = mine ? (state === "failed" ? " · No enviado" : state === "pending" ? " · Enviando…" : " · ✓ Enviado") : "";
-            foot.textContent = time + stateText;
+            const stateText = data.is_deleted ? "" : mine ? (state === "failed" ? " · No enviado" : state === "pending" ? " · Enviando…" : " · ✓ Enviado") : "";
+            const editText = data.is_edited && !data.is_deleted ? " · editado" : "";
+            foot.textContent = time + editText + stateText;
             item.append(label, content, foot);
+            if (mine && data.id && !data.is_deleted && state !== "pending" && state !== "failed") {
+                const actions = document.createElement("div");
+                actions.className = "sgr-chat-actions";
+                const menuButton = document.createElement("button");
+                menuButton.type = "button";
+                menuButton.className = "sgr-chat-menu-button";
+                menuButton.title = "Opciones del mensaje";
+                menuButton.setAttribute("aria-label", "Opciones del mensaje");
+                menuButton.innerHTML = '<i class="bi bi-three-dots-vertical" aria-hidden="true"></i>';
+                const menu = document.createElement("div");
+                menu.className = "sgr-chat-menu";
+                const edit = document.createElement("button");
+                edit.type = "button";
+                edit.className = "sgr-chat-menu-option";
+                edit.innerHTML = '<i class="bi bi-pencil me-2" aria-hidden="true"></i>Editar';
+                edit.appendChild(document.createTextNode("Editar"));
+                edit.addEventListener("click", (event) => {
+                    event.stopPropagation();
+                    menu.hidden = true;
+                    editMessage(data, item);
+                });
+                const remove = document.createElement("button");
+                remove.type = "button";
+                remove.className = "sgr-chat-menu-option sgr-chat-menu-danger";
+                remove.innerHTML = '<i class="bi bi-trash me-2" aria-hidden="true"></i>Eliminar';
+                remove.addEventListener("click", (event) => {
+                    event.stopPropagation();
+                    menu.hidden = true;
+                    askDeleteMessage(data.id);
+                });
+                menu.append(edit, remove);
+                menu.hidden = true;
+                menuButton.addEventListener("click", (event) => {
+                    event.stopPropagation();
+                    document.querySelectorAll(".sgr-chat-menu").forEach(other => {
+                        if (other !== menu) other.hidden = true;
+                    });
+                    menu.hidden = !menu.hidden;
+                });
+                actions.append(menuButton, menu);
+                item.appendChild(actions);
+            }
             if (mine && state === "failed") {
                 const retry = document.createElement("button");
                 retry.type = "button";
@@ -91,7 +137,7 @@
             if (shouldScroll || mine) messages.scrollTop = messages.scrollHeight;
         }
         function normalize(data) {
-            return {id:data.id,client_id:data.client_id,user_id:data.user_id,username:data.username,message:data.message,created_at:data.created_at};
+            return {id:data.id,client_id:data.client_id,user_id:data.user_id,username:data.username,message:data.message,created_at:data.created_at,is_edited:Boolean(data.is_edited),is_deleted:Boolean(data.is_deleted)};
         }
         async function refreshMessages() {
             if (busy) return;
@@ -188,6 +234,91 @@
             return h.slice(0, 8) + "-" + h.slice(8, 12) + "-" + h.slice(12, 16) + "-" + h.slice(16, 20) + "-" + h.slice(20);
         }
         
+        function endpoint(template, id) { return template.replace(/\/0\//, "/" + String(id) + "/"); }
+        function editMessage(data, item) {
+            if (item.querySelector(".sgr-chat-inline-editor")) return;
+            const text = item.querySelector(".sgr-chat-text");
+            if (!text) return;
+            const editor = document.createElement("div");
+            editor.className = "sgr-chat-inline-editor";
+            const inputEditor = document.createElement("input");
+            inputEditor.type = "text";
+            inputEditor.className = "sgr-chat-inline-input";
+            inputEditor.maxLength = 300;
+            inputEditor.value = data.message;
+            const controls = document.createElement("div");
+            controls.className = "sgr-chat-inline-controls";
+            const cancel = document.createElement("button");
+            cancel.type = "button";
+            cancel.className = "sgr-chat-inline-cancel";
+            cancel.textContent = "Cancelar";
+            const save = document.createElement("button");
+            save.type = "button";
+            save.className = "sgr-chat-inline-save";
+            save.textContent = "Guardar";
+            cancel.addEventListener("click", () => upsertMessage(data, "sent"));
+            save.addEventListener("click", () => saveEditedMessage(data, item, inputEditor.value));
+            inputEditor.addEventListener("keydown", (event) => {
+                if (event.key === "Enter") save.click();
+                if (event.key === "Escape") cancel.click();
+            });
+            controls.append(cancel, save);
+            editor.append(inputEditor, controls);
+            text.replaceWith(editor);
+            inputEditor.focus();
+            inputEditor.select();
+        }
+        async function saveEditedMessage(data, item, value) {
+            const text = value.trim();
+            if (!text || text === data.message || text.length > 300) return;
+            try {
+                const response = await fetch(endpoint(editUrlTemplate, data.id), {
+                    method:"POST",
+                    headers:{"X-CSRFToken":csrfToken,"X-Requested-With":"XMLHttpRequest"},
+                    body:new URLSearchParams({message:text})
+                });
+                const result = await response.json();
+                if (!response.ok || !result.ok) throw new Error(result.error || "No fue posible editar el mensaje.");
+                upsertMessage(normalize(result.message), "sent");
+            } catch (error) {
+                connectionStatus(error.message, "bg-danger");
+            }
+        }
+        function askDeleteMessage(id) {
+            const existing = modal.querySelector(".sgr-chat-confirmation");
+            if (existing) existing.remove();
+            const confirmation = document.createElement("div");
+            confirmation.className = "sgr-chat-confirmation";
+            confirmation.innerHTML = "<span>¿Eliminar este mensaje?</span>";
+            const cancel = document.createElement("button");
+            cancel.type = "button";
+            cancel.className = "btn btn-sm btn-light";
+            cancel.textContent = "Cancelar";
+            const confirm = document.createElement("button");
+            confirm.type = "button";
+            confirm.className = "btn btn-sm btn-danger";
+            confirm.textContent = "Eliminar";
+            cancel.addEventListener("click", () => confirmation.remove());
+            confirm.addEventListener("click", () => {
+                confirmation.remove();
+                deleteMessage(id);
+            });
+            confirmation.append(cancel, confirm);
+            modal.querySelector(".sgr-chat-body").prepend(confirmation);
+        }
+        async function deleteMessage(id) {
+            try {
+                const response = await fetch(endpoint(deleteUrlTemplate, id), {
+                    method:"POST",
+                    headers:{"X-CSRFToken":csrfToken,"X-Requested-With":"XMLHttpRequest"}
+                });
+                const result = await response.json();
+                if (!response.ok || !result.ok) throw new Error(result.error || "No fue posible eliminar el mensaje.");
+                upsertMessage(normalize(result.message), "sent");
+            } catch (error) {
+                connectionStatus(error.message, "bg-danger");
+            }
+        }
         async function send(message, existingClientId) {
             const clientId = existingClientId || newClientId();
             if (!clientId) { connectionStatus("No se puede generar el envío", "bg-danger"); return; }

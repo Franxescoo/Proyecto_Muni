@@ -18,6 +18,8 @@ class ChatMessage(models.Model):
     message = models.CharField(max_length=300)
     client_id = models.UUIDField(default=uuid.uuid4, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
+    edited_at = models.DateTimeField(null=True, blank=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["id"]

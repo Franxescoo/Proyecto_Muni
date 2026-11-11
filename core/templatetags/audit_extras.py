@@ -70,6 +70,28 @@ VALORES_VISUALES = {
     "Period": "Período",
     "Indicator": "Indicador",
     "CommitmentComment": "Comentario de compromiso",
+    "AttentionEntry": "Atención ciudadana",
+    "Employee": "Funcionario",
+    "User": "Usuario",
+    "Position": "Cargo",
+    "MeasurementItem": "Ítem de medición",
+    "Delegation": "Delegación",
+    "Citizen": "Ciudadano",
+    "EventEdition": "Edición anual",
+    "MunicipalEvent": "Evento municipal",
+    "Campaign": "Campaña municipal",
+    "Enrollment": "Inscripción",
+    "GiftDelivery": "Entrega de regalo",
+    "Validation": "Validación",
+    "ActivityType": "Tipo de actividad",
+    "AttentionType": "Tipo de atención",
+    "SubAttention": "Subatención",
+    "Service": "Servicio",
+    "CitizenRequest": "Solicitud ciudadana",
+    "RequestEvent": "Historial de solicitud",
+    "UserProfile": "Perfil de usuario",
+    "OrganizationRole": "Rol y permisos",
+    "PositionFunction": "Cargo y función",
     "Created Commitment": "Creó un compromiso",
     "Updated Commitment": "Actualizó un compromiso",
     "Deleted Commitment": "Eliminó un compromiso",
@@ -89,6 +111,12 @@ VALORES_VISUALES = {
     "Updated Indicator": "Actualizó un indicador",
     "Deleted Indicator": "Eliminó un indicador",
     "Reopened Period": "Reabrió un período",
+    "Created AttentionEntry": "Creó una atención ciudadana",
+    "Updated AttentionEntry": "Actualizó una atención ciudadana",
+    "Deleted AttentionEntry": "Eliminó una atención ciudadana",
+    "Created Employee": "Creó un funcionario",
+    "Updated Employee": "Actualizó un funcionario",
+    "Deleted Employee": "Eliminó un funcionario",
     "CREATE": "Creación",
     "UPDATE": "Actualización",
     "DELETE": "Eliminación",
@@ -146,14 +174,15 @@ def mostrar_valor(valor):
         return "Sí" if valor else "No"
 
     if isinstance(valor, list):
-        return ", ".join(str(v) for v in valor) if valor else "Ninguno"
+        return ", ".join(visual_es(v) for v in valor) if valor else "Ninguno"
 
     if isinstance(valor, str):
         if valor.strip() in {"None", "null", "NULL"}:
             return "—"
 
-        if valor in VALORES_VISUALES:
-            return VALORES_VISUALES[valor]
+        traducido = visual_es(valor)
+        if traducido != valor:
+            return traducido
 
         if valor.upper() in ESTADOS:
             return ESTADOS[valor.upper()]
@@ -172,7 +201,20 @@ def visual_es(valor):
     """Presenta valores heredados en español sin cambiar su valor almacenado."""
     if valor is None or valor == "":
         return valor
-    return VALORES_VISUALES.get(str(valor), str(valor))
+    texto = str(valor)
+    if texto in VALORES_VISUALES:
+        return VALORES_VISUALES[texto]
+
+    for prefijo, verbo in (
+        ("Created ", "Creó "),
+        ("Updated ", "Actualizó "),
+        ("Deleted ", "Eliminó "),
+    ):
+        if texto.startswith(prefijo):
+            entidad = texto[len(prefijo):]
+            return verbo + VALORES_VISUALES.get(entidad, entidad)
+
+    return texto
 
 
 def comparar(antes, despues, ruta, cambios):

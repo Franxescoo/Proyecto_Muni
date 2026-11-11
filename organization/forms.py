@@ -313,7 +313,6 @@ class EmployeeForm(AccountsEmployeeForm):
         "assigned_roles_display",
         "username",
         "employee_code",
-        "authorized_delegations",
         "groups",
     }
 

@@ -7,6 +7,7 @@ from django.db import transaction
 from django.db.models import Max
 from django.http import JsonResponse
 from django.shortcuts import render
+from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
 from .access import chat_delegation_id
@@ -114,4 +115,51 @@ def send_message(request):
     if created:
         publish_chat_message(message)
     message = ChatMessage.objects.select_related("sender").get(pk=message.pk)
+    return JsonResponse({"ok": True, "message": serialize_message(message)})
+
+
+def _owned_message(request, message_id):
+    delegation_id = _delegation_for_request(request)
+    if delegation_id is None:
+        return None, JsonResponse({"error": "Sin delegación autorizada"}, status=403)
+    try:
+        message = ChatMessage.objects.select_related("sender").get(
+            pk=message_id, delegation_id=delegation_id, sender=request.user,
+        )
+    except ChatMessage.DoesNotExist:
+        return None, JsonResponse({"error": "Mensaje no encontrado"}, status=404)
+    return message, None
+
+
+@login_required
+@require_POST
+def edit_message(request, message_id):
+    message, error = _owned_message(request, message_id)
+    if error:
+        return error
+    if message.deleted_at:
+        return JsonResponse({"error": "El mensaje fue eliminado"}, status=409)
+    text = request.POST.get("message", "")
+    if not isinstance(text, str):
+        return JsonResponse({"error": "Mensaje inválido"}, status=400)
+    text = text.strip()
+    if not 1 <= len(text) <= 300:
+        return JsonResponse({"error": "Mensaje inválido (1 a 300 caracteres)"}, status=400)
+    message.message = text
+    message.edited_at = timezone.now()
+    message.save(update_fields=["message", "edited_at"])
+    publish_chat_message(message)
+    return JsonResponse({"ok": True, "message": serialize_message(message)})
+
+
+@login_required
+@require_POST
+def delete_message(request, message_id):
+    message, error = _owned_message(request, message_id)
+    if error:
+        return error
+    if not message.deleted_at:
+        message.deleted_at = timezone.now()
+        message.save(update_fields=["deleted_at"])
+        publish_chat_message(message)
     return JsonResponse({"ok": True, "message": serialize_message(message)})

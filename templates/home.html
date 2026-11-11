@@ -57,6 +57,9 @@
           rgba(255,240,246,.88) 47%,rgba(255,244,247,.36) 72%,transparent 100%);
   }
   .sgr-inicio-bienvenida-texto { max-width:750px; }
+  .sgr-inicio-bienvenida-identidad { display:flex; align-items:center; gap:16px; }
+  .sgr-inicio-bienvenida-foto { width:68px; height:68px; flex:0 0 68px; border-radius:50%; object-fit:cover; border:3px solid #fff; box-shadow:0 3px 10px rgba(37,48,64,.18); background:#fff; }
+  .sgr-inicio-bienvenida-foto--vacia { display:grid; place-items:center; color:#a40c20; font-size:2rem; }
   .sgr-inicio-saludo {font-size:clamp(1.8rem,2.8vw,2.85rem);font-weight:850;letter-spacing:-.045em;
       color:#a40c20;margin:0 0 .22rem;line-height:1.12;}
   .sgr-inicio-bajada {font-size:clamp(.99rem,1.4vw,1.24rem);font-weight:800;margin:0 0 .3rem;line-height:1.34;color:#17243a;}
@@ -157,10 +160,19 @@
 {% block contenido %}
 <div class="sgr-inicio">
   <section class="sgr-inicio-bienvenida" aria-labelledby="sgrInicioSaludo">
-    <div class="sgr-inicio-bienvenida-texto">
+    <div class="sgr-inicio-bienvenida-identidad">
+      {% if user.profile.profile_photo %}
+        <img class="sgr-inicio-bienvenida-foto" src="{{ user.profile.profile_photo.url }}" alt="Foto de {{ user.get_full_name|default:user.username }}">
+      {% else %}
+        <div class="sgr-inicio-bienvenida-foto sgr-inicio-bienvenida-foto--vacia" aria-hidden="true">
+          <i class="bi bi-person-fill"></i>
+        </div>
+      {% endif %}
+      <div class="sgr-inicio-bienvenida-texto">
       <h1 class="sgr-inicio-saludo" id="sgrInicioSaludo">¡Hola, {{ user.first_name|default:user.username }}!</h1>
       <p class="sgr-inicio-bajada">Bienvenido al Sistema de Gestión de Resultados (SGR)</p>
       <p class="sgr-inicio-detalle">Gestiona la planificación, organización, registro, validación y monitoreo del desempeño municipal.</p>
+      </div>
     </div>
   </section>
 

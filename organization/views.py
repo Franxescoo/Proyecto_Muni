@@ -137,15 +137,45 @@ def _delegation_id(user):
     ).first()
 
 
-def _delegation_ids(user, permission=None):
-    return allowed_delegation_ids(user, permission)
+def _delegation_ids(
+    user,
+    permission=None,
+    *,
+    active_only=True,
+    respect_role_scope=True,
+):
+    allowed = allowed_delegation_ids(
+        user,
+        permission,
+        active_only=active_only,
+    )
+    if respect_role_scope or user.is_superuser or allowed is None:
+        return allowed
+    created_ids = Delegation.objects.filter(
+        created_by_id=user.pk,
+        deleted_at__isnull=True,
+    ).values_list("pk", flat=True)
+    return set(allowed or set()).union(created_ids)
 
 
-def _scoped_queryset(queryset, user, relation, permission=None):
+def _scoped_queryset(
+    queryset,
+    user,
+    relation,
+    permission=None,
+    *,
+    active_only=True,
+    respect_role_scope=True,
+):
     queryset = queryset.filter(deleted_at__isnull=True)
     if user.is_superuser:
         return queryset
-    delegation_ids = _delegation_ids(user, permission)
+    delegation_ids = _delegation_ids(
+        user,
+        permission,
+        active_only=active_only,
+        respect_role_scope=respect_role_scope,
+    )
     if not delegation_ids:
         return queryset.none()
     if relation == "global_position_catalog":
@@ -172,9 +202,20 @@ def _require_permission(user, action, model_name):
         raise PermissionDenied
 
 
-def _limit_form_choices(form, user, permission=None):
+def _limit_form_choices(
+    form,
+    user,
+    permission=None,
+    *,
+    respect_role_scope=True,
+):
     if isinstance(form, EmployeeForm) and not user.is_superuser:
-        permitted = _delegation_ids(user, permission)
+        permitted = _delegation_ids(
+            user,
+            permission,
+            active_only=False,
+            respect_role_scope=respect_role_scope,
+        )
         form.fields["delegation"].queryset = Delegation.objects.filter(
             pk__in=permitted, deleted_at__isnull=True,
         )
@@ -257,7 +298,12 @@ def _handle_mutations(
         instance_id = request.POST.get("object_id")
         if modal_action == "delete":
             _require_permission(request.user, "delete", model_name)
-            allowed = _delegation_ids(request.user, f"organization.delete_{model_name}")
+            allowed = _delegation_ids(
+                request.user,
+                f"organization.delete_{model_name}",
+                active_only=False,
+                respect_role_scope=model_name not in ("employee", "delegation"),
+            )
             if not request.user.is_superuser:
                 if model_name == "positionfunction":
                     # Catálogo global: su permiso explícito de eliminación autoriza la operación.
@@ -294,18 +340,46 @@ def _handle_mutations(
         instance = None
         if modal_action == "edit":
             targets = records
-            if not request.user.is_superuser and model_name in ("employee", "delegation"):
+            if not request.user.is_superuser and model_name in (
+                "employee", "delegation"
+            ):
                 relation = "delegation_id" if model_name == "employee" else "pk"
-                targets = targets.filter(**{f"{relation}__in": _delegation_ids(request.user, f"organization.change_{model_name}")})
+                targets = targets.filter(
+                    **{
+                        f"{relation}__in": _delegation_ids(
+                            request.user,
+                            f"organization.change_{model_name}",
+                            active_only=False,
+                        respect_role_scope=False,
+                    )
+                    }
+                )
             instance = get_object_or_404(targets, pk=instance_id)
         form = form_class(request.POST, request.FILES, instance=instance)
-        _limit_form_choices(form, request.user, f"organization.{permission_action}_{model_name}")
+        _limit_form_choices(
+            form,
+            request.user,
+            f"organization.{permission_action}_{model_name}",
+            respect_role_scope=model_name not in ("employee", "delegation"),
+        )
         if form.is_valid():
 
             if isinstance(form, DelegationForm):
                 with transaction.atomic():
                     previous_id = (Delegation.objects.select_for_update().filter(pk=instance.pk).values_list("responsible_id", flat=True).first() if instance else None)
+                    if instance is None:
+                        form.instance.created_by = request.user
                     saved = form.save()
+                    if instance is None and not request.user.is_superuser:
+                        profile = UserProfile.objects.filter(
+                            user=request.user,
+                            deleted_at__isnull=True,
+                        ).first()
+                        if profile is None:
+                            raise PermissionDenied(
+                                "El usuario creador no tiene un perfil activo."
+                            )
+                        profile.authorized_delegations.add(saved)
                     if saved.responsible_id != previous_id:
                         DelegationResponsibilityLog.objects.create(
                             delegation=saved,
@@ -355,9 +429,25 @@ def _handle_mutations(
         elif modal_action in ("edit", "view"):
             _require_permission(request.user, "view" if modal_action == "view" else "change", model_name)
             targets = records
-            if not request.user.is_superuser and model_name in ("employee", "delegation"):
+            if (
+                not request.user.is_superuser
+                and model_name == "employee"
+            ) or (
+                not request.user.is_superuser
+                and model_name == "delegation"
+                and modal_action == "edit"
+            ):
                 relation = "delegation_id" if model_name == "employee" else "pk"
-                targets = targets.filter(**{f"{relation}__in": _delegation_ids(request.user, f"organization.{('view' if modal_action == 'view' else 'change')}_{model_name}")})
+                targets = targets.filter(
+                    **{
+                        f"{relation}__in": _delegation_ids(
+                            request.user,
+                            f"organization.{('view' if modal_action == 'view' else 'change')}_{model_name}",
+                            active_only=False,
+                            respect_role_scope=model_name not in ("employee", "delegation"),
+                        )
+                    }
+                )
             instance = get_object_or_404(targets, pk=instance_id)
             form = form_class(instance=instance)
             if modal_action == "view":
@@ -365,7 +455,16 @@ def _handle_mutations(
                     field.disabled = True
         else:
             return {"form": None, "modal_open": False}
-        _limit_form_choices(form, request.user, "organization." + ("add" if modal_action == "create" else "view" if modal_action == "view" else "change") + "_" + model_name)
+        _limit_form_choices(
+            form,
+            request.user,
+            "organization." + (
+                "add" if modal_action == "create"
+                else "view" if modal_action == "view"
+                else "change"
+            ) + "_" + model_name,
+            respect_role_scope=model_name not in ("employee", "delegation"),
+        )
 
     return {
         "form": form,
@@ -584,7 +683,10 @@ def employee_list(request):
             "assigned_groups"
         ),
         request.user,
-        "delegation_id", "organization.view_employee",
+        "delegation_id",
+        "organization.view_employee",
+        active_only=False,
+        respect_role_scope=False,
     )
     mutation_context = _handle_mutations(
         request,
@@ -617,7 +719,13 @@ def employee_list(request):
             Q(status__iexact="active") | Q(status__iexact="activo")
         ).count(),
         "statuses": _statuses(
-            _scoped_queryset(Employee.objects.all(), request.user, "delegation_id")
+            _scoped_queryset(
+                Employee.objects.all(),
+                request.user,
+                "delegation_id",
+                active_only=False,
+                respect_role_scope=False,
+            )
         ),
         "active_page": "employees",
         "page_title": "Empleados",
@@ -638,7 +746,7 @@ def employee_list(request):
 
 @organization_access("organization.view_delegation")
 def delegation_list(request):
-    records = _scoped_queryset(
+    all_records = _scoped_queryset(
         Delegation.objects.select_related("responsible").annotate(
             employee_count=Count(
                 "employees",
@@ -646,18 +754,21 @@ def delegation_list(request):
             )
         ),
         request.user,
-        "pk", "organization.view_delegation",
+        "pk",
+        "organization.view_delegation",
+        active_only=False,
+        respect_role_scope=False,
     )
     mutation_context = _handle_mutations(
         request,
-        records,
+        all_records,
         DelegationForm,
         "delegation",
         "delegación",
     )
     if mutation_context is None:
         return redirect("organization:delegation_list")
-    delegations = records
+    delegations = all_records
     search = _query(request.GET.get("q"))
     status = _query(request.GET.get("status"))
     if search:
@@ -682,11 +793,13 @@ def delegation_list(request):
             Q(status__iexact="active") | Q(status__iexact="activo")
         ).count(),
         "selected_commune": selected_commune,
-        "commune_options": (Delegation.objects.filter(deleted_at__isnull=True)
-            .exclude(commune="").order_by("commune").values_list("commune", flat=True).distinct()),
-        "statuses": _statuses(
-            _scoped_queryset(Delegation.objects.all(), request.user, "pk")
+        "commune_options": (
+            all_records.exclude(commune="")
+            .order_by("commune")
+            .values_list("commune", flat=True)
+            .distinct()
         ),
+        "statuses": _statuses(all_records),
         "active_page": "delegations",
         "page_title": "Delegaciones",
         "page_description": "Consulta las unidades territoriales y sus empleados.",
@@ -705,7 +818,12 @@ def delegation_list(request):
 @organization_access("organization.view_delegation")
 def delegation_export(request):
     delegations = _scoped_queryset(
-        Delegation.objects.select_related("responsible"), request.user, "pk", "organization.view_delegation"
+        Delegation.objects.select_related("responsible"),
+        request.user,
+        "pk",
+        "organization.view_delegation",
+        active_only=False,
+        respect_role_scope=False,
     ).order_by("name")
     search = _query(request.GET.get("q"))
     status = _query(request.GET.get("status"))
