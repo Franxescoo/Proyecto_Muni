@@ -100,6 +100,27 @@
     box-shadow: 0 0 0 1000px #fff inset !important;
     caret-color: #17212c !important;
 }
+#chatInstitucionalModal .sgr-chat-messages .sgr-chat-item { position:relative; padding-right:2.1rem; }
+#chatInstitucionalModal .sgr-chat-actions { position:absolute; top:.25rem; right:.25rem; display:flex; justify-content:flex-end; min-height:1.45rem; opacity:0; transition:opacity .15s ease; z-index:5; }
+#chatInstitucionalModal .sgr-chat-item:hover .sgr-chat-actions,
+#chatInstitucionalModal .sgr-chat-item:focus-within .sgr-chat-actions { opacity:1; }
+#chatInstitucionalModal .sgr-chat-menu-button { width:1.55rem; height:1.55rem; padding:0 !important; border:0 !important; border-radius:50%; background:transparent !important; color:inherit; line-height:1; }
+#chatInstitucionalModal .sgr-chat-menu-button:hover, #chatInstitucionalModal .sgr-chat-menu-button:focus-visible { background:transparent !important; color:#a60a17; outline:0; }
+#chatInstitucionalModal .sgr-chat-menu { position:absolute; top:1.5rem; right:0; min-width:118px; padding:.3rem; background:#202124; border:1px solid #3c4043; border-radius:.5rem; box-shadow:0 6px 18px rgba(20,27,38,.3); }
+.sgr-chat-menu[hidden] { display:none; }
+.sgr-chat-menu-option { display:block; width:100%; padding:.35rem .5rem; border:0; border-radius:.3rem; background:transparent; color:#fff; text-align:left; font-size:.76rem; }
+.sgr-chat-menu-option:hover, .sgr-chat-menu-option:focus-visible { background:#343638; outline:0; }
+.sgr-chat-menu-danger { color:#ffb4b4; }
+.sgr-chat-inline-editor { display:flex; flex-direction:column; gap:.35rem; min-width:190px; }
+.sgr-chat-inline-input { width:100%; min-width:0; padding:.3rem .4rem; border:1px solid #a3cfbb; border-radius:.3rem; color:#17212c; background:#fff; }
+.sgr-chat-inline-input:focus { outline:2px solid rgba(25,135,84,.25); border-color:#198754; }
+.sgr-chat-inline-controls { display:flex; justify-content:flex-end; gap:.3rem; }
+.sgr-chat-inline-controls button { border:0; border-radius:.3rem; padding:.2rem .4rem; font-size:.7rem; cursor:pointer; }
+.sgr-chat-inline-cancel { background:#e9ecef; color:#343a40; }
+.sgr-chat-inline-save { background:#198754; color:#fff; }
+.sgr-chat-confirmation { display:flex; align-items:center; justify-content:space-between; gap:.6rem; padding:.45rem .6rem; margin-bottom:.55rem; border:1px solid #f1c7cd; border-radius:.45rem; background:#fff4f5; color:#7f1120; font-size:.78rem; }
+.sgr-chat-confirmation .btn { padding:.2rem .45rem; font-size:.72rem; }
+.sgr-chat-deleted { color:#6c757d; font-style:italic; }
 /* Minimizado: mantiene una barra accesible y no tapa la pantalla. */
 .sgr-floating-chat.is-minimized { height: 52px !important; }
 .sgr-floating-chat.is-minimized .sgr-chat-body { display: none; }

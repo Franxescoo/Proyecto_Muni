@@ -77,6 +77,13 @@ class PeriodForm(BootstrapMixin, forms.ModelForm):
             "thresholds",
             "parameters_version",
         ]
+        labels = {
+            "start_date": "Fecha de inicio",
+            "end_date": "Fecha de término",
+            "computable_days": "Días computables",
+            "thresholds": "Umbrales",
+            "parameters_version": "Versión de parámetros",
+        }
 
         widgets = {
             "start_date": forms.DateInput(
@@ -495,6 +502,17 @@ class GoalForm(GoalScopeMixin, forms.ModelForm):
             "unit",
             "weight",
         ]
+        labels = {
+            "period": "Período",
+            "employee": "Funcionario",
+            "position": "Cargo",
+            "measurement_item": "Ítem de medición",
+            "item": "Ítem",
+            "objective_value": "Valor objetivo",
+            "required_evidence_count": "Evidencias requeridas",
+            "unit": "Unidad",
+            "weight": "Ponderador",
+        }
 
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -538,6 +556,16 @@ class GoalInlineForm(GoalScopeMixin, forms.ModelForm):
             "unit",
             "weight",
         ]
+        labels = {
+            "employee": "Funcionario",
+            "position": "Cargo",
+            "measurement_item": "Ítem de medición",
+            "item": "Ítem",
+            "objective_value": "Valor objetivo",
+            "required_evidence_count": "Evidencias requeridas",
+            "unit": "Unidad",
+            "weight": "Ponderador",
+        }
 
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -561,6 +589,15 @@ class MeasurementItemForm(BootstrapMixin, forms.ModelForm):
             "formula",
             "is_active",
         ]
+        labels = {
+            "code": "Código",
+            "name": "Nombre",
+            "description": "Descripción",
+            "item_type": "Tipo de medición",
+            "unit": "Unidad de medida",
+            "formula": "Descripción de la fórmula",
+            "is_active": "Activo",
+        }
 
         widgets = {
             "description": forms.Textarea(

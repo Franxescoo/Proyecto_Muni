@@ -67,6 +67,17 @@
                         </div>
 
                         <div class="col-md-6 mb-3">
+                            <label for="{{ form.attention.id_for_label }}" class="form-label fw-semibold">
+                                {{ form.attention.label }} <span class="text-danger">*</span>
+                            </label>
+                            {{ form.attention }}
+                            <div class="form-text">Selecciona la atención que origina esta actividad.</div>
+                            {% for error in form.attention.errors %}
+                            <div class="text-danger small mt-1">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="col-md-6 mb-3">
                             <label class="form-label fw-semibold">
                                 {{ form.author.label }}
                             </label>

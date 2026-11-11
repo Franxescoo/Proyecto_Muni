@@ -16,7 +16,15 @@ from planning_measurements.models import Goal, Period
 
 from .admin import archive_evidences
 from .forms import ActivityForm, EvidenceForm, ValidationForm
-from .models import Activity, ActivityType, Evidence, Validation
+from .models import (
+    Activity,
+    ActivityType,
+    AttentionEntry,
+    AttentionType,
+    Evidence,
+    SubAttention,
+    Validation,
+)
 from .views import EvidenceCreateView, EvidenceUpdateView
 
 
@@ -102,6 +110,23 @@ class RegistrationRelationshipIntegrityTests(TestCase):
             code="REL-ACT",
             name="Actividad de prueba",
         )
+        cls.attention_type = AttentionType.objects.create(
+            code="REL-ATT",
+            name="Atención de prueba",
+        )
+        cls.sub_attention = SubAttention.objects.create(
+            code="REL-SUB",
+            name="Subatención de prueba",
+            attention_type=cls.attention_type,
+        )
+        cls.north_attention = AttentionEntry.objects.create(
+            origin="INTERNAL",
+            requester="Solicitante de prueba",
+            attention_type=cls.attention_type,
+            sub_attention=cls.sub_attention,
+            description="Atención de prueba",
+            delegation=cls.north,
+        )
 
     def make_activity(self, goal=None, author=None, **kwargs):
         values = {
@@ -156,6 +181,7 @@ class RegistrationRelationshipIntegrityTests(TestCase):
             "goal": goal.pk,
             "author": author.pk,
             "activity_type": self.activity_type.pk,
+            "attention": self.north_attention.pk,
             "date": "2026-06-01",
             "request_problem": "Solicitud de prueba",
             "action": "Acción de prueba",

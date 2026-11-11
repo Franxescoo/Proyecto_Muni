@@ -6,6 +6,13 @@ from core.models import BaseModel
 
 class Delegation(BaseModel):
     delegation_id = models.BigAutoField(primary_key=True)
+    created_by = models.ForeignKey(
+        "auth.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="created_delegations",
+    )
     code = models.CharField(max_length=30, unique=True, null=True, blank=True)
     name = models.CharField(max_length=150)
     address = models.CharField(max_length=200, blank=True)

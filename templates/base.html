@@ -449,7 +449,7 @@
             opacity: 1 !important;
         }
     </style>
-    <link rel="stylesheet" href="{% static 'css/chat_flotante.css' %}">
+    <link rel="stylesheet" href="{% static 'css/chat_flotante.css' %}?v=20261111-chat-menu-3">
     {% block estilos %}{% endblock %}
 </head>
 <body>
@@ -767,6 +767,8 @@ document.addEventListener('DOMContentLoaded', function () {
                       action="{% url 'websocket:send' %}"
                       data-history-url="{% url 'websocket:history' %}"
                       data-read-url="{% url 'websocket:read' %}"
+                      data-edit-url-template="{% url 'websocket:edit' 0 %}"
+                      data-delete-url-template="{% url 'websocket:delete' 0 %}"
                       class="mt-3">
 
                     {% csrf_token %}
@@ -1240,7 +1242,7 @@ document.addEventListener("DOMContentLoaded", function () {
 <script defer src="{% static 'js/live_refresh.js' %}"></script>
 {% endif %}
 {% if user.is_authenticated and sgr_active_delegation %}
-<script defer src="{% static 'js/chat_institucional.js' %}"></script>
+<script defer src="{% static 'js/chat_institucional.js' %}?v=20261111-chat-inline-edit"></script>
 <script defer src="{% static 'js/chat_flotante.js' %}"></script>
 {% endif %}
 <script>
