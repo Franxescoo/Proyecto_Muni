@@ -12,11 +12,52 @@ from django.db.models import Max
 from .models import Goal, Period, PeriodParameterSnapshot
 
 _CAP_PATTERN = re.compile(r"(?:tope|max)\s*:\s*(\d+(?:[.,]\d+)?)", re.I)
+_VERSION_PATTERN = re.compile(
+    r"^(?:[A-Za-z0-9_-]*v)?\d+(?:\.\d+)*$",
+    re.I,
+)
+_VERSION_PARTS_PATTERN = re.compile(
+    r"^(.*?)(v)?(\d+(?:\.\d+)*)$",
+    re.I,
+)
 
 
 def compliance_cap_value(thresholds):
     found = _CAP_PATTERN.search(thresholds or "")
     return str(Decimal(found.group(1).replace(",", "."))) if found else "150"
+
+
+def next_parameters_version(value):
+    """Incrementa el último componente numérico de una versión válida."""
+    current = str(value or "").strip()
+    if not _VERSION_PATTERN.fullmatch(current):
+        return current
+    match = _VERSION_PARTS_PATTERN.fullmatch(current)
+    if not match:
+        return current
+    prefix, marker, components = match.groups()
+    numbers = components.split(".")
+    numbers[-1] = str(int(numbers[-1]) + 1)
+    return f"{prefix}{marker or ''}{'.'.join(numbers)}"
+
+
+def parameters_version_is_valid(value):
+    return bool(_VERSION_PATTERN.fullmatch(str(value or "").strip()))
+
+
+def advance_period_parameters_version(period):
+    """Incrementa la versión funcional dentro de la transacción llamadora."""
+    if not transaction.get_connection().in_atomic_block:
+        raise RuntimeError(
+            "La actualización de versión debe ejecutarse dentro de "
+            "transaction.atomic()."
+        )
+    locked = Period.objects.select_for_update().get(pk=period.pk)
+    updated = next_parameters_version(locked.parameters_version)
+    if updated != locked.parameters_version:
+        locked.parameters_version = updated
+        locked.save(update_fields=["parameters_version", "updated_at"])
+    return locked
 
 
 def capture_period_parameters(period, *, actor, event):

@@ -177,6 +177,7 @@
 {% endblock %}
 
 
+
 {% block contenido %}
 
 <div class="monitor-shell pb-4">
@@ -390,7 +391,8 @@
                                        class="form-check-input sel"
                                        name="_selected_action"
                                        value="{{ period.pk }}"
-                                       {% if period.status == 'Closed' and not can_archive_closed_period %}disabled title="Requiere permiso individual"{% endif %}
+                                       {% if period.status == 'Closed' %}disabled title="No se pueden archivar períodos cerrados"{% endif %}
+                                       {% if period.goals.exists %}disabled title="El período conserva metas protegidas"{% endif %}
                                        aria-label="Seleccionar período {{ period.pk }}">
                             </td>
                             {% endif %}
@@ -491,13 +493,23 @@
 
                                     <!-- ELIMINAR -->
                                     {% if perms.planning_measurements.delete_period %}
-                                    {% if period.status != 'Closed' or can_archive_closed_period %}
+                                    {% if period.status != 'Closed' %}
+                                    {% if period.goals.exists %}
+                                    <button type="button"
+                                            class="btn btn-sm btn-outline-danger"
+                                            disabled
+                                            title="No se puede archivar: el período conserva metas protegidas">
+                                        <i class="bi bi-trash me-1"></i>
+                                        Eliminar
+                                    </button>
+                                    {% else %}
                                     <a href="{% url 'planning:period_delete' period.period_id %}"
                                        class="btn btn-sm btn-outline-danger"
                                        data-swal-delete="período">
                                         <i class="bi bi-trash me-1"></i>
                                         Eliminar
                                     </a>
+                                    {% endif %}
                                     {% endif %}
                                     {% endif %}
 
@@ -983,4 +995,3 @@ document.addEventListener("DOMContentLoaded", function () {
 </script>
 
 {% endblock %}
-

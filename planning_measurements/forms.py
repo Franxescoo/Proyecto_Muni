@@ -10,7 +10,7 @@ from .models import Goal, Period, MeasurementItem
 
 from .working_days import calculate_computable_days
 from .measurement_rules import (SUPPORTED_PERCENTAGE_FORMULA, canonical_percentage_formula)
-from .parameter_history import compliance_cap_value
+from .parameter_history import compliance_cap_value, parameters_version_is_valid
 import re
 from decimal import Decimal
 
@@ -109,6 +109,12 @@ class PeriodForm(BootstrapMixin, forms.ModelForm):
             50,
             "La versión de parámetros",
         )
+        if self.instance.pk:
+            self.fields["parameters_version"].disabled = True
+            self.fields["parameters_version"].help_text = (
+                "La versión se incrementa automáticamente al cambiar "
+                "parámetros efectivos."
+            )
 
         # El administrador no ingresa manualmente los días.
         self.fields["computable_days"].required = False
@@ -160,6 +166,16 @@ class PeriodForm(BootstrapMixin, forms.ModelForm):
             )
 
         return valor
+
+
+    def clean_parameters_version(self):
+        value = self.cleaned_data["parameters_version"].strip()
+        if not parameters_version_is_valid(value):
+            raise forms.ValidationError(
+                "La versión debe tener un formato numérico, por ejemplo "
+                "SGR050-v1, v1 o SGR044-v1.3."
+            )
+        return value
 
 
     def clean(self):

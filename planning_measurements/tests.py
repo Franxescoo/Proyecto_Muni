@@ -631,6 +631,123 @@ class PlanningTests(TestCase):
         self.period.refresh_from_db()
         self.assertIsNone(self.period.deleted_at)
 
+    def test_period_delete_action_remains_visible_but_disabled_for_protected_period(self):
+        self.account("view_period", "delete_period")
+        self.create_goal()
+
+        response = self.client.get(reverse("planning:period_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "No se puede archivar: el período conserva metas protegidas",
+        )
+        self.assertNotContains(response, 'data-swal-delete="período"')
+
+    def test_bulk_period_delete_keeps_protected_period(self):
+        self.account("view_period", "delete_period")
+        self.create_goal()
+
+        response = self.client.post(
+            reverse("planning:period_list"),
+            {
+                "action": "delete_selected",
+                "_selected_action": [str(self.period.pk)],
+            },
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.period.refresh_from_db()
+        self.assertIsNone(self.period.deleted_at)
+
+    def test_copying_existing_goals_increments_target_version_once(self):
+        source_period = Period.objects.create(
+            start_date=date(2027, 1, 1),
+            end_date=date(2027, 1, 31),
+            computable_days=21,
+            status=Period.Status.ACTIVE,
+            thresholds="Verde: 100, Amarillo: 80, Rojo: 60",
+            parameters_version="v1",
+        )
+        source = Goal.objects.create(
+            period=source_period,
+            employee=self.employee,
+            position=self.position,
+            measurement_item=self.measurement_item,
+            item="Meta",
+            objective_value=100,
+            unit="Items",
+            weight=100,
+        )
+        self.account("add_goal", "view_goal", "view_period")
+
+        url = reverse(
+            "planning:period_assign_existing_goals",
+            args=[self.period.pk],
+        )
+        response = self.client.post(url, {"goal_ids": [str(source.pk)]})
+
+        self.assertEqual(response.status_code, 302)
+        self.period.refresh_from_db()
+        self.assertEqual(self.period.parameters_version, "2")
+        self.assertEqual(self.period.parameter_snapshots.count(), 1)
+        self.assertTrue(
+            Goal.objects.filter(
+                period=self.period,
+                measurement_item=self.measurement_item,
+                deleted_at__isnull=True,
+            ).exists()
+        )
+        self.assertTrue(
+            Goal.objects.filter(
+                pk=source.pk,
+                period=source_period,
+                deleted_at__isnull=True,
+            ).exists()
+        )
+
+        response = self.client.post(url, {"goal_ids": [str(source.pk)]})
+        self.assertEqual(response.status_code, 200)
+        self.period.refresh_from_db()
+        self.assertEqual(self.period.parameters_version, "2")
+        self.assertEqual(self.period.parameter_snapshots.count(), 1)
+
+    def test_copying_existing_goals_is_blocked_for_closed_period(self):
+        source_period = Period.objects.create(
+            start_date=date(2027, 2, 1),
+            end_date=date(2027, 2, 28),
+            computable_days=20,
+            status=Period.Status.ACTIVE,
+            thresholds="Verde: 100, Amarillo: 80, Rojo: 60",
+            parameters_version="v1",
+        )
+        source = Goal.objects.create(
+            period=source_period,
+            employee=self.employee,
+            position=self.position,
+            measurement_item=self.measurement_item,
+            item="Meta",
+            objective_value=100,
+            unit="Items",
+            weight=100,
+        )
+        self.period.status = Period.Status.CLOSED
+        self.period.save(update_fields=["status"])
+        self.account("add_goal", "view_goal", "view_period")
+
+        response = self.client.post(
+            reverse(
+                "planning:period_assign_existing_goals",
+                args=[self.period.pk],
+            ),
+            {"goal_ids": [str(source.pk)]},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.period.refresh_from_db()
+        self.assertEqual(self.period.parameters_version, "1")
+        self.assertFalse(Goal.objects.filter(period=self.period).exists())
+
     def test_archived_period_hides_and_blocks_goals(self):
         user = self.account(
             "view_goal",

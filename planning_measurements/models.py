@@ -1,9 +1,16 @@
 from django.core.exceptions import ValidationError
 from django.conf import settings
 from django.db import models
+import re
+
 from django.core.validators import MinValueValidator
 
 from core.models import BaseModel
+
+_PARAMETERS_VERSION_PATTERN = re.compile(
+    r"^(?:[A-Za-z0-9_-]*v)?\d+(?:\.\d+)*$",
+    re.I,
+)
 
 
 class Period(BaseModel):
@@ -16,7 +23,8 @@ class Period(BaseModel):
     )
     thresholds = models.CharField(max_length=255, verbose_name="Thresholds")
     parameters_version = models.CharField(
-        max_length=50, verbose_name="Parameters version"
+        max_length=50,
+        verbose_name="Parameters version",
     )
 
     class Meta:
@@ -31,6 +39,14 @@ class Period(BaseModel):
     def clean(self):
         super().clean()
         errors = {}
+
+        if not _PARAMETERS_VERSION_PATTERN.fullmatch(
+            (self.parameters_version or "").strip()
+        ):
+            errors["parameters_version"] = (
+                "La versión debe tener un formato numérico, por ejemplo "
+                "SGR050-v1, v1 o SGR044-v1.3."
+            )
 
         if self.computable_days is not None:
             if self.computable_days <= 0:
@@ -213,6 +229,45 @@ class Goal(BaseModel):
                 "El cargo de la meta no coincide con "
                 "el cargo actual del funcionario."
             )
+
+        if self.measurement_item_id and self.position_id:
+            historical_item = False
+            if self.pk:
+                previous = (
+                    type(self).objects
+                    .filter(pk=self.pk)
+                    .values(
+                        "measurement_item_id", "employee_id", "position_id"
+                    )
+                    .first()
+                )
+                historical_item = bool(
+                    previous
+                    and previous["measurement_item_id"] == self.measurement_item_id
+                    and previous["employee_id"] == self.employee_id
+                    and previous["position_id"] == self.position_id
+                )
+
+            item = self.measurement_item
+            if not historical_item and (
+                item.deleted_at is not None
+                or not item.is_active
+                or not self.position.catalog_items.filter(pk=item.pk).exists()
+            ):
+                errors.setdefault("measurement_item", []).append(
+                    "El ítem debe estar activo y autorizado para el cargo."
+                )
+
+            if (
+                item.item_type == MeasurementItem.ItemType.PERCENTAGE
+                and not historical_item
+            ):
+                from .measurement_rules import canonical_percentage_formula
+
+                if not canonical_percentage_formula(item.formula):
+                    errors.setdefault("measurement_item", []).append(
+                        "El ítem porcentual no tiene una fórmula compatible."
+                    )
 
 
         # Evitar metas duplicadas en el mismo período.
