@@ -1,10 +1,12 @@
 from datetime import date
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.utils import timezone
 
+from accounts.models import UserProfile
 from organization.models import Delegation, Employee, PositionFunction
 from registration_validation.models import (
     Activity,
@@ -15,6 +17,7 @@ from registration_validation.models import (
     Validation as EvidenceValidation,
 )
 
+from .forms import CitizenRequestActionForm
 from .models import CitizenRequest, CitizenRequestAction, RequestEvent
 
 
@@ -73,6 +76,20 @@ class CitizenRequestActionModelTests(TestCase):
             username="request-action-other",
             password="test-password",
         )
+        cls.profile = UserProfile.objects.create(
+            user=cls.user,
+            employee_code="CRA-USER-001",
+            delegation=cls.north,
+        )
+        cls.profile.authorized_delegations.add(cls.north)
+        action_permissions = Permission.objects.filter(
+            content_type__app_label="citizen_requests",
+            codename__in=(
+                "add_citizenrequestaction",
+                "change_citizenrequestaction",
+            ),
+        )
+        cls.user.user_permissions.add(*action_permissions)
         cls.attention_type = AttentionType.objects.create(
             code="CRA-ATT",
             name="Atención de prueba",
@@ -118,6 +135,17 @@ class CitizenRequestActionModelTests(TestCase):
         }
         values.update(overrides)
         return CitizenRequestAction.objects.create(**values)
+
+    def action_form_data(self, responsible=None, **overrides):
+        values = {
+            "responsible": (responsible or self.north_employee).pk,
+            "action_type": "INSPECTION",
+            "performed_at": timezone.localtime().strftime("%Y-%m-%dT%H:%M"),
+            "description": "Se inspeccionó el lugar.",
+            "outcome": "Se requiere una reparación.",
+        }
+        values.update(overrides)
+        return values
 
     def test_creates_action_without_requiring_attention_entry(self):
         request = self.make_request(delegation=self.north)
@@ -279,3 +307,140 @@ class CitizenRequestActionModelTests(TestCase):
             set(CitizenRequestAction._meta.default_permissions),
             {"add", "change", "view"},
         )
+
+    def test_form_creates_action_and_assigns_protected_fields(self):
+        request = self.make_request(delegation=self.north)
+        form = CitizenRequestActionForm(
+            data=self.action_form_data(),
+            citizen_request=request,
+            user=self.user,
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        action = form.save()
+
+        self.assertEqual(action.request_id, request.pk)
+        self.assertEqual(action.delegation_id, self.north.pk)
+        self.assertEqual(action.registered_by_id, self.user.pk)
+        self.assertEqual(action.responsible_id, self.north_employee.pk)
+        self.assertNotIn("request", form.fields)
+        self.assertNotIn("delegation", form.fields)
+        self.assertNotIn("registered_by", form.fields)
+
+    def test_form_edits_action_without_changing_original_relations(self):
+        request = self.make_request(delegation=self.north)
+        action = self.make_action(request)
+        self.north_employee.delegation = self.south
+        self.north_employee.save(update_fields=("delegation", "updated_at"))
+        form = CitizenRequestActionForm(
+            data=self.action_form_data(
+                responsible=self.north_employee,
+                action_type="VERIFICATION",
+                description="Se verificó la reparación.",
+            ),
+            instance=action,
+            citizen_request=request,
+            user=self.user,
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        updated = form.save()
+
+        self.assertEqual(updated.request_id, request.pk)
+        self.assertEqual(updated.delegation_id, self.north.pk)
+        self.assertEqual(updated.registered_by_id, self.user.pk)
+        self.assertEqual(updated.responsible_id, self.north_employee.pk)
+        self.assertEqual(updated.action_type, "VERIFICATION")
+
+    def test_responsible_selector_is_limited_to_authorized_delegation(self):
+        request = self.make_request(delegation=self.north)
+        form = CitizenRequestActionForm(
+            citizen_request=request,
+            user=self.user,
+        )
+
+        responsible_ids = set(
+            form.fields["responsible"].queryset.values_list("pk", flat=True)
+        )
+        self.assertEqual(
+            responsible_ids,
+            {self.north_employee.pk, self.other_north_employee.pk},
+        )
+
+    def test_form_rejects_responsible_from_another_delegation(self):
+        request = self.make_request(delegation=self.north)
+        form = CitizenRequestActionForm(
+            data=self.action_form_data(responsible=self.south_employee),
+            citizen_request=request,
+            user=self.user,
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("responsible", form.errors)
+
+    def test_form_ignores_posted_protected_fields(self):
+        request = self.make_request(delegation=self.north)
+        forged_request = self.make_request(
+            delegation=self.south,
+            subject="Solicitud manipulada",
+        )
+        form_data = self.action_form_data()
+        form_data.update(
+            {
+                "request": forged_request.pk,
+                "delegation": self.south.pk,
+                "registered_by": self.other_user.pk,
+            }
+        )
+        form = CitizenRequestActionForm(
+            data=form_data,
+            citizen_request=request,
+            user=self.user,
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        action = form.save()
+
+        self.assertEqual(action.request_id, request.pk)
+        self.assertEqual(action.delegation_id, self.north.pk)
+        self.assertEqual(action.registered_by_id, self.user.pk)
+
+    def test_form_rejects_request_without_delegation(self):
+        request = self.make_request()
+        form = CitizenRequestActionForm(
+            data=self.action_form_data(),
+            citizen_request=request,
+            user=self.user,
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertTrue(form.non_field_errors())
+
+    def test_form_rejects_request_with_inconsistent_attention(self):
+        attention = self.make_attention(self.south)
+        request = self.make_request(delegation=self.north, attention=attention)
+        form = CitizenRequestActionForm(
+            data=self.action_form_data(),
+            citizen_request=request,
+            user=self.user,
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertTrue(form.non_field_errors())
+
+    def test_form_rejects_edit_for_different_authorized_request(self):
+        request = self.make_request(delegation=self.north)
+        other_request = self.make_request(
+            delegation=self.north,
+            subject="Otra solicitud",
+        )
+        action = self.make_action(request)
+        form = CitizenRequestActionForm(
+            data=self.action_form_data(),
+            instance=action,
+            citizen_request=other_request,
+            user=self.user,
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertTrue(form.non_field_errors())
