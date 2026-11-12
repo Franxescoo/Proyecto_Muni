@@ -78,7 +78,11 @@
       overflow:hidden;
       background:#fff;border:1px solid #e3e7ee;border-radius:17px;
       box-shadow:0 7px 16px rgba(22,35,54,.11);
+      position:relative;
   }
+  .sgr-inicio-alerta-vencimiento {position:absolute;top:10px;right:11px;color:#c1121f;font-size:1.35rem;z-index:2;animation:sgr-alerta-pulso 1.15s ease-in-out infinite;}
+  @keyframes sgr-alerta-pulso {0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(1.18)}}
+  @media(prefers-reduced-motion:reduce){.sgr-inicio-alerta-vencimiento{animation:none;}}
   .sgr-inicio-tarjeta--organizacion {--sgr-acento:#a86e00;--sgr-boton-inicio:#e6a80d;--sgr-boton-final:#ac6d00;--sgr-cabecera-inicio:#fff4da;--sgr-cabecera-final:#fffcf4;}
   .sgr-inicio-tarjeta--registro {--sgr-acento:#ae4209;--sgr-boton-inicio:#fd8207;--sgr-boton-final:#d55300;--sgr-cabecera-inicio:#ffebdf;--sgr-cabecera-final:#fffaf7;}
   .sgr-inicio-tarjeta--eventos {--sgr-acento:#6625a3;--sgr-boton-inicio:#9040d0;--sgr-boton-final:#5a1d9a;--sgr-cabecera-inicio:#f2e8ff;--sgr-cabecera-final:#fcfaff;}
@@ -180,6 +184,7 @@
   <div class="sgr-inicio-rejilla" aria-label="Módulos habilitados">
     {% for section in sections %}
       <section class="sgr-inicio-tarjeta{% if section.title == 'Planificación' %} sgr-inicio-tarjeta--planificacion{% elif section.title == 'Organización' %} sgr-inicio-tarjeta--organizacion{% elif section.title == 'Registro y validación' %} sgr-inicio-tarjeta--registro{% elif section.title == 'Eventos y Campañas' %} sgr-inicio-tarjeta--eventos{% elif section.title == 'Monitoreo y trazabilidad' %} sgr-inicio-tarjeta--monitoreo{% endif %}" aria-labelledby="sgrTarjeta{{ forloop.counter }}">
+        {% if section.title == 'Monitoreo y trazabilidad' and has_overdue_commitments %}<span class="sgr-inicio-alerta-vencimiento" title="Hay compromisos vencidos" aria-label="Hay compromisos vencidos"><i class="bi bi-exclamation-circle-fill" aria-hidden="true"></i></span>{% endif %}
         <div class="sgr-inicio-tarjeta-cabecera">
           <div class="sgr-inicio-tarjeta-icono" aria-hidden="true">
             {% if section.title == 'Planificación' %}<i class="bi bi-calendar-check"></i>

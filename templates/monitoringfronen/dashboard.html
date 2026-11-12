@@ -1,10 +1,12 @@
 {% extends "base.html" %}
 {% load i18n %}
+{% load static %}
 
 {% block titulo %}Resumen ejecutivo · Monitoreo y trazabilidad{% endblock %}
 
 {% block estilos %}
 <style>
+    @import url("{% static 'css/sgr_autoayuda_dos_modulos.css' %}?v=3");
     .monitor-shell { max-width: 1480px; margin: 0 auto; }
     .monitor-hero { background: linear-gradient(135deg, #a60a17, #760710); color: #fff; border-radius: .65rem; padding: 1.5rem 1.75rem; box-shadow: 0 6px 18px rgba(166, 10, 23, .18); }
     .monitor-hero h1 { font-size: clamp(1.35rem, 2vw, 1.85rem); }
@@ -36,6 +38,7 @@
         </div>
         <i class="bi bi-speedometer2 display-5 opacity-75" aria-hidden="true"></i>
     </section>
+    {% include "shared/_sgr_autoayuda.html" with help_namespace="monitoring" help_section="dashboard" only %}
 
     <section class="section-card p-3 p-lg-4 mb-4">
         <form method="get" class="row g-3 align-items-end">
@@ -60,7 +63,7 @@
                     {% for period in periods %}<option value="{{ period.pk }}" {% if selected_period.pk == period.pk %}selected{% endif %}>{{ period.start_date }} - {{ period.end_date }}</option>{% endfor %}
                 </select>
             </div>
-            <div class="col-12 col-md-2"><button class="btn btn-dark w-100" type="submit"><i class="bi bi-funnel me-1"></i>Filtrar</button></div>
+            <div class="col-12 col-md-2"><button class="btn btn-dark w-100" data-help="Aplica los filtros de delegación, cargo y período al resumen." type="submit"><i class="bi bi-funnel me-1"></i>Filtrar</button></div>
         </form>
     </section>
 
@@ -69,12 +72,25 @@
         <div class="col-12 col-md-4"><div class="section-card metric alert-danger h-100"><div class="alert-value">{{ alerts.overdue_commitments }}</div><div class="metric-label">Compromisos vencidos</div></div></div>
         <div class="col-12 col-md-4"><div class="section-card metric alert-secondary h-100"><div class="alert-value">{{ alerts.low_performance }}</div><div class="metric-label">Rendimientos bajo 80%</div></div></div>
     </div>
+    {% if selected_period %}
+    <div class="alert alert-info py-2 small" role="status">
+        <strong>Semáforo del período:</strong>
+        {{ selected_period.thresholds|default:"Sin umbrales registrados" }}
+        <span class="text-muted">· Parámetros {{ selected_period.parameters_version }}</span>
+    </div>
+    {% endif %}
 
     <section class="section-card p-3 p-lg-4">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
             <div><h2 class="h5 mb-1 fw-bold">Consolidado por funcionario</h2><p class="text-muted small mb-0">Resultados agregados de las metas y evidencias vigentes.</p></div>
-            <a class="btn btn-outline-secondary btn-sm" href="{% url 'monitoring:activity_control' %}"><i class="bi bi-person-check me-1"></i>Control de actividad</a>
+            <div class="d-flex gap-2"><a class="btn btn-outline-secondary btn-sm" data-help="Descarga el consolidado respetando los filtros actuales." href="{% url 'monitoring:dashboard_export' %}?{{ request.GET.urlencode }}"><i class="bi bi-download me-1"></i>Exportar</a><a class="btn btn-outline-secondary btn-sm" data-help="Abre el seguimiento de ingresos y registros por funcionario." href="{% url 'monitoring:activity_control' %}"><i class="bi bi-person-check me-1"></i>Control de actividad</a></div>
         </div>
+        {% if commitment_alerts %}
+        <div class="alert alert-warning small">
+            <strong>Alertas de compromisos abiertas:</strong>
+            {% for alert in commitment_alerts %}<div>{{ alert.message }} Responsable: {{ alert.commitment.responsible }} · {{ alert.commitment.commitment_date|date:"d/m/Y" }}</div>{% endfor %}
+        </div>
+        {% endif %}
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
                 <thead><tr><th>Funcionario</th><th class="text-end">Metas</th><th class="text-end">Cumplimiento promedio</th><th class="text-end">Ponderación</th><th class="text-end">Resultado ponderado</th><th class="text-end">Evidencias aprobadas</th><th>Semáforo</th></tr></thead>
@@ -87,3 +103,4 @@
     </section>
 </div>
 {% endblock %}
+{% block scripts %}<script src="{% static 'js/sgr_autoayuda_dos_modulos.js' %}?v=4" defer></script>{% endblock %}

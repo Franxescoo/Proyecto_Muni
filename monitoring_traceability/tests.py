@@ -1,5 +1,5 @@
 from django.test import TestCase
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -8,6 +8,7 @@ from django.contrib.auth.models import Permission
 from django.core import management
 from django.core.exceptions import ValidationError
 from django.test import TestCase, RequestFactory
+from django.utils import timezone
 
 from accounts.models import UserProfile
 from organization.models import Delegation, Employee, PositionFunction
@@ -22,6 +23,7 @@ from .services import (
 	monitoring_alerts,
 	recalculate_indicator_for_goal,
 )
+from .forms import CommitmentForm
 
 
 class TraceabilityModelsTest(TestCase):
@@ -134,6 +136,30 @@ class TraceabilityModelsTest(TestCase):
 		)
 		with self.assertRaises(ValidationError):
 			commitment.full_clean()
+
+	def test_commitment_form_exposes_existing_activities_by_delegation(self):
+		activity = Activity.objects.create(
+			goal=self.north_goal,
+			author=self.north_employee,
+			date=date(2026, 6, 20),
+			request_problem="Request",
+			action="Action",
+			contact="Contact",
+			phone="555",
+		)
+		form = CommitmentForm(
+			employees=Employee.objects.filter(pk=self.north_employee.pk),
+			delegations=Delegation.objects.filter(pk=self.north.pk),
+			activities=Activity.objects.filter(pk=activity.pk),
+		)
+
+		rendered = str(form["activity"])
+
+		self.assertIn(f'value="{activity.pk}"', rendered)
+		self.assertIn(
+			f'data-delegation-id="{self.north.pk}"',
+			rendered,
+		)
 
 	def test_indicator_recalculates_from_approved_evidence(self):
 		activity = Activity.objects.create(
@@ -404,6 +430,42 @@ class TraceabilityModelsTest(TestCase):
 
 		self.assertEqual(comment.author, self.north_employee)
 		self.assertEqual(comment.text, "Seguimiento realizado.")
+
+	def test_activity_control_separates_login_and_activity_inactivity(self):
+		user = get_user_model().objects.create_user(
+			username="activity_admin",
+			password="test-password",
+			is_superuser=True,
+		)
+		UserProfile.objects.create(
+			user=user,
+			employee_code="ACTIVITY-001",
+			employee=self.north_employee,
+			delegation=self.north,
+		)
+		Activity.objects.create(
+			goal=self.north_goal,
+			author=self.north_employee,
+			date=date(2026, 6, 20),
+			request_problem="Request",
+			action="Action",
+			contact="Contact",
+			phone="555",
+		)
+
+		self.client.force_login(user)
+		user.last_login = timezone.make_aware(datetime(2026, 6, 1, 10, 0))
+		user.save(update_fields=["last_login"])
+		with patch(
+			"monitoring_traceability.views.timezone.localdate",
+			return_value=date(2026, 6, 30),
+		):
+			response = self.client.get("/monitoring/actividad/")
+
+		self.assertEqual(response.status_code, 200)
+		row = response.context["rows"][0]
+		self.assertEqual(row["days_without_login"], 29)
+		self.assertEqual(row["days_without_activity"], 10)
 
 	def test_comment_can_be_created_without_employee_link(self):
 		user = get_user_model().objects.create_user(

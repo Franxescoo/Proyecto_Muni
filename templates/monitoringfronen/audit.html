@@ -1,11 +1,13 @@
 {% extends "base.html" %}
 {% load audit_extras %}
 {% load i18n %}
+{% load static %}
 
 {% block titulo %}Auditoría · Monitoreo y trazabilidad{% endblock %}
 
 {% block estilos %}
 <style>
+    @import url("{% static 'css/sgr_autoayuda_dos_modulos.css' %}?v=3");
     .monitor-shell { max-width: 1480px; margin: 0 auto; }
     .monitor-hero { background: linear-gradient(135deg, #a60a17, #760710); color: #fff; border-radius: .65rem; padding: 1.5rem 1.75rem; box-shadow: 0 6px 18px rgba(166, 10, 23, .18); }
     .monitor-hero h1 { font-size: clamp(1.35rem, 2vw, 1.85rem); }
@@ -33,6 +35,7 @@
         <div><div class="small text-uppercase fw-semibold opacity-75 mb-2">Monitoreo y trazabilidad</div><h1 class="mb-2 fw-bold">Registro de auditoría</h1><p class="mb-0">Consulta el historial de eventos y cambios del sistema.</p></div>
         <i class="bi bi-shield-check display-5 opacity-75" aria-hidden="true"></i>
     </section>
+    {% include "shared/_sgr_autoayuda.html" with help_namespace="monitoring" help_section="audit" only %}
     <div class="row g-3 mb-4">
         <div class="col-12 col-md-6"><div class="section-card metric h-100"><div class="value">{{ total_audits|default:"0" }}</div><div class="label">Eventos registrados</div></div></div>
         <div class="col-12 col-md-6"><div class="section-card metric h-100"><div class="value text-muted">{% language 'es' %}{{ last_audit_date|date:"d \d\e F \d\e Y H:i"|default:"—" }}{% endlanguage %}</div><div class="label">Última actualización</div></div></div>
@@ -42,7 +45,7 @@
         <form class="row g-3 align-items-end mb-3" method="get">
             <div class="col-12 col-md-4"><label class="filter-label" for="audit-search">Buscar evento o entidad</label><input id="audit-search" name="q" value="{{ request.GET.q }}" class="form-control" placeholder="Ej. actualización, meta..." type="search"></div>
             <div class="col-12 col-md-3"><label class="filter-label" for="audit-date">Desde</label><input id="audit-date" name="date_from" value="{{ request.GET.date_from }}" class="form-control" type="date"></div>
-            <div class="col-12 col-md-2"><button class="btn btn-dark w-100" type="submit"><i class="bi bi-funnel me-1"></i>Filtrar</button></div>
+            <div class="col-12 col-md-2"><button class="btn btn-dark w-100" data-help="Busca y filtra los eventos de auditoría desde la fecha indicada." type="submit"><i class="bi bi-funnel me-1"></i>Filtrar</button></div>
         </form>
         <div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr><th>Evento</th><th>Usuario</th><th>Entidad</th><th>Identificador</th><th>Fecha</th><th class="text-end">Detalle</th></tr></thead><tbody>
             {% for audit in audits %}
@@ -64,7 +67,7 @@
                     <details class="text-start">
                         <summary class="btn btn-sm btn-light border">
                             <i class="bi bi-eye"></i>
-                            Ver cambios
+                            <span data-help="Muestra los valores anteriores y nuevos registrados para este evento.">Ver cambios</span>
                         </summary>
 
                         <div class="border rounded p-3 mt-2 bg-light">
@@ -122,3 +125,4 @@
     </section>
 </div>
 {% endblock %}
+{% block scripts %}<script src="{% static 'js/sgr_autoayuda_dos_modulos.js' %}?v=4" defer></script>{% endblock %}
