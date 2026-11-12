@@ -495,13 +495,15 @@
                                     {% if perms.planning_measurements.delete_period %}
                                     {% if period.status != 'Closed' %}
                                     {% if period.goals.exists %}
-                                    <button type="button"
-                                            class="btn btn-sm btn-outline-danger"
-                                            disabled
-                                            title="No se puede archivar: el período conserva metas protegidas">
-                                        <i class="bi bi-trash me-1"></i>
-                                        Eliminar
-                                    </button>
+                                    <span title="No se puede eliminar este período porque tiene o ha tenido metas asociadas">
+                                        <button type="button"
+                                                class="btn btn-sm btn-outline-danger"
+                                                disabled
+                                                style="pointer-events: none">
+                                            <i class="bi bi-trash me-1"></i>
+                                            Eliminar
+                                        </button>
+                                    </span>
                                     {% else %}
                                     <a href="{% url 'planning:period_delete' period.period_id %}"
                                        class="btn btn-sm btn-outline-danger"

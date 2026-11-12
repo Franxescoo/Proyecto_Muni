@@ -61,6 +61,30 @@ class EventExtensionTests(TestCase):
         self.event.refresh_from_db()
         self.assertIsNone(self.event.deleted_at)
 
+    def test_event_edit_audits_effective_changes_only(self):
+        url = reverse("municipal_events:event_edit", args=[self.event.pk])
+        data = {"name": "Verbena actualizada", "description": "Nueva descripción"}
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("municipal_events:event_list"))
+        audit = EventActionAudit.objects.get(
+            event_id=self.event.pk,
+            action="MODIFICADO",
+        )
+        self.assertIn("Nombre", audit.reason)
+        self.assertIn("Descripción", audit.reason)
+
+        self.assertEqual(self.client.post(url, data).status_code, 302)
+        self.assertEqual(
+            EventActionAudit.objects.filter(
+                event=self.event, action="MODIFICADO"
+            ).count(),
+            1,
+            list(EventActionAudit.objects.filter(
+                event=self.event, action="MODIFICADO"
+            ).values_list("reason", flat=True)),
+        )
+
     def test_edition_soft_delete_and_reactivation(self):
         delete = reverse('municipal_events:edition_delete', args=[self.edition.pk])
         self.assertEqual(self.client.post(delete, {'reason': 'Sin actividad'}).status_code, 302)

@@ -103,6 +103,58 @@ class CampaignWorkflowTests(TestCase):
         data["attention"] = self.a1.pk
         self.assertEqual(self.client.post(url,data).status_code,403)
 
+    def test_campaign_age_limit_uses_december_31_and_has_no_partial_records(self):
+        self.client.force_login(self.user1)
+        url = reverse("municipal_events:enrollment_create", args=[self.campaign.pk])
+        base = {
+            "attention": self.a1.pk,
+            "name": "Niño límite",
+            "sex": "M",
+            "observation": "",
+        }
+
+        allowed = {**base, "rut": "123456785", "birth_date": "2016-12-31"}
+        self.assertEqual(self.client.post(url, allowed).status_code, 302)
+
+        rejected = {
+            **base,
+            "rut": "11223344K",
+            "birth_date": "2015-12-31",
+        }
+        response = self.client.post(url, rejected)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "supera la edad máxima")
+        self.assertEqual(Enrollment.objects.count(), 1)
+        self.assertEqual(Beneficiary.objects.count(), 1)
+
+    def test_campaign_can_configure_age_limit(self):
+        self.campaign.max_age = 12
+        self.campaign.full_clean()
+        self.campaign.save(update_fields=["max_age"])
+        self.assertEqual(Campaign.objects.get(pk=self.campaign.pk).max_age, 12)
+
+    def test_inactive_attention_type_blocks_new_enrollments_but_preserves_campaign(self):
+        self.attention_type.status = False
+        self.attention_type.save(update_fields=["status"])
+        self.campaign.refresh_from_db()
+        self.assertFalse(self.campaign.accepts_enrollments)
+        self.campaign.status = "CLOSED"
+        self.campaign.full_clean()
+        self.campaign.save(update_fields=["status"])
+        self.client.force_login(self.user1)
+        response = self.client.post(
+            reverse("municipal_events:enrollment_create", args=[self.campaign.pk]),
+            {
+                "attention": self.a1.pk,
+                "name": "No debe inscribirse",
+                "rut": "123456785",
+                "birth_date": "2017-03-01",
+                "sex": "M",
+            },
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(Enrollment.objects.count(), 0)
+
     def test_delivery_needs_approval_and_cannot_repeat(self):
         child = Beneficiary.objects.create(name="Demo",rut="123456785",birth_date="2017-03-01")
         enrollment = Enrollment.objects.create(campaign=self.campaign,beneficiary=child,attention=self.a1,delegation=self.d1,created_by=self.user1)

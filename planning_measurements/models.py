@@ -249,14 +249,15 @@ class Goal(BaseModel):
                 )
 
             item = self.measurement_item
-            if not historical_item and (
-                item.deleted_at is not None
-                or not item.is_active
-                or not self.position.catalog_items.filter(pk=item.pk).exists()
-            ):
-                errors.setdefault("measurement_item", []).append(
-                    "El ítem debe estar activo y autorizado para el cargo."
-                )
+            if not historical_item:
+                if item.deleted_at is not None or not item.is_active:
+                    errors.setdefault("measurement_item", []).append(
+                        "El ítem de medición no está activo."
+                    )
+                elif not self.position.catalog_items.filter(pk=item.pk).exists():
+                    errors.setdefault("measurement_item", []).append(
+                        "El ítem de medición no está autorizado para el cargo."
+                    )
 
             if (
                 item.item_type == MeasurementItem.ItemType.PERCENTAGE

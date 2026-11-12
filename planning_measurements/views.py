@@ -29,6 +29,7 @@ from .calculations import (
     InvalidPeriodWeights,
     validate_period_weights,
 )
+from .measurement_rules import canonical_percentage_formula
 
 PAGE_SIZE = 25
 PAGE_SIZE_OPTIONS = (10, 25, 50)
@@ -387,23 +388,51 @@ def available_goal_sources(user, period=None):
 
     available = []
     for goal in goals[:300]:
-        item = goal.measurement_item
-        if (
-            item is None
-            or item.deleted_at is not None
-            or not item.is_active
-            or goal.employee.deleted_at is not None
-            or goal.position.deleted_at is not None
-            or item.unit != goal.unit
-            or not goal.position.catalog_items.filter(
-                pk=item.pk,
-                deleted_at__isnull=True,
-                is_active=True,
-            ).exists()
-        ):
+        if goal_copy_error(goal):
             continue
         available.append(goal)
     return available
+
+
+def goal_copy_error(goal):
+    """Return the user-facing reason a goal cannot be copied, if any."""
+    item = goal.measurement_item
+
+    if item is None:
+        return (
+            f"La meta '{goal.item}' no tiene un ítem de medición "
+            "identificado."
+        )
+    if item.deleted_at is not None or not item.is_active:
+        return f"El ítem '{item.code} - {item.name}' no está activo."
+    if goal.employee.deleted_at is not None or goal.position.deleted_at is not None:
+        return (
+            f"La meta '{goal.item}' pertenece a un funcionario o cargo "
+            "archivado."
+        )
+    if not goal.position.catalog_items.filter(
+        pk=item.pk,
+        deleted_at__isnull=True,
+        is_active=True,
+    ).exists():
+        return (
+            f"El ítem '{item.code} - {item.name}' no está autorizado "
+            f"para el cargo '{goal.position}'."
+        )
+    if item.unit != goal.unit:
+        return (
+            f"La unidad del ítem '{item.code}' no coincide con la "
+            "unidad de la meta original."
+        )
+    if (
+        item.item_type == MeasurementItem.ItemType.PERCENTAGE
+        and not canonical_percentage_formula(item.formula)
+    ):
+        return (
+            f"La fórmula porcentual del ítem '{item.code} - {item.name}' "
+            "no es compatible con el cálculo actual del SGR."
+        )
+    return None
 
 
 def apply_goal_assignments(request, period, *, may_add, may_remove):
@@ -524,25 +553,9 @@ def apply_goal_assignments(request, period, *, may_add, may_remove):
             # Utilizar el ítem vinculado a la meta original.
             item = source.measurement_item
 
-            if item is None:
-                raise ValidationError(
-                    f"La meta '{source.item}' no tiene un ítem "
-                    "del catálogo identificado. Debe revisarse "
-                    "antes de copiarla."
-                )
-
-            if item.deleted_at is not None or not item.is_active:
-                raise ValidationError(
-                    f"El ítem '{item.code} - {item.name}' "
-                    "no está activo y no puede asignarse "
-                    "a una nueva meta."
-                )
-
-            if item.unit != source.unit:
-                raise ValidationError(
-                    f"La unidad del ítem '{item.code}' "
-                    "no coincide con la meta original."
-                )
+            copy_error = goal_copy_error(source)
+            if copy_error:
+                raise ValidationError(copy_error)
 
 
             copied_goal = Goal(
@@ -846,14 +859,7 @@ def period_create(request):
             for field, message in validation_messages:
                 form.add_error(
                     None,
-                    (
-                        "No se puede copiar la meta porque el ítem de "
-                        "medición no está autorizado para el cargo."
-                        if field == "measurement_item"
-                        or "ítem" in message.lower()
-                        and "autorizado" in message.lower()
-                        else message
-                    ),
+                    message,
                 )
 
         else:
@@ -1102,14 +1108,7 @@ def period_edit(request, period_id):
             for field, message in validation_messages:
                 form.add_error(
                     None,
-                    (
-                        "No se puede copiar la meta porque el ítem de "
-                        "medición no está autorizado para el cargo."
-                        if field == "measurement_item"
-                        or "ítem" in message.lower()
-                        and "autorizado" in message.lower()
-                        else message
-                    ),
+                    message,
                 )
 
         else:
@@ -1173,17 +1172,7 @@ def period_assign_existing_goals(request, period_id):
             "-period__start_date", "item", "pk"
         )
         if (
-            goal.measurement_item_id is not None
-            and goal.measurement_item.deleted_at is None
-            and goal.measurement_item.is_active
-            and goal.employee.deleted_at is None
-            and goal.position.deleted_at is None
-            and goal.measurement_item.unit == goal.unit
-            and goal.position.catalog_items.filter(
-                pk=goal.measurement_item_id,
-                deleted_at__isnull=True,
-                is_active=True,
-            ).exists()
+            not goal_copy_error(goal)
             and (
                 goal.employee_id,
                 goal.position_id,
@@ -1191,6 +1180,19 @@ def period_assign_existing_goals(request, period_id):
             ) not in already_assigned
         )
     ]
+    unavailable = [
+        (goal, goal_copy_error(goal))
+        for goal in sources.order_by(
+            "-period__start_date", "item", "pk"
+        )
+        if goal_copy_error(goal)
+        and (
+            goal.employee_id,
+            goal.position_id,
+            goal.measurement_item_id,
+        ) not in already_assigned
+    ]
+    error_messages = []
 
     if request.method == "POST":
         selected_ids = request.POST.getlist("goal_ids")
@@ -1200,12 +1202,16 @@ def period_assign_existing_goals(request, period_id):
             or len(selected_ids) > 100
             or len(set(selected_ids)) != len(selected_ids)
         ):
+            error_messages.append("Selecciona entre 1 y 100 metas distintas.")
             messages.error(
                 request,
                 "Selecciona entre 1 y 100 metas distintas."
             )
 
         elif not all(value.isdecimal() for value in selected_ids):
+            error_messages.append(
+                "La selección contiene identificadores inválidos."
+            )
             messages.error(
                 request,
                 "La selección contiene identificadores inválidos."
@@ -1227,6 +1233,9 @@ def period_assign_existing_goals(request, period_id):
                 )
 
                 if len(selected) != len(selected_ids):
+                    error_messages.append(
+                        "Alguna meta seleccionada no está disponible."
+                    )
                     messages.error(
                         request,
                         "Alguna meta seleccionada no está disponible."
@@ -1271,26 +1280,9 @@ def period_assign_existing_goals(request, period_id):
                         # Identifica el ítem por su relación, no por el nombre.
                         item = source.measurement_item
 
-                        if item is None:
-                            errors.append(
-                                f"La meta '{source.item}' no tiene un ítem "
-                                "del catálogo identificado. Debe revisarse "
-                                "antes de copiarla."
-                            )
-                            continue
-
-                        if item.deleted_at is not None or not item.is_active:
-                            errors.append(
-                                f"El ítem '{item.code} - {item.name}' "
-                                "no está activo y no puede copiarse."
-                            )
-                            continue
-
-                        if item.unit != source.unit:
-                            errors.append(
-                                f"La unidad del ítem '{item.code}' "
-                                "no coincide con la meta original."
-                            )
+                        copy_error = goal_copy_error(source)
+                        if copy_error:
+                            errors.append(copy_error)
                             continue
 
 
@@ -1319,6 +1311,10 @@ def period_assign_existing_goals(request, period_id):
                             new_goals.append(copy)
 
                     if errors:
+                        error_messages.extend(errors[:5])
+                        error_messages.append(
+                            "No se copió ninguna meta; revisa la selección."
+                        )
                         for error in errors[:5]:
                             messages.error(request, error)
 
@@ -1355,6 +1351,8 @@ def period_assign_existing_goals(request, period_id):
         {
             "period": period,
             "available_goals": available,
+            "unavailable_goals": unavailable,
+            "error_messages": error_messages,
         }
     )
 

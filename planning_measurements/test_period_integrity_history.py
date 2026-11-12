@@ -475,8 +475,8 @@ class PlanIntegrityTests(TestCase):
                 str(error)
                 for error in response.context["form"].non_field_errors()
             ),
-            "No se puede copiar la meta porque el ítem de medición "
-            "no está autorizado para el cargo.",
+            "El ítem 'C099 - Ítem no autorizado' no está autorizado "
+            "para el cargo 'Administrativo'.",
         )
         self.assertFalse(
             Goal.objects.filter(
