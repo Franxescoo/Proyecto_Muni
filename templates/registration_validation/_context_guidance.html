@@ -1,0 +1,91 @@
+<section class="sgr-guide-card" aria-label="Orientación de la sección" role="note">
+  <div class="sgr-guide-card-heading">
+    <span class="sgr-guide-icon" aria-hidden="true"><i class="bi bi-lightbulb"></i></span>
+    <div class="sgr-guide-card-text">
+      {% if help_namespace == "citizen_registry" %}
+        <div class="fw-bold">Guía rápida · Ciudadanos</div>
+        <p>Busca por RUT, nombre o correo y usa Estado para consultar registros activos, inactivos o todos.</p>
+        <p>Selecciona Ver para revisar una ficha. El RUT identifica un registro único.</p>
+        {% if perms.citizen_registry.add_citizen %}
+        <p>Para registrar una persona, selecciona Agregar ciudadano y completa los datos solicitados. Si pertenece a una organización vecinal, marca esa opción para indicar su agrupación y cargo.</p>
+        {% endif %}
+        {% if perms.citizen_registry.change_citizen %}
+        <p>Las opciones para modificar, desactivar o reactivar aparecen en cada fila cuando corresponden al estado del registro.</p>
+        {% endif %}
+      {% elif help_section == "attention_entry_list" or help_section == "attention_entry_create" or help_section == "attention_entry_update" %}
+        <div class="fw-bold">Guía rápida · Ingreso de atenciones</div>
+        <p>Busca por los datos de la atención y combina los filtros de tipo, delegación y estado para acotar la lista. Selecciona Ver para consultar sus antecedentes.</p>
+        {% if perms.registration_validation.add_attentionentry %}
+        <p>Al registrar una atención, identifica al ciudadano por RUT, selecciona el tipo y la subatención que correspondan y completa la descripción. Los datos personales se cargan desde la ficha del ciudadano y no se editan en este formulario.</p>
+        {% endif %}
+        {% if perms.registration_validation.change_attentionentry %}
+        <p>Al actualizar una atención, revisa el estado y la observación cuando el formulario los presente. Los cambios disponibles pueden depender de la delegación y de las reglas de seguimiento.</p>
+        {% endif %}
+        {% if help_section == "attention_entry_list" %}
+        <p>Abre Solicitudes en la barra superior para consultar la bandeja. Al seleccionar una solicitud, el detalle muestra los antecedentes y el historial de movimientos en orden cronológico.</p>
+          {% if perms.citizen_requests.view_citizenrequestaction or perms.citizen_requests.add_citizenrequestaction %}
+        <p>En el detalle, las opciones para consultar o registrar gestiones aparecen solo para las solicitudes y delegaciones autorizadas. Los archivos adjuntos se muestran cuando existen y tu cuenta puede acceder a ellos.</p>
+          {% endif %}
+        {% endif %}
+      {% elif help_section == "activity_list" or help_section == "activity_create" or help_section == "activity_update" %}
+        <div class="fw-bold">Guía rápida · Actividades</div>
+        <p>Busca por solicitud o problema, acción, funcionario o meta, y utiliza el filtro de estado para acotar los resultados. Consulta los detalles desde las acciones de la fila.</p>
+        {% if perms.registration_validation.add_activity %}
+        <p>Para registrar una actividad, asóciala a una meta y a una atención existente. Completa la solicitud o problema, la acción realizada, el funcionario y los demás datos requeridos; las actividades nuevas también requieren un tipo activo.</p>
+        {% endif %}
+        {% if perms.registration_validation.change_activity %}
+        <p>Al modificar una actividad, revisa el estado y conserva la relación con una atención de la misma delegación del funcionario autor. No se pueden modificar actividades de períodos cerrados o archivados.</p>
+        {% endif %}
+      {% elif help_section == "evidence_list" or help_section == "evidence_create" or help_section == "evidence_update" %}
+        <div class="fw-bold">Guía rápida · Evidencias</div>
+        <p>Busca por código, actividad, meta o funcionario, y filtra por estado de revisión. Desde la lista puedes consultar los respaldos disponibles; los archivos privados mantienen sus controles de acceso.</p>
+        {% if perms.registration_validation.add_evidence %}
+        <p>Para registrar una evidencia, selecciona una actividad y un funcionario. El código se genera automáticamente. Adjunta entre 2 y 5 archivos permitidos, con un peso total máximo de 50 MB; también puedes añadir un enlace como dato adicional.</p>
+        {% endif %}
+        {% if perms.registration_validation.change_evidence %}
+        <p>Al modificar una evidencia, revisa los archivos existentes antes de quitarlos. Después de los cambios deben permanecer entre 2 y 5 archivos y el peso total no debe superar 50 MB.</p>
+        {% endif %}
+        <p>Para consultar la decisión y el resultado de una revisión, abre Validaciones.</p>
+      {% elif help_section == "validation_list" or help_section == "validation_create" or help_section == "validation_update" %}
+        <div class="fw-bold">Guía rápida · Validaciones</div>
+        <p>Busca por evidencia, verificador, decisión o resultado. En la lista puedes consultar las revisiones registradas, sus versiones y antecedentes.</p>
+        {% if perms.registration_validation.add_validation %}
+        <p>Para registrar una revisión, selecciona la evidencia y el funcionario verificador, e ingresa la decisión, la fecha y el resultado. La observación es opcional; decisión y resultado son campos de texto.</p>
+        {% endif %}
+        {% if perms.registration_validation.change_validation %}
+        <p>Al modificar una validación, revisa la versión y los antecedentes de la revisión antes de guardar los cambios.</p>
+        {% endif %}
+      {% elif help_section == "activity_type_list" %}
+        <div class="fw-bold">Guía rápida · Tipos de actividad</div>
+        <p>Busca una clasificación y revisa su código, nombre, descripción y estado. Los tipos activos están disponibles al registrar actividades nuevas.</p>
+        {% if perms.registration_validation.add_activitytype or perms.registration_validation.change_activitytype %}
+        <p>Usa las acciones habilitadas en la tabla para mantener el catálogo. Las opciones de administración dependen de los permisos de tu cuenta.</p>
+        {% endif %}
+      {% elif help_section == "attention_type_list" %}
+        <div class="fw-bold">Guía rápida · Tipos de atención</div>
+        <p>Busca por los criterios disponibles y utiliza Estado para acotar los resultados. El catálogo clasifica los ingresos de atención.</p>
+        {% if perms.registration_validation.add_attentiontype or perms.registration_validation.change_attentiontype %}
+        <p>Usa las acciones habilitadas en la tabla para mantener los tipos disponibles.</p>
+        {% endif %}
+        <p>La opción Exportar Excel descarga la información del catálogo.</p>
+      {% elif help_section == "sub_attention_list" %}
+        <div class="fw-bold">Guía rápida · Subatenciones</div>
+        <p>Busca una subatención por nombre y utiliza el filtro de tipo para revisar a qué clasificación pertenece.</p>
+        {% if perms.registration_validation.add_subattention or perms.registration_validation.change_subattention %}
+        <p>Al mantener el catálogo, relaciona cada subatención con su tipo de atención. Las acciones de la tabla dependen de tus permisos.</p>
+        {% endif %}
+        <p>La opción Exportar Excel descarga la información disponible.</p>
+      {% elif help_section == "service_list" %}
+        <div class="fw-bold">Guía rápida · Servicios</div>
+        <p>Busca un servicio y utiliza el filtro de estado para consultar las opciones disponibles.</p>
+        {% if perms.registration_validation.add_service or perms.registration_validation.change_service %}
+        <p>Usa las acciones habilitadas en la tabla para mantener el catálogo de servicios.</p>
+        {% endif %}
+      {% else %}
+        <div class="fw-bold">Guía rápida · Registro y Validación</div>
+        <p>Usa el menú lateral para acceder a las secciones disponibles en tu cuenta.</p>
+        <p>Las acciones de registro y administración aparecen según tus permisos y el alcance de tu delegación.</p>
+      {% endif %}
+    </div>
+  </div>
+</section>

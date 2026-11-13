@@ -202,7 +202,7 @@
         <div class="sgr-inicio-tarjeta-lista" tabindex="0" aria-label="Accesos de {{ section.title }} (desplazable)">
           {% for card in section.cards %}
             {% if card.href %}
-            <a class="sgr-inicio-acceso" href="{{ card.href }}">
+            <a class="sgr-inicio-acceso" href="{{ card.href }}{% if section.title == 'Registro y validación' and card.title == 'Ciudadanos' %}?sgr_context=registration_validation{% endif %}">
               <i class="bi {{ card.icon }}" aria-hidden="true"></i>
               <span class="sgr-inicio-acceso-titulo">{{ card.title }}</span>
               <i class="bi bi-chevron-right" aria-hidden="true"></i>

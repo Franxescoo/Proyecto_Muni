@@ -299,6 +299,13 @@ class ActivityForm(BootstrapMixin, forms.ModelForm):
 
 
 class EvidenceForm(BootstrapMixin, forms.ModelForm):
+    code = forms.CharField(
+        label="Código",
+        required=False,
+        disabled=True,
+        help_text="Código único generado automáticamente.",
+    )
+
     date = forms.DateTimeField(
         label="Fecha y hora",
         input_formats=["%Y-%m-%dT%H:%M"],
@@ -331,7 +338,6 @@ class EvidenceForm(BootstrapMixin, forms.ModelForm):
     class Meta:
         model = Evidence
         fields = [
-            "code",
             "activity",
             "author",
             "file_link",
@@ -339,7 +345,6 @@ class EvidenceForm(BootstrapMixin, forms.ModelForm):
             "review_status",
         ]
         labels = {
-            "code": "Código",
             "activity": "Actividad",
             "author": "Funcionario",
             "file_link": "Enlace de evidencia",
@@ -347,9 +352,6 @@ class EvidenceForm(BootstrapMixin, forms.ModelForm):
             "review_status": "Estado de revisión",
         }
         widgets = {
-            "code": forms.TextInput(
-                attrs={"placeholder": "Ej.: EVID-001"},
-            ),
             "file_link": forms.TextInput(
                 attrs={"placeholder": "https://..."},
             ),

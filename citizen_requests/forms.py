@@ -1,10 +1,38 @@
 from django import forms
+from django.core.exceptions import ValidationError
 from django.db.models import Q
 
 from accounts.permissions import allowed_delegation_ids
 from organization.models import Employee
 
-from .models import CitizenRequest, CitizenRequestAction
+from .models import (
+    CitizenRequest,
+    CitizenRequestAction,
+    CitizenRequestActionAttachment,
+)
+from .storage import (
+    MAX_ACTION_ATTACHMENT_SIZE,
+    MAX_ACTION_ATTACHMENTS,
+    validate_action_attachment,
+)
+
+
+class MultipleFileInput(forms.FileInput):
+    allow_multiple_selected = True
+
+
+class MultipleFileField(forms.FileField):
+    widget = MultipleFileInput
+
+    def clean(self, data, initial=None):
+        if data in self.empty_values:
+            return []
+        files = data if isinstance(data, (list, tuple)) else [data]
+        return [
+            super(MultipleFileField, self).clean(upload, initial)
+            for upload in files
+            if upload
+        ]
 
 
 class CitizenRequestForm(forms.ModelForm):
@@ -77,6 +105,18 @@ class CitizenRequestForm(forms.ModelForm):
 
 
 class CitizenRequestActionForm(forms.ModelForm):
+    attachments = MultipleFileField(
+        label="Adjuntar archivos",
+        required=False,
+        help_text="Hasta 5 archivos PDF, JPG, PNG, DOC o DOCX; máximo 50 MB en total.",
+        widget=MultipleFileInput(
+            attrs={
+                "class": "form-control",
+                "accept": ".pdf,.jpg,.jpeg,.png,.doc,.docx",
+            }
+        ),
+    )
+
     performed_at = forms.DateTimeField(
         label="Fecha y hora de realización",
         input_formats=["%Y-%m-%dT%H:%M"],
@@ -241,6 +281,45 @@ class CitizenRequestActionForm(forms.ModelForm):
                     "El funcionario debe pertenecer a la delegación "
                     "autorizada de la solicitud.",
                 )
+
+        new_attachments = cleaned_data.get("attachments", [])
+        if self.instance.pk:
+            existing_attachments = (
+                CitizenRequestActionAttachment.objects
+                .filter(action_id=self.instance.pk)
+            )
+            existing_count = existing_attachments.count()
+            existing_size = 0
+            for attachment in existing_attachments.only("file"):
+                try:
+                    existing_size += attachment.file.size
+                except OSError as exc:
+                    raise forms.ValidationError(
+                        "No se pudo verificar el tamaño de un archivo existente."
+                    ) from exc
+        else:
+            existing_count = 0
+            existing_size = 0
+
+        if existing_count + len(new_attachments) > MAX_ACTION_ATTACHMENTS:
+            self.add_error(
+                "attachments",
+                "Una gestión puede tener como máximo cinco archivos.",
+            )
+        new_size = 0
+        for uploaded_file in new_attachments:
+            try:
+                _, file_size = validate_action_attachment(uploaded_file)
+            except ValidationError as exc:
+                self.add_error("attachments", exc)
+            else:
+                new_size += file_size
+        if existing_size + new_size > MAX_ACTION_ATTACHMENT_SIZE:
+            self.add_error(
+                "attachments",
+                "El tamaño total de los archivos de la gestión no puede "
+                "superar 50 MB.",
+            )
 
         return cleaned_data
 

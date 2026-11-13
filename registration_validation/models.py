@@ -8,7 +8,7 @@ from django.core.validators import (
     URLValidator,
     validate_email,
 )
-from django.db import models
+from django.db import IntegrityError, models, transaction
 
 from core.models import BaseModel
 
@@ -27,6 +27,11 @@ EVIDENCE_ALLOWED_EXTENSIONS = [
 ]
 
 EVIDENCE_FILE_LINK_SCHEMES = ("http", "https")
+EVIDENCE_CODE_GENERATION_ATTEMPTS = 5
+
+
+def _new_evidence_code():
+    return f"EVID-{uuid.uuid4().hex.upper()}"
 
 
 def is_safe_evidence_file_link(value):
@@ -326,6 +331,7 @@ class Evidence(BaseModel):
     code = models.CharField(
         max_length=100,
         unique=True,
+        editable=False,
         verbose_name="Código",
     )
 
@@ -482,6 +488,46 @@ class Evidence(BaseModel):
             )
 
     def save(self, *args, **kwargs):
+        manager = type(self)._default_manager
+        using = kwargs.get("using") or self._state.db
+
+        if self._state.adding and not self.code:
+            for _ in range(EVIDENCE_CODE_GENERATION_ATTEMPTS):
+                self.code = _new_evidence_code()
+                if manager.using(using).filter(code=self.code).exists():
+                    continue
+                try:
+                    with transaction.atomic(using=using):
+                        return super().save(*args, **kwargs)
+                except IntegrityError:
+                    if manager.using(using).filter(code=self.code).exists():
+                        continue
+                    raise
+            raise ValidationError(
+                {
+                    "code": (
+                        "No se pudo generar un código único para la evidencia. "
+                        "Inténtalo nuevamente."
+                    )
+                }
+            )
+
+        if not self._state.adding:
+            stored_code = (
+                manager.using(using)
+                .filter(pk=self.pk)
+                .values_list("code", flat=True)
+                .first()
+            )
+            if stored_code is not None and self.code != stored_code:
+                update_fields = kwargs.get("update_fields")
+                if update_fields is not None and "code" not in update_fields:
+                    self.code = stored_code
+                else:
+                    raise ValidationError(
+                        {"code": "El código de una evidencia no se puede modificar."}
+                    )
+
         _validate_changed_relationships(
             self,
             ("activity", "author"),

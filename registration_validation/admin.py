@@ -167,6 +167,7 @@ class EvidenceInline(
 ):
     model = Evidence
     extra = 0
+    readonly_fields = ("code",)
 
     fields = (
         "code",
@@ -266,6 +267,13 @@ class EvidenceAdmin(
     DelegationRestrictedAdminMixin,
     admin.ModelAdmin,
 ):
+    readonly_fields = (
+        "created_at",
+        "updated_at",
+        "deleted_at",
+        "code",
+    )
+
     delegation_filter = (
         "activity__author__delegation_id"
     )

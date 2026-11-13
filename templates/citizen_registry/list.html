@@ -9,7 +9,18 @@
 .cr-table td,.cr-table th{vertical-align:middle;padding:13px}
 .cr-modal-title{background:#a40a20;color:white}.cr-modal-title .btn-close{filter:invert(1)}
 .cr-panel input,.cr-panel select,.modal input,.modal select{color:#1f2937!important;-webkit-text-fill-color:#1f2937}
-</style>{% endblock %}
+</style>
+{% if request.GET.sgr_context == "registration_validation" %}
+<link rel="stylesheet" href="{% static 'css/sgr_autoayuda_dos_modulos.css' %}?v=1">
+<link rel="stylesheet" href="{% static 'css/sgr_module_guides.css' %}?v=1">
+<link rel="stylesheet" href="{% static 'css/registration_validation_help.css' %}?v=1">
+{% endif %}
+{% endblock %}
+{% block submenu %}
+  {% if request.GET.sgr_context == "registration_validation" %}
+  {% include "registration_validation/_autoayuda.html" with help_namespace=request.resolver_match.namespace help_section=request.resolver_match.url_name perms=perms only %}
+  {% endif %}
+{% endblock %}
 {% block contenido %}
 <div class="container-fluid px-2 px-md-4 pb-4">
   <div class="cr-hero d-flex justify-content-between align-items-center gap-3 flex-wrap">
@@ -23,6 +34,7 @@
       {% endif %}
     </div>
     <form class="row g-2 mb-4 align-items-end" method="get">
+      {% if request.GET.sgr_context == "registration_validation" %}<input type="hidden" name="sgr_context" value="registration_validation">{% endif %}
       <div class="col-md-6"><label for="citizenSearch" class="form-label fw-semibold">Buscar por RUT, nombre o correo</label><input class="form-control" id="citizenSearch" name="q" value="{{ q }}" placeholder="Ej. 12.345.678-5"></div>
       <div class="col-md-3"><label for="citizenState" class="form-label fw-semibold">Estado</label><select id="citizenState" name="state" class="form-select"><option value="active" {% if state == 'active' %}selected{% endif %}>Activos</option><option value="inactive" {% if state == 'inactive' %}selected{% endif %}>Inactivos</option><option value="all" {% if state == 'all' %}selected{% endif %}>Todos</option></select></div>
       <div class="col-md-3"><button class="btn btn-dark w-100" type="submit"><i class="bi bi-search me-1"></i> Buscar</button></div>
@@ -31,7 +43,7 @@
       <tbody>{% for c in page_obj %}<tr><td>{{ c.rut }}</td><td class="fw-semibold">{{ c.full_name }}</td><td>{{ c.email|default:'—' }}</td><td>{{ c.phone|default:'—' }}</td><td>{% if c.is_active %}<span class="badge text-bg-success">Activo</span>{% else %}<span class="badge text-bg-secondary">Inactivo</span>{% endif %}</td>
       <td><div class="d-flex gap-1 flex-wrap"><button type="button" class="btn btn-outline-info btn-sm" data-citizen-view="{{ c.pk }}"><i class="bi bi-eye"></i> Ver</button>{% if perms.citizen_registry.change_citizen %}<button type="button" class="btn btn-outline-secondary btn-sm" data-citizen-edit="{{ c.pk }}">Modificar</button>{% if c.is_active %}<button type="button" class="btn btn-outline-danger btn-sm" data-citizen-deactivate="{{ c.pk }}">Desactivar</button>{% else %}<button type="button" class="btn btn-outline-success btn-sm" data-citizen-reactivate="{{ c.pk }}">Reactivar</button>{% endif %}{% endif %}</div></td></tr>{% empty %}<tr><td colspan="6" class="text-center py-5 text-muted">Sin ciudadanos registrados para esta búsqueda.</td></tr>{% endfor %}</tbody>
     </table></div>
-    {% if page_obj.has_other_pages %}<nav class="d-flex gap-2 mt-3" aria-label="Páginas de ciudadanos">{% if page_obj.has_previous %}<a class="btn btn-outline-secondary btn-sm" href="?q={{ q|urlencode }}&state={{ state|urlencode }}&page={{ page_obj.previous_page_number }}">Anterior</a>{% endif %}<span class="small text-muted my-auto">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>{% if page_obj.has_next %}<a class="btn btn-outline-secondary btn-sm" href="?q={{ q|urlencode }}&state={{ state|urlencode }}&page={{ page_obj.next_page_number }}">Siguiente</a>{% endif %}</nav>{% endif %}
+    {% if page_obj.has_other_pages %}<nav class="d-flex gap-2 mt-3" aria-label="Páginas de ciudadanos">{% if page_obj.has_previous %}<a class="btn btn-outline-secondary btn-sm" href="?q={{ q|urlencode }}&state={{ state|urlencode }}{% if request.GET.sgr_context == 'registration_validation' %}&sgr_context=registration_validation{% endif %}&page={{ page_obj.previous_page_number }}">Anterior</a>{% endif %}<span class="small text-muted my-auto">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>{% if page_obj.has_next %}<a class="btn btn-outline-secondary btn-sm" href="?q={{ q|urlencode }}&state={{ state|urlencode }}{% if request.GET.sgr_context == 'registration_validation' %}&sgr_context=registration_validation{% endif %}&page={{ page_obj.next_page_number }}">Siguiente</a>{% endif %}</nav>{% endif %}
   </section>
 </div>
 <div class="modal fade" id="citizenModal" tabindex="-1" aria-hidden="true"><div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
@@ -76,4 +88,8 @@
   const resp=await fetch(endpoint,{method:'POST',headers:{'X-CSRFToken':form.elements.csrfmiddlewaretoken.value,'X-Requested-With':'XMLHttpRequest'},body});const result=await resp.json().catch(()=>({}));if(resp.ok&&result.ok){location.reload();return}const detail=result.errors?Object.entries(result.errors).map(([k,v])=>`${k}: ${v.map(x=>x.message).join(', ')}`).join(' · '):result.error||'Revisa los campos';showError(detail)
  });
 })();
-</script>{% endblock %}
+</script>
+{% if request.GET.sgr_context == "registration_validation" %}
+<script src="{% static 'js/registration_validation_help.js' %}?v=1" defer></script>
+{% endif %}
+{% endblock %}

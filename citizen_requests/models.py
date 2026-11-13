@@ -1,4 +1,5 @@
 import uuid
+from pathlib import PurePosixPath
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -6,6 +7,17 @@ from django.core.validators import validate_email
 from django.db import models
 
 from core.models import BaseModel
+
+from .storage import (
+    MAX_ACTION_ATTACHMENT_SIZE,
+    MAX_ACTION_ATTACHMENTS,
+    PrivateActionStorage,
+    action_attachment_upload_to,
+    validate_action_attachment,
+)
+
+
+private_action_storage = PrivateActionStorage()
 
 
 class CitizenRequest(models.Model):
@@ -367,6 +379,95 @@ class CitizenRequestAction(BaseModel):
 
     def __str__(self):
         return f"{self.get_action_type_display()} — Solicitud {self.request_id}"
+
+
+class CitizenRequestActionAttachment(BaseModel):
+    action = models.ForeignKey(
+        CitizenRequestAction,
+        on_delete=models.PROTECT,
+        related_name="attachments",
+        verbose_name="Gestión operativa",
+    )
+    file = models.FileField(
+        storage=private_action_storage,
+        upload_to=action_attachment_upload_to,
+        max_length=100,
+        verbose_name="Archivo",
+    )
+    original_name = models.CharField(
+        max_length=255,
+        verbose_name="Nombre original",
+    )
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="uploaded_citizen_request_action_attachments",
+        verbose_name="Usuario que subió el archivo",
+    )
+
+    class Meta:
+        default_permissions = ("add", "change", "view")
+        ordering = ("created_at", "pk")
+        verbose_name = "Adjunto de gestión operativa"
+        verbose_name_plural = "Adjuntos de gestiones operativas"
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        if self.file:
+            try:
+                safe_name, file_size = validate_action_attachment(
+                    self.file,
+                    filename=self.original_name,
+                )
+            except ValidationError as exc:
+                errors["file"] = exc.messages
+            else:
+                if self.original_name != safe_name:
+                    errors["original_name"] = (
+                        "El nombre del archivo debe estar normalizado."
+                    )
+                if file_size > MAX_ACTION_ATTACHMENT_SIZE:
+                    errors["file"] = "El archivo supera el tamaño máximo de 50 MB."
+
+                if self.action_id:
+                    siblings = type(self).objects.filter(
+                        action_id=self.action_id,
+                    )
+                    if self.pk:
+                        siblings = siblings.exclude(pk=self.pk)
+                    existing_count = siblings.count()
+                    existing_size = 0
+                    for attachment in siblings.only("file"):
+                        try:
+                            existing_size += attachment.file.size
+                        except OSError as exc:
+                            errors["file"] = (
+                                "No se pudo verificar el tamaño de un adjunto existente."
+                            )
+                            break
+                    if existing_count + 1 > MAX_ACTION_ATTACHMENTS:
+                        errors["action"] = (
+                            "Una gestión puede tener como máximo cinco archivos."
+                        )
+                    if existing_size + file_size > MAX_ACTION_ATTACHMENT_SIZE:
+                        errors["file"] = (
+                            "El tamaño total de los archivos de la gestión "
+                            "no puede superar 50 MB."
+                        )
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.original_name
+
+    @property
+    def file_type(self):
+        return PurePosixPath(self.original_name).suffix.lstrip(".").upper()
 
 
 class RequestEvent(models.Model):

@@ -1,0 +1,37 @@
+.sgr-selfhelp-tour.registration-validation-tour {
+  z-index: 1085;
+}
+
+.sgr-selfhelp-highlight {
+  scroll-margin-block: 6rem;
+}
+
+.registration-validation-help:not(.is-positioned) {
+  display: none !important;
+}
+
+.registration-validation-help .sgr-selfhelp-guide-toggle {
+  display: inline-flex !important;
+}
+
+.registration-help-main {
+  min-width: 0;
+}
+
+.registration-help-offcanvas {
+  z-index: 1090;
+}
+
+body.registration-help-open .offcanvas-backdrop {
+  z-index: 1085;
+}
+
+.registration-help-offcanvas .sgr-guide-card {
+  box-shadow: none;
+}
+
+@media (max-width: 575.98px) {
+  .registration-validation-help .sgr-selfhelp-caption {
+    width: auto;
+  }
+}

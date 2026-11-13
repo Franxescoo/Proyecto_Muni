@@ -7,27 +7,39 @@ import time
 from urllib.parse import urlencode
 
 from django.conf import settings
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, SuspiciousFileOperation, ValidationError
 from django.core.mail import send_mail
 from django.core.cache import cache
-from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
-from django.db import transaction
+from django.db import DatabaseError, transaction
 from django.db.models import CharField, Q
 from django.db.models.functions import Cast
-from django.http import JsonResponse
+from django.http import FileResponse, Http404, JsonResponse
+from django.urls import reverse
 from django.utils.crypto import constant_time_compare, salted_hmac
 from django.views.decorators.cache import never_cache
 from django.shortcuts import get_object_or_404, redirect, render
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_http_methods, require_POST
 
 from accounts.permissions import allowed_delegation_ids
 from organization.models import Delegation
 from registration_validation.models import AttentionEntry
 
-from .forms import CitizenRequestForm, PublicVerifiedRequestForm, PublicTrackingCodeForm
-from .models import CitizenRequest, RequestEvent
+from .forms import (
+    CitizenRequestActionForm,
+    CitizenRequestForm,
+    PublicVerifiedRequestForm,
+    PublicTrackingCodeForm,
+)
+from .models import (
+    CitizenRequest,
+    CitizenRequestAction,
+    CitizenRequestActionAttachment,
+    RequestEvent,
+)
+from .storage import action_attachment_upload_to, safe_action_attachment_name
 from .tracking import tracking_stages
 from .notifications import (
     LOCAL_PUBLIC_PORTAL_URL,
@@ -416,6 +428,82 @@ def _attention_delegation_access(request, delegation_id, permission):
     return allowed_ids is None or delegation_id in allowed_ids
 
 
+ACTION_VIEW_PERMISSION = "citizen_requests.view_citizenrequestaction"
+ACTION_ADD_PERMISSION = "citizen_requests.add_citizenrequestaction"
+ACTION_CHANGE_PERMISSION = "citizen_requests.change_citizenrequestaction"
+
+
+def _action_request_for_permission(request, request_id, permission):
+    if not request.user.has_perm(permission):
+        raise PermissionDenied(
+            "No tienes permiso para acceder a las gestiones operativas."
+        )
+    citizen_request = get_object_or_404(
+        CitizenRequest.objects.select_related("delegation"),
+        pk=request_id,
+        delegation__isnull=False,
+    )
+    if not _attention_delegation_access(
+        request,
+        citizen_request.delegation_id,
+        permission,
+    ):
+        raise PermissionDenied(
+            "La solicitud no pertenece a tu delegación activa autorizada."
+        )
+    return citizen_request
+
+
+def _actions_in_user_scope(user, queryset, permission):
+    allowed_ids = allowed_delegation_ids(
+        user,
+        permission,
+        active_only=False,
+    )
+    if allowed_ids is not None:
+        queryset = queryset.filter(delegation_id__in=allowed_ids)
+    return queryset
+
+
+def _save_action_attachments(action, user, uploaded_files):
+    saved_files = []
+    try:
+        if action.pk:
+            CitizenRequestAction.objects.select_for_update().get(pk=action.pk)
+        for uploaded_file in uploaded_files:
+            original_name = safe_action_attachment_name(uploaded_file.name)
+            attachment = CitizenRequestActionAttachment(
+                action=action,
+                original_name=original_name,
+                uploaded_by=user,
+            )
+            storage = attachment.file.storage
+            requested_name = action_attachment_upload_to(
+                attachment,
+                original_name,
+            )
+            saved_files.append((storage, requested_name))
+            stored_name = storage.save(requested_name, uploaded_file)
+            saved_files[-1] = (storage, stored_name)
+            attachment.file = stored_name
+            attachment.save()
+    except (
+        DatabaseError,
+        OSError,
+        SuspiciousFileOperation,
+        ValidationError,
+        ValueError,
+    ):
+        for storage, name in reversed(saved_files):
+            try:
+                storage.delete(name)
+            except OSError:
+                logger.exception(
+                    "No se pudo limpiar un archivo temporal de gestión operativa."
+                )
+        raise
+
+
 def _serialize_request(citizen_request, request=None):
     can_derive = bool(
         request
@@ -546,6 +634,84 @@ def _serialize_event(event):
             event.new_status,
         ),
     }
+
+
+def _serialize_action_timeline_item(action, request):
+    can_edit = _attention_delegation_access(
+        request,
+        action.delegation_id,
+        ACTION_CHANGE_PERMISSION,
+    )
+    attachments = [
+        {
+            "name": attachment.original_name,
+            "type": attachment.file_type,
+            "size": attachment.file.size,
+            "url": reverse(
+                "citizen_requests:download_request_action_attachment",
+                args=(
+                    action.request_id,
+                    action.pk,
+                    attachment.pk,
+                ),
+            ),
+        }
+        for attachment in action.attachments.all()
+    ]
+    return {
+        "kind": "action",
+        "type": "Gestión operativa",
+        "action_type": action.get_action_type_display(),
+        "occurred_at": action.performed_at.isoformat(),
+        "responsible": action.responsible.name,
+        "description": action.description,
+        "outcome": action.outcome,
+        "attachments": attachments,
+        "can_edit": can_edit,
+        "edit_url": (
+            reverse(
+                "citizen_requests:edit_request_action",
+                args=(action.request_id, action.pk),
+            )
+            if can_edit
+            else None
+        ),
+    }
+
+
+def _request_timeline(citizen_request, request, events, can_view_actions):
+    timeline = []
+    for event in events:
+        item = _serialize_event(event)
+        item.update(
+            {
+                "kind": "event",
+                "occurred_at": event.created_at.isoformat(),
+            }
+        )
+        timeline.append(
+            ((event.created_at, 0, event.pk), item)
+        )
+
+    if can_view_actions:
+        actions = _actions_in_user_scope(
+            request.user,
+            citizen_request.actions.select_related(
+                "responsible",
+                "delegation",
+            ).prefetch_related("attachments"),
+            ACTION_VIEW_PERMISSION,
+        )
+        for action in actions:
+            timeline.append(
+                (
+                    (action.performed_at, 1, action.pk),
+                    _serialize_action_timeline_item(action, request),
+                )
+            )
+
+    timeline.sort(key=lambda entry: entry[0])
+    return [item for _, item in timeline]
 
 
 def _filtered_requests(queryset, request):
@@ -887,6 +1053,14 @@ def request_detail(request, request_id):
         citizen_request.events.select_related("actor")
         .order_by("created_at", "pk")
     )
+    can_view_actions = bool(
+        citizen_request.delegation_id
+        and _attention_delegation_access(
+            request,
+            citizen_request.delegation_id,
+            ACTION_VIEW_PERMISSION,
+        )
+    )
     data = _serialize_request(citizen_request)
     data.update(
         {
@@ -918,10 +1092,289 @@ def request_detail(request, request_id):
             ),
             "followup_email_pending": citizen_request.followup_email_paused,
             "attention_entry_id": citizen_request.attention_entry_id,
+            "can_view_actions": can_view_actions,
+            "can_add_actions": bool(
+                citizen_request.delegation_id
+                and _attention_delegation_access(
+                    request,
+                    citizen_request.delegation_id,
+                    ACTION_ADD_PERMISSION,
+                )
+            ),
             "events": [_serialize_event(event) for event in events],
+            "timeline": _request_timeline(
+                citizen_request,
+                request,
+                events,
+                can_view_actions,
+            ),
         }
     )
     return JsonResponse({"request": data})
+
+
+@login_required
+def request_action_list(request, request_id):
+    citizen_request = _action_request_for_permission(
+        request,
+        request_id,
+        ACTION_VIEW_PERMISSION,
+    )
+    actions = _actions_in_user_scope(
+        request.user,
+        citizen_request.actions.select_related(
+            "responsible",
+            "delegation",
+            "registered_by",
+        ).prefetch_related("attachments"),
+        ACTION_VIEW_PERMISSION,
+    )
+    for action in actions:
+        action.can_edit = _attention_delegation_access(
+            request,
+            action.delegation_id,
+            ACTION_CHANGE_PERMISSION,
+        )
+    can_add = _attention_delegation_access(
+        request,
+        citizen_request.delegation_id,
+        ACTION_ADD_PERMISSION,
+    )
+    return render(
+        request,
+        "citizen_requests/action_list.html",
+        {
+            "citizen_request": citizen_request,
+            "actions": actions,
+            "can_add": can_add,
+        },
+    )
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def create_request_action(request, request_id):
+    citizen_request = _action_request_for_permission(
+        request,
+        request_id,
+        ACTION_ADD_PERMISSION,
+    )
+    form = CitizenRequestActionForm(
+        data=request.POST if request.method == "POST" else None,
+        files=request.FILES if request.method == "POST" else None,
+        citizen_request=citizen_request,
+        user=request.user,
+    )
+    can_view_actions = _attention_delegation_access(
+        request,
+        citizen_request.delegation_id,
+        ACTION_VIEW_PERMISSION,
+    )
+    if request.method == "POST" and form.is_valid():
+        try:
+            with transaction.atomic():
+                action = form.save()
+                _save_action_attachments(
+                    action,
+                    request.user,
+                    form.cleaned_data.get("attachments", []),
+                )
+        except (
+            DatabaseError,
+            OSError,
+            SuspiciousFileOperation,
+            ValidationError,
+            ValueError,
+        ):
+            logger.exception(
+                "No se pudo guardar la gestión operativa para la solicitud %s.",
+                citizen_request.pk,
+            )
+            form.add_error(
+                None,
+                "No se pudo guardar la gestión y sus archivos. "
+                "Intenta nuevamente.",
+            )
+            return render(
+                request,
+                "citizen_requests/action_form.html",
+                {
+                    "citizen_request": citizen_request,
+                    "form": form,
+                    "is_editing": False,
+                    "can_view_actions": can_view_actions,
+                },
+                status=400,
+            )
+        messages.success(request, "La gestión operativa fue registrada.")
+        if can_view_actions:
+            return redirect(
+                "citizen_requests:request_action_list",
+                request_id=citizen_request.pk,
+            )
+        return redirect(
+            "citizen_requests:request_detail",
+            request_id=citizen_request.pk,
+        )
+    return render(
+        request,
+        "citizen_requests/action_form.html",
+        {
+            "citizen_request": citizen_request,
+            "form": form,
+            "is_editing": False,
+            "can_view_actions": can_view_actions,
+        },
+        status=400 if request.method == "POST" else 200,
+    )
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def edit_request_action(request, request_id, action_id):
+    citizen_request = _action_request_for_permission(
+        request,
+        request_id,
+        ACTION_CHANGE_PERMISSION,
+    )
+    actions = _actions_in_user_scope(
+        request.user,
+        CitizenRequestAction.objects.filter(request=citizen_request),
+        ACTION_CHANGE_PERMISSION,
+    )
+    action = get_object_or_404(
+        actions.select_related("responsible", "delegation", "registered_by"),
+        pk=action_id,
+    )
+    if not _attention_delegation_access(
+        request,
+        action.delegation_id,
+        ACTION_CHANGE_PERMISSION,
+    ):
+        raise PermissionDenied(
+            "La gestión no pertenece a tu delegación activa autorizada."
+        )
+
+    form = CitizenRequestActionForm(
+        data=request.POST if request.method == "POST" else None,
+        files=request.FILES if request.method == "POST" else None,
+        instance=action,
+        citizen_request=citizen_request,
+        user=request.user,
+    )
+    can_view_actions = _attention_delegation_access(
+        request,
+        citizen_request.delegation_id,
+        ACTION_VIEW_PERMISSION,
+    )
+    if request.method == "POST" and form.is_valid():
+        try:
+            with transaction.atomic():
+                action = form.save()
+                _save_action_attachments(
+                    action,
+                    request.user,
+                    form.cleaned_data.get("attachments", []),
+                )
+        except (
+            DatabaseError,
+            OSError,
+            SuspiciousFileOperation,
+            ValidationError,
+            ValueError,
+        ):
+            logger.exception(
+                "No se pudo actualizar la gestión operativa %s.",
+                action.pk,
+            )
+            form.add_error(
+                None,
+                "No se pudo guardar la gestión y sus archivos. "
+                "Intenta nuevamente.",
+            )
+            return render(
+                request,
+                "citizen_requests/action_form.html",
+                {
+                    "citizen_request": citizen_request,
+                    "form": form,
+                    "action": action,
+                    "is_editing": True,
+                    "can_view_actions": can_view_actions,
+                },
+                status=400,
+            )
+        messages.success(request, "La gestión operativa fue actualizada.")
+        if can_view_actions:
+            return redirect(
+                "citizen_requests:request_action_list",
+                request_id=citizen_request.pk,
+            )
+        return redirect(
+            "citizen_requests:request_detail",
+            request_id=citizen_request.pk,
+        )
+    return render(
+        request,
+        "citizen_requests/action_form.html",
+        {
+            "citizen_request": citizen_request,
+            "form": form,
+            "action": action,
+            "is_editing": True,
+            "can_view_actions": can_view_actions,
+        },
+        status=400 if request.method == "POST" else 200,
+    )
+
+
+@login_required
+def download_request_action_attachment(
+    request,
+    request_id,
+    action_id,
+    attachment_id,
+):
+    _action_request_for_permission(
+        request,
+        request_id,
+        ACTION_VIEW_PERMISSION,
+    )
+    action = get_object_or_404(
+        _actions_in_user_scope(
+            request.user,
+            CitizenRequestAction.objects.filter(request_id=request_id),
+            ACTION_VIEW_PERMISSION,
+        ),
+        pk=action_id,
+    )
+    attachment = get_object_or_404(
+        CitizenRequestActionAttachment.objects.select_related("action").filter(
+            action=action,
+        ),
+        pk=attachment_id,
+    )
+    try:
+        file_handle = attachment.file.open("rb")
+    except OSError as exc:
+        logger.exception(
+            "No se pudo abrir el adjunto %s de la gestión %s.",
+            attachment.pk,
+            action.pk,
+        )
+        raise Http404("El archivo solicitado no está disponible.") from exc
+
+    response = FileResponse(
+        file_handle,
+        as_attachment=True,
+        filename=attachment.original_name,
+        content_type="application/octet-stream",
+    )
+    response["X-Content-Type-Options"] = "nosniff"
+    response["X-Frame-Options"] = "DENY"
+    response["Cache-Control"] = "private, no-store"
+    response["Content-Security-Policy"] = "sandbox"
+    return response
 
 
 def _get_attention_request(request, request_id, permission):

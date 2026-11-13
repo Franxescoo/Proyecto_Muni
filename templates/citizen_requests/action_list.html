@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block titulo %}Gestiones operativas{% endblock %}
+
+{% block contenido %}
+<div class="container py-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <div>
+            <h1 class="h3 mb-1">Gestiones operativas</h1>
+            <p class="text-muted mb-0">
+                Solicitud #{{ citizen_request.pk }} — {{ citizen_request.subject }}
+            </p>
+        </div>
+        <div class="d-flex gap-2">
+            {% if can_add %}
+            <a class="btn btn-danger"
+               href="{% url 'citizen_requests:create_request_action' citizen_request.pk %}">
+                Registrar gestión
+            </a>
+            {% endif %}
+            <a class="btn btn-outline-secondary"
+               href="{% url 'citizen_requests:request_detail' citizen_request.pk %}">
+                Volver a la solicitud
+            </a>
+        </div>
+    </div>
+
+    {% if actions %}
+    <div class="table-responsive">
+        <table class="table table-striped table-bordered align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>Tipo de actuación</th>
+                    <th>Responsable</th>
+                    <th>Fecha y hora</th>
+                    <th>Descripción</th>
+                    <th>Resultado u observaciones</th>
+                    <th>Archivos</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for action in actions %}
+                <tr>
+                    <td>{{ action.get_action_type_display }}</td>
+                    <td>{{ action.responsible.name }}</td>
+                    <td>{{ action.performed_at|date:"d/m/Y H:i" }}</td>
+                    <td>{{ action.description|linebreaksbr }}</td>
+                    <td>{{ action.outcome|default:"—"|linebreaksbr }}</td>
+                    <td>
+                        {% for attachment in action.attachments.all %}
+                        <div class="mb-1">
+                            <a href="{% url 'citizen_requests:download_request_action_attachment' citizen_request.pk action.pk attachment.pk %}">
+                                {{ attachment.original_name }}
+                            </a>
+                            <span class="small text-muted">
+                                · {{ attachment.file_type }}
+                                · {{ attachment.file.size|filesizeformat }}
+                            </span>
+                        </div>
+                        {% empty %}
+                        <span class="text-muted">—</span>
+                        {% endfor %}
+                    </td>
+                    <td>
+                        {% if action.can_edit %}
+                        <a class="btn btn-sm btn-outline-danger"
+                           href="{% url 'citizen_requests:edit_request_action' citizen_request.pk action.pk %}">
+                            Editar
+                        </a>
+                        {% else %}
+                        <span class="text-muted">Solo lectura</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="alert alert-light border">
+        No hay gestiones operativas registradas para esta solicitud.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

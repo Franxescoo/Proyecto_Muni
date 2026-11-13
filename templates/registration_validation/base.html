@@ -1,9 +1,13 @@
 
 {% extends "base.html" %}
+{% load static %}
 
 {% block titulo %}Registro y validación{% endblock %}
 
 {% block estilos %}
+<link rel="stylesheet" href="{% static 'css/sgr_module_guides.css' %}?v=1">
+<link rel="stylesheet" href="{% static 'css/sgr_autoayuda_dos_modulos.css' %}?v=1">
+<link rel="stylesheet" href="{% static 'css/registration_validation_help.css' %}?v=1">
 
 <style>
     /* =========================================
@@ -323,6 +327,10 @@
     {% include "shared/global_sidebar.html" %}
 {% endblock %}
 
+{% block submenu %}
+    {% include "registration_validation/_autoayuda.html" with help_namespace=request.resolver_match.namespace help_section=request.resolver_match.url_name perms=perms only %}
+{% endblock %}
+
 {% block scripts %}
 
 {{ block.super }}
@@ -471,5 +479,7 @@
     })();
 
 </script>
+
+<script src="{% static 'js/registration_validation_help.js' %}?v=1" defer></script>
 
 {% endblock %}
