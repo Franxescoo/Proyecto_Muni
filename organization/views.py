@@ -23,6 +23,7 @@ from .forms import (
 )
 from .models import (
     Delegation,
+    EmployeeHistory,
     Employee,
     PositionFunction,
     DelegationResponsibilityLog,
@@ -30,6 +31,10 @@ from .models import (
 )
 from .exports import workbook_response
 from .permission_labels import catalog_permission_queryset
+from .employee_history import (
+    employee_snapshot, record_employee_change, organization_snapshot,
+    record_organization_action,
+)
 
 from django.db import IntegrityError
 
@@ -265,6 +270,16 @@ def _sync_employee_account(employee, form):
         },
     )
     profile.authorized_delegations.set(delegations or [primary])
+    # El formulario de Empleados es el origen principal de la fotografía.
+    # Los dos campos ImageField apuntan al mismo archivo (sin duplicarlo).
+    # Recuperar una foto histórica de la cuenta si el empleado aún no tiene.
+    if employee.profile_photo:
+        if profile.profile_photo.name != employee.profile_photo.name:
+            profile.profile_photo = employee.profile_photo.name
+            profile.save(update_fields=["profile_photo", "updated_at"])
+    elif profile.profile_photo:
+        employee.profile_photo = profile.profile_photo.name
+        employee.save(update_fields=["profile_photo", "updated_at"])
     # El cargo es la única fuente de roles para una cuenta vinculada.
     sync_user_groups(user)
 
@@ -308,14 +323,23 @@ def _handle_mutations(
             ):
                 messages.error(request, "No se puede archivar esta delegación mientras tenga empleados, usuarios o roles vinculados.")
                 return None
+            previous_employee = employee_snapshot(record) if isinstance(record, Employee) else None
+            previous_action = organization_snapshot(record)
             with transaction.atomic():
                 record.deleted_at = timezone.now()
                 record.save(update_fields=["deleted_at", "updated_at"])
                 if isinstance(record, Employee):
                     # Archivar no puede dejar una cuenta con permisos heredados.
                     sync_employee(record)
+                    record_employee_change(record, request.user, "Desactivación", previous_employee)
                 elif isinstance(record, PositionFunction):
                     sync_position(record)
+                record_organization_action(
+                    request.user,
+                    {"employee": "Empleados", "delegation": "Delegaciones",
+                     "positionfunction": "Cargos y Funciones"}[model_name],
+                    "Desactivó", record, previous_action,
+                )
             messages.success(
                 request,
                 f"{object_label.capitalize()} archivado correctamente.",
@@ -348,6 +372,8 @@ def _handle_mutations(
                     }
                 )
             instance = get_object_or_404(targets, pk=instance_id)
+        previous_employee = employee_snapshot(instance) if isinstance(instance, Employee) else {}
+        previous_action = organization_snapshot(instance) if instance is not None else {}
         form = form_class(request.POST, request.FILES, instance=instance)
         _limit_form_choices(
             form,
@@ -421,6 +447,11 @@ def _handle_mutations(
                     _sync_employee_account(saved, form)
                     # Reemplazar los grupos antiguos por los del cargo actual.
                     sync_employee(saved)
+                    record_employee_change(
+                        saved, request.user,
+                        "Creación" if modal_action == "create" else "Modificación",
+                        previous_employee,
+                    )
 
             elif isinstance(form, PositionForm):
                 # Impedir modificar los roles del cargo propio.
@@ -444,6 +475,12 @@ def _handle_mutations(
 
             else:
                 saved = form.save()
+            record_organization_action(
+                request.user,
+                {"employee": "Empleados", "delegation": "Delegaciones",
+                 "positionfunction": "Cargos y Funciones"}[model_name],
+                "Creó" if modal_action == "create" else "Modificó", saved, previous_action,
+            )
             verb = "creado" if modal_action == "create" else "actualizado"
             messages.success(
                 request,
@@ -593,7 +630,10 @@ def role_list(request):
                     "No se puede eliminar el rol mientras esté asignado a un cargo, empleado o usuario.",
                 )
                 return redirect("organization:role_list")
-            group.delete()
+            previous_action = organization_snapshot(group)
+            with transaction.atomic():
+                record_organization_action(request.user, "Roles y Permisos", "Eliminó", group, previous_action)
+                group.delete()
             messages.success(
                 request,
                 "Rol eliminado correctamente.",
@@ -608,9 +648,16 @@ def role_list(request):
         instance = None
         if modal_action == "edit":
             instance = _role_target(request.user, object_id, "change")
+        previous_action = organization_snapshot(instance) if instance is not None else {}
         form = OrganizationRoleForm(request.POST, group=instance, actor=request.user)
         if form.is_valid():
-            form.save()
+            with transaction.atomic():
+                saved_role = form.save()
+                record_organization_action(
+                    request.user, "Roles y Permisos",
+                    "Creó" if modal_action == "create" else "Modificó",
+                    saved_role, previous_action,
+                )
             messages.success(
                 request,
                 "Rol y permisos guardados correctamente.",
@@ -700,6 +747,22 @@ def employee_list(request):
         active_only=False,
         respect_role_scope=False,
     )
+    history_employee = None
+    history_events = []
+    performed_events = []
+    if request.method == "GET" and request.GET.get("history"):
+        history_employee = get_object_or_404(
+            records, pk=request.GET["history"]
+        )
+        history_events = list(
+            EmployeeHistory.objects.filter(employee=history_employee)
+            .exclude(event__startswith="Acción: ")
+            .select_related("actor")[:100]
+        )
+        performed_events = list(
+            EmployeeHistory.objects.filter(employee=history_employee, event__startswith="Acción: ")
+            .select_related("actor")[:100]
+        )
     mutation_context = _handle_mutations(
         request,
         records,
@@ -730,6 +793,9 @@ def employee_list(request):
         "active_employees": employees.filter(
             Q(status__iexact="active") | Q(status__iexact="activo")
         ).count(),
+        "history_employee": history_employee,
+        "history_events": history_events,
+        "performed_events": performed_events,
         "statuses": _statuses(
             _scoped_queryset(
                 Employee.objects.all(),
@@ -1051,6 +1117,9 @@ def user_list(request):
         # EDITAR USUARIO
         elif modal_action == "edit":
             account = _user_target(request.user, object_id, "change")
+            linked_employee = (getattr(account.profile, "employee", None)
+                               if hasattr(account, "profile") else None)
+            previous_account_employee = employee_snapshot(linked_employee)
 
             form = AccountEditForm(
                 request.POST,
@@ -1068,11 +1137,32 @@ def user_list(request):
         if form.is_valid():
             try:
                 if modal_action == "create":
-                    create_user_account(form)
+                    new_account = create_user_account(form)
+                    linked = getattr(new_account.profile, "employee", None)
+                    if linked:
+                        record_employee_change(linked, request.user, "Vinculación de cuenta", {})
 
                 else:
                     with transaction.atomic():
                         form.save()
+                        if linked_employee:
+                            record_employee_change(
+                                linked_employee, request.user, "Cambio de cuenta",
+                                previous_account_employee,
+                            )
+                        updated_profile = UserProfile.objects.filter(
+                            user=account, deleted_at__isnull=True
+                        ).first()
+                        updated_employee = (updated_profile.employee
+                                            if updated_profile else None)
+                        if updated_employee and (
+                            linked_employee is None
+                            or linked_employee.pk != updated_employee.pk
+                        ):
+                            record_employee_change(
+                                updated_employee, request.user,
+                                "Vinculación de cuenta", {},
+                            )
 
             except IntegrityError:
                 form.add_error(

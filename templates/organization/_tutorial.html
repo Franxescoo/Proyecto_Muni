@@ -1,0 +1,162 @@
+{% comment %}Ayuda visual exclusiva de Organizacion. No ejecuta operaciones CRUD.{% endcomment %}
+<div class="org-help" data-org-help="{{ active_page }}">
+  <div class="org-help-toolbar" role="group" aria-label="Ayuda de Organización">
+    <span><i class="bi bi-patch-question" aria-hidden="true"></i> ¿Necesitas orientación?</span>
+    <button type="button" class="btn btn-outline-danger btn-sm" data-org-start><i class="bi bi-signpost-split me-1" aria-hidden="true"></i>Iniciar tutorial</button>
+    <button type="button" class="btn btn-outline-secondary btn-sm" data-org-toggle aria-expanded="true"><i class="bi bi-layout-sidebar-reverse me-1" aria-hidden="true"></i><span data-org-toggle-label>Ocultar guía lateral</span></button>
+  </div>
+  <aside class="org-help-guide" data-org-guide aria-label="Guía rápida de esta sección">
+    <div class="org-help-heading"><i class="bi bi-info-circle" aria-hidden="true"></i><strong>Guía rápida de Organización</strong></div>
+    {% if active_page == 'employees' %}
+      <p>Consulta los datos de cada empleado y su cuenta integrada. Los roles se heredan del cargo.</p>
+      <ol><li>Busca por nombre, RUT, cargo o delegación.</li><li>Usa <strong>Ver</strong> para consultar y <strong>Modificar</strong> para editar, según tus permisos.</li><li>En <strong>Historial</strong> revisa las acciones realizadas por la persona y los cambios recibidos en su ficha.</li><li>Al guardar, comprueba el resultado antes de salir.</li></ol>
+    {% elif active_page == 'delegations' %}
+      <p>Administra las unidades territoriales municipales y sus responsables.</p>
+      <ol><li>Filtra delegaciones por nombre, código, comuna o estado.</li><li>Usa <strong>Nueva delegación</strong> cuando tengas permiso para crear.</li><li>Consulta o modifica la delegación desde su tarjeta.</li><li>Antes de desactivar una delegación, revisa sus vinculaciones.</li></ol>
+    {% elif active_page == 'positions' %}
+      <p>Los cargos definen funciones, vigencia y roles que se heredan a las cuentas de empleados vinculados.</p>
+      <ol><li>Busca cargos por nombre, servicio o ítem.</li><li>Filtra por vigencia para consultar cargos actuales o históricos.</li><li>Usa <strong>Nuevo cargo</strong> si tienes permiso.</li><li>Al modificar los roles de un cargo, revisa las consecuencias para los empleados asociados.</li></ol>
+    {% elif active_page == 'roles' %}
+      <p>Los roles reúnen permisos; solo puedes realizar las operaciones autorizadas para tu cuenta.</p>
+      <ol><li>Busca un rol por nombre o descripción.</li><li>Usa <strong>Crear rol</strong> si cuentas con el permiso correspondiente.</li><li>Revisa cuidadosamente los permisos antes de guardar.</li><li>Los cambios autorizados quedan asociados al historial de actividad del usuario que los realizó.</li></ol>
+    {% else %}
+      <p>Usa los filtros, revisa los registros y realiza únicamente las acciones habilitadas por tus permisos.</p>
+    {% endif %}
+    <small><i class="bi bi-shield-check" aria-hidden="true"></i> La guía no modifica información ni concede permisos.</small>
+  </aside>
+</div>
+<style>
+.org-help {margin:0 0 1.25rem;}
+.org-help-toolbar {display:flex;flex-wrap:wrap;align-items:center;gap:.65rem;background:#fff;border:1px solid #e1e3e6;border-radius:.65rem;padding:.8rem 1rem;box-shadow:0 2px 10px rgba(23,31,40,.04)}
+.org-help-toolbar>span {font-weight:600;color:#343a40;margin-right:auto}
+.org-help-guide {margin-top:.7rem;background:#fff;border:1px solid #e3d7d9;border-left:4px solid #a60a17;border-radius:.6rem;padding:1rem 1.2rem;color:#343a40}
+.org-help-guide[hidden] {display:none!important}
+.org-help-heading {display:flex;align-items:center;gap:.5rem;color:#920c18;margin-bottom:.45rem}
+.org-help-guide p {margin:.3rem 0 .5rem}
+.org-help-guide ol {margin:.5rem 0;padding-left:1.3rem}
+.org-help-guide li {margin:.25rem 0}
+.org-help-guide small {display:block;color:#66717e;margin-top:.7rem}
+.org-help-focus {outline:3px solid #b02031!important;outline-offset:5px;border-radius:5px;position:relative;z-index:2}
+.org-help-tour {position:fixed;bottom:1.25rem;left:1.25rem;z-index:1065;width:min(390px,calc(100vw - 2.5rem));padding:1rem 1.1rem;border-radius:.8rem;background:#fff;box-shadow:0 15px 55px rgba(0,0,0,.27);border:1px solid #e5d7d8}
+.org-help-tour-head {display:flex;align-items:flex-start;justify-content:space-between;gap:.8rem}
+.org-help-tour strong {color:#920c18}
+.org-help-tour p {margin:.7rem 0 1rem;color:#414951}
+.org-help-tour-foot {display:flex;justify-content:space-between;align-items:center;gap:.6rem}
+.org-help-tour-count {font-size:.8rem;color:#59636d}
+.org-help-tour-actions {display:flex;gap:.4rem}
+.org-help-tour button:focus-visible,.org-help-toolbar button:focus-visible {outline:3px solid #0d6efd;outline-offset:2px}
+@media(max-width:575.98px){.org-help-toolbar>span {flex-basis:100%}.org-help-tour {left:.7rem;bottom:.7rem;width:calc(100vw - 1.4rem)}}
+</style>
+<script>
+(function () {
+  'use strict';
+  function init() {
+    const root = document.querySelector('[data-org-help]');
+    if (!root) return;
+    const page = root.getAttribute('data-org-help');
+    const guide = root.querySelector('[data-org-guide]');
+    const toggle = root.querySelector('[data-org-toggle]');
+    const toggleLabel = root.querySelector('[data-org-toggle-label]');
+    let hidden = false;
+    try { hidden = window.localStorage.getItem('sgr-org-guide-hidden') === '1'; } catch (_) {}
+    function updateGuide() {
+      guide.hidden = hidden;
+      toggle.setAttribute('aria-expanded', String(!hidden));
+      toggleLabel.textContent = hidden ? 'Mostrar guía lateral' : 'Ocultar guía lateral';
+    }
+    updateGuide();
+    toggle.addEventListener('click', function () {
+      hidden = !hidden;
+      updateGuide();
+      try { window.localStorage.setItem('sgr-org-guide-hidden', hidden ? '1' : '0'); } catch (_) {}
+    });
+
+    const definitions = {
+      employees: [
+        ['.organization-hero', 'Empleados y perfiles', 'Usuarios y empleados están integrados. Aquí se consulta la información del funcionario y su cargo.'],
+        ['.metric', 'Resumen de empleados', 'Las tarjetas muestran los resultados y sus estados.'],
+        ['input[type="search"]', 'Buscar empleados', 'Busca por nombre, RUT o los demás criterios disponibles.'],
+        ['texto:Agregar empleado|texto:Nuevo empleado|texto:Crear empleado', 'Registrar un empleado', 'Si tienes permiso, abre el formulario para ingresar los datos y vincular su cuenta.'],
+        ['table', 'Acciones e historial', 'Desde cada fila puedes ver o modificar el registro y consultar su Historial individual, según tus permisos.']
+      ],
+      delegations: [
+        ['.organization-hero', 'Delegaciones municipales', 'Esta sección administra las unidades territoriales y sus responsables.'],
+        ['.metric', 'Resumen de delegaciones', 'Estas tarjetas muestran las delegaciones del resultado y cuántas están activas.'],
+        ['#delegation-search', 'Buscar delegaciones', 'Busca por código o nombre y usa los filtros de comuna y estado.'],
+        ['texto:Nueva delegación', 'Crear delegación', 'El botón aparece únicamente si tienes autorización para crear.'],
+        ['.delegation-grid', 'Consultar y mantener', 'En las tarjetas encontrarás los datos y las acciones habilitadas para tu usuario.']
+      ],
+      positions: [
+        ['.organization-hero', 'Cargos y funciones', 'Un cargo contiene servicios, ítems, vigencia y roles asociados.'],
+        ['#position-search', 'Buscar cargos', 'Busca por nombre o funciones y filtra su vigencia.'],
+        ['texto:Nuevo cargo', 'Crear un cargo', 'Solo aparece si tienes permiso. Antes de asignar roles, considera su alcance.'],
+        ['table', 'Revisar cargos', 'Consulta roles vinculados, servicios, ítems medibles, empleados y acciones disponibles.']
+      ],
+      roles: [
+        ['.organization-hero', 'Roles y permisos', 'Los roles definen qué operaciones puede efectuar una cuenta.'],
+        ['#role-search', 'Buscar roles', 'Localiza roles por nombre o descripción.'],
+        ['texto:Crear rol', 'Crear un rol', 'El formulario permite seleccionar permisos únicamente dentro de tus autorizaciones.'],
+        ['table', 'Consultar y modificar', 'Los botones dependen de tus permisos. Las acciones quedan auditadas bajo la cuenta que las realizó.']
+      ]
+    };
+    function target(spec) {
+      for (const piece of spec.split('|')) {
+        if (piece.startsWith('texto:')) {
+          const text = piece.slice(6).toLowerCase();
+          const el = Array.from(document.querySelectorAll('.organization-shell a,.organization-shell button')).find(function (node) {
+            return node.getClientRects().length && node.textContent.toLowerCase().includes(text) && !node.closest('.org-help');
+          });
+          if (el) return el;
+        } else {
+          const el = document.querySelector('.organization-shell ' + piece);
+          if (el && el.getClientRects().length) return el;
+        }
+      }
+      return null;
+    }
+    const start = root.querySelector('[data-org-start]');
+    let popup = null, steps = [], index = 0, selected = null;
+    function stop() {
+      if (selected) selected.classList.remove('org-help-focus');
+      selected = null;
+      if (popup) popup.remove();
+      popup = null;
+      start.focus({preventScroll:true});
+    }
+    function render() {
+      if (selected) selected.classList.remove('org-help-focus');
+      const step = steps[index];
+      selected = step.element;
+      selected.classList.add('org-help-focus');
+      selected.scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',block:'center'});
+      popup.querySelector('[data-org-count]').textContent = 'Paso ' + (index + 1) + ' de ' + steps.length;
+      popup.querySelector('[data-org-title]').textContent = step.title;
+      popup.querySelector('[data-org-desc]').textContent = step.description;
+      popup.querySelector('[data-org-prev]').disabled = index === 0;
+      popup.querySelector('[data-org-next]').textContent = index === steps.length - 1 ? 'Terminar' : 'Siguiente';
+    }
+    start.addEventListener('click', function () {
+      if (popup) { stop(); return; }
+      steps = (definitions[page] || []).map(function (step) {
+        return {element:target(step[0]),title:step[1],description:step[2]};
+      }).filter(function (step) { return !!step.element; });
+      if (!steps.length) return;
+      popup = document.createElement('section');
+      popup.className = 'org-help-tour';
+      popup.setAttribute('role','dialog');
+      popup.setAttribute('aria-label','Tutorial de Organización');
+      popup.innerHTML = '<div class="org-help-tour-head"><strong data-org-title></strong><button type="button" class="btn-close" data-org-close aria-label="Cerrar tutorial"></button></div>' +
+        '<p data-org-desc></p><div class="org-help-tour-foot"><span class="org-help-tour-count" data-org-count></span><div class="org-help-tour-actions"><button type="button" class="btn btn-outline-secondary btn-sm" data-org-prev>Anterior</button><button type="button" class="btn btn-danger btn-sm" data-org-next>Siguiente</button></div></div>';
+      document.body.appendChild(popup);
+      index = 0;
+      popup.querySelector('[data-org-close]').addEventListener('click',stop);
+      popup.querySelector('[data-org-prev]').addEventListener('click',function () { if (index > 0) { index--; render(); } });
+      popup.querySelector('[data-org-next]').addEventListener('click',function () { if (index + 1 === steps.length) stop(); else { index++; render(); } });
+      render();
+    });
+    document.addEventListener('keydown',function (event) { if (event.key === 'Escape' && popup) stop(); });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded',init);
+  else init();
+})();
+</script>

@@ -105,6 +105,11 @@
                         <td>
                             <div class="d-flex justify-content-end gap-1">
                                 {% if perms.organization.view_employee %}<a class="btn btn-sm btn-outline-info" href="?modal=view&amp;id={{ employee.pk }}" title="Ver detalles" aria-label="Ver employee {{ employee.name }}"><i class="bi bi-eye me-1" aria-hidden="true"></i>Ver</a>{% endif %}
+                                {% if perms.organization.view_employee %}
+                                    <a class="btn btn-sm btn-outline-secondary" href="?history={{ employee.pk }}" title="Ver historial" aria-label="Historial de {{ employee.name }}">
+                                        <i class="bi bi-clock-history me-1" aria-hidden="true"></i>Historial
+                                    </a>
+                                {% endif %}
                                 {% if perms.organization.change_employee %}
                                     <a class="btn btn-sm btn-light border" href="?modal=edit&amp;id={{ employee.pk }}" title="Modificar empleado" aria-label="Modificar {{ employee.name }}">
                                         <i class="bi bi-pencil-square me-1" aria-hidden="true"></i>Modificar
@@ -138,4 +143,71 @@
 </section>
 
 {% include "organization/_record_modal.html" with form_route="organization:employee_list" %}
+{% if history_employee %}
+<div class="modal fade" id="organization-employee-history" tabindex="-1" aria-labelledby="organization-employee-history-title" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header text-white" style="background:#a60a17">
+        <h5 class="modal-title" id="organization-employee-history-title">
+          <i class="bi bi-clock-history me-2"></i>Historial de {{ history_employee.name }}
+        </h5>
+        <a href="{% url 'organization:employee_list' %}" class="btn-close btn-close-white" aria-label="Cerrar"></a>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small">Actividad en Organización y cambios de la cuenta integrada. Solo lectura.</p>
+        <ul class="nav nav-tabs mb-3" id="employee-history-tabs" role="tablist">
+          <li class="nav-item" role="presentation"><button class="nav-link active" id="performed-tab" data-bs-toggle="tab" data-bs-target="#performed-pane" type="button" role="tab" aria-controls="performed-pane" aria-selected="true">Acciones realizadas</button></li>
+          <li class="nav-item" role="presentation"><button class="nav-link" id="received-tab" data-bs-toggle="tab" data-bs-target="#received-pane" type="button" role="tab" aria-controls="received-pane" aria-selected="false">Cambios recibidos</button></li>
+        </ul>
+        <div class="tab-content">
+          <div class="tab-pane fade show active" id="performed-pane" role="tabpanel" aria-labelledby="performed-tab" tabindex="0">
+            {% for entry in performed_events %}
+              <div class="card mb-3 border-start border-3"><div class="card-body py-3">
+                <div class="d-flex flex-wrap justify-content-between gap-2 mb-2"><strong>{{ entry.event|slice:"8:" }}</strong><span class="text-muted small">{{ entry.created_at|date:"d/m/Y H:i" }}</span></div>
+                <p class="small text-muted mb-2">{{ entry.target_description }} · Realizado por: {% if entry.actor %}{{ entry.actor.get_username }}{% else %}Usuario no disponible{% endif %}</p>
+                {% for change in entry.action_changes %}
+                  <div class="row g-2 small mb-1"><div class="col-12 col-md-4 fw-semibold">{{ change.label }}</div><div class="col-12 col-md-4"><span class="text-muted">Antes:</span> {{ change.before }}</div><div class="col-12 col-md-4"><span class="text-muted">Después:</span> {{ change.after }}</div></div>
+                {% empty %}<p class="small text-muted mb-0">Sin cambios de campos registrados.</p>{% endfor %}
+              </div></div>
+            {% empty %}<div class="alert alert-light border">Todavía no hay acciones registradas para este empleado.</div>{% endfor %}
+          </div>
+          <div class="tab-pane fade" id="received-pane" role="tabpanel" aria-labelledby="received-tab" tabindex="0">
+        {% for entry in history_events %}
+          <div class="card mb-3 border-start border-3">
+            <div class="card-body py-3">
+              <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
+                <strong>{{ entry.event }}</strong>
+                <span class="text-muted small">{{ entry.created_at|date:"d/m/Y H:i" }}</span>
+              </div>
+              <p class="small text-muted mb-2">Realizado por: {% if entry.actor %}{{ entry.actor.get_username }}{% else %}Usuario no disponible{% endif %}</p>
+              {% for change in entry.changes %}
+                <div class="row g-2 small mb-1">
+                  <div class="col-12 col-md-4 fw-semibold">{{ change.label }}</div>
+                  <div class="col-12 col-md-4"><span class="text-muted">Antes:</span> {{ change.before }}</div>
+                  <div class="col-12 col-md-4"><span class="text-muted">Después:</span> {{ change.after }}</div>
+                </div>
+              {% empty %}
+                <p class="small text-muted mb-0">No hubo cambios en los campos registrados.</p>
+              {% endfor %}
+            </div>
+          </div>
+        {% empty %}
+          <div class="alert alert-light border">Todavía no existen movimientos registrados para este empleado.</div>
+        {% endfor %}
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <a href="{% url 'organization:employee_list' %}" class="btn btn-secondary">Cerrar</a>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const modal = document.getElementById('organization-employee-history');
+  if (modal && window.bootstrap) bootstrap.Modal.getOrCreateInstance(modal).show();
+});
+</script>
+{% endif %}
 {% endblock %}

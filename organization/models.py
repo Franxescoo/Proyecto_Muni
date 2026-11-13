@@ -180,4 +180,66 @@ class Employee(BaseModel):
     def __str__(self):
         return self.name
 
-    
+
+
+class EmployeeHistory(models.Model):
+    """Auditoría individual y de solo lectura de empleado + cuenta vinculada."""
+    employee = models.ForeignKey(
+        Employee, on_delete=models.PROTECT, related_name="history_events"
+    )
+    actor = models.ForeignKey(
+        "auth.User", null=True, on_delete=models.SET_NULL,
+        related_name="organization_employee_changes",
+    )
+    event = models.CharField(max_length=70)
+    previous_value = models.JSONField(default=dict, blank=True)
+    new_value = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at", "-pk")
+        verbose_name = "Historial individual del empleado"
+        verbose_name_plural = "Historial individual de empleados"
+
+    @property
+    def is_performed_action(self):
+        return self.event.startswith("Acción: ")
+
+    @property
+    def target_description(self):
+        return (self.new_value or self.previous_value or {}).get("__target", "")
+
+    @property
+    def action_changes(self):
+        old = self.previous_value or {}
+        new = self.new_value or {}
+        keys = sorted((old.keys() | new.keys()) - {"__target"})
+        return [{"label": key, "before": old.get(key) or "—", "after": new.get(key) or "—"}
+                for key in keys if old.get(key) != new.get(key)]
+
+    @property
+    def changes(self):
+        labels = {
+            "name": "Nombre", "rut": "RUT", "address": "Dirección",
+            "delegation": "Delegación", "position": "Cargo",
+            "roles": "Funciones", "status": "Estado",
+            "photo": "Fotografía", "archived": "Archivado", "username": "Usuario",
+            "email": "Correo", "account_active": "Cuenta activa",
+            "authorized_delegations": "Delegaciones autorizadas",
+            "assigned_groups": "Roles heredados",
+        }
+        previous, current = self.previous_value or {}, self.new_value or {}
+        return [
+            {"label": labels.get(key, key), "before": previous.get(key, "—") or "—",
+             "after": current.get(key, "—") or "—"}
+            for key in labels
+            if previous.get(key) != current.get(key)
+        ]
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            raise ValidationError("No es posible modificar un evento de historial.")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("No es posible eliminar un evento de historial.")

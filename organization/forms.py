@@ -87,8 +87,30 @@ class OrganizationRoleForm(BootstrapMixin, forms.Form):
         kwargs["initial"] = initial
         super().__init__(*args, **kwargs)
 
-        # CATALOGO_COMPLETO_ROLES_SGR_V1: el catálogo NO depende de los permisos del administrador.
-        # Las vistas ya exigen organization.add/change_organizationrole.
+        # Mínimo privilegio (RNF-005): solo se pueden CONCEDER permisos que
+        # el administrador ya tiene. No dependemos del nombre del rol ni de
+        # is_superuser: un Administrador General tendrá todo el catálogo si
+        # su rol institucional tiene esos permisos.
+        self._actor_permission_names = None
+        if self.actor is not None:
+            self._actor_permission_names = set(self.actor.get_all_permissions())
+            permitted_ids = [
+                permission.pk
+                for permission in self.fields["permissions"].queryset
+                if f"{permission.content_type.app_label}.{permission.codename}"
+                in self._actor_permission_names
+            ]
+            self.fields["permissions"].queryset = (
+                self.fields["permissions"].queryset.filter(pk__in=permitted_ids)
+            )
+            self.fields["permissions"].help_text = (
+                "Solo puedes conceder permisos que tienes autorizados. "
+                "Los demás no pueden asignarse desde esta cuenta."
+            )
+
+        # Conservar permisos técnicos ajenos al catálogo al editar un rol;
+        # sin embargo, no permitir que alguien EDITE un rol que ya posea
+        # permisos superiores a su autorización (ver clean()).
         # Conservar los permisos técnicos/ajenos al catálogo al editar un rol:
         # no se presentan ni se eliminan por accidente al guardar.
         self._preserved_permission_ids = set()
@@ -102,10 +124,9 @@ class OrganizationRoleForm(BootstrapMixin, forms.Form):
                 )
             )
 
-            if self._preserved_permission_ids:
+            if self._preserved_permission_ids and self.actor is None:
                 self.fields["permissions"].help_text = (
-                    "Puedes modificar los permisos que posees. "
-                    "Los demás se conservarán sin cambios."
+                    "Algunos permisos técnicos se conservarán sin cambios."
                 )
 
         self.apply_bootstrap()
@@ -159,6 +180,20 @@ class OrganizationRoleForm(BootstrapMixin, forms.Form):
 
     def clean(self):
         cleaned_data = super().clean()
+
+        if self.actor is not None and self.group is not None:
+            # También en POST: un usuario limitado no puede editar roles
+            # que ya contienen permisos que superan su propia autorización.
+            current = {
+                f"{permission.content_type.app_label}.{permission.codename}"
+                for permission in self.group.permissions.select_related("content_type")
+            }
+            if not current.issubset(self._actor_permission_names):
+                raise ValidationError(
+                    "No puedes modificar este rol porque contiene permisos "
+                    "fuera de tu autorización. Solicita ayuda a un "
+                    "administrador con los permisos correspondientes."
+                )
 
         # Evitar que un usuario se quite los accesos
         # de un rol que tiene asignado.
