@@ -263,7 +263,7 @@ class Commitment(BaseModel):
 
     @property
     def effective_status(self):
-        return self.activity.status if self.activity_id and self.activity else self.status
+        return self.status
 
     @property
     def is_completed(self):

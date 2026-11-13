@@ -157,14 +157,16 @@ def recalculate_indicator_for_goal(goal, create_if_missing=True):
     )
 
     expected = Decimal(goal.objective_value)
-    actual = Decimal(approved_activities)
-
-
     item = goal.measurement_item
     formula_kind = (
         percentage_formula_kind(item.formula)
         if item and item.item_type == "percentage"
         else None
+    )
+    actual = (
+        Decimal("0")
+        if item and item.item_type == "percentage"
+        else Decimal(approved_activities)
     )
     if formula_kind == "approved_activities":
         numerator, denominator = approved_activities, len(activities)
@@ -174,8 +176,6 @@ def recalculate_indicator_for_goal(goal, create_if_missing=True):
         ]
         denominator = len(attention_activities)
         completed_statuses = {"resolved", "closed"}
-        if formula_kind == "resolved_requests":
-            completed_statuses = {"resolved"}
         numerator = sum(
             activity.attention.status.casefold() in completed_statuses
             for activity in attention_activities

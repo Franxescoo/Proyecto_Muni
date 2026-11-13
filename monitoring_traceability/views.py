@@ -728,77 +728,90 @@ def commitment_list(request):
                     request,
                     "No puedes eliminar este comentario.",
                 )
-            elif action == "status":
-                if not request.user.has_perm("monitoring_traceability.change_commitment"):
-                    raise PermissionDenied("No puedes cambiar estados.")
-                new_status = _query(request.POST.get("status"))
-                valid_statuses = {value for value, _ in Commitment.Status.choices}
-                if new_status not in valid_statuses:
-                    messages.error(request, "Estado de compromiso no válido.")
-                else:
-                    commitment.status = new_status
-                    commitment._audit_actor_user = request.user
-                    commitment._status_observation = _query(
-                        request.POST.get("observation")
-                    )
-                    commitment.save(update_fields=["status", "updated_at"])
-                    messages.success(request, "Estado actualizado.")
-            elif action == "reassign":
-                if not request.user.has_perm("monitoring_traceability.change_commitment"):
-                    raise PermissionDenied("No puedes reasignar compromisos.")
-                employees = _employee_scope(
-                    request, "monitoring_traceability.view_commitment"
-                ).filter(
-                    delegation_id=commitment.responsible.delegation_id
-                ).exclude(
-                    pk=commitment.responsible_id
-                )
-                reassignment_form = CommitmentReassignmentForm(
-                    request.POST, employees=employees
-                )
-                if reassignment_form.is_valid():
-                    previous = commitment.responsible
-                    new_responsible = reassignment_form.cleaned_data["responsible"]
-                    commitment.responsible = new_responsible
-                    commitment._audit_actor_user = request.user
-                    commitment.save(update_fields=["responsible", "updated_at"])
-                    CommitmentReassignment.objects.create(
-                        commitment=commitment,
-                        previous_responsible=previous,
-                        new_responsible=new_responsible,
-                        reason=reassignment_form.cleaned_data["reason"],
-                        changed_by=request.user,
-                    )
-                    messages.success(request, "Compromiso reasignado.")
-                else:
-                    messages.error(request, "Revisa los datos de la reasignación.")
-                    return render(
-                        request,
-                        "monitoringfronen/compro.html",
-                        _commitment_list_context(
-                            request,
-                            commitments,
-                            reassignment_form=reassignment_form,
-                            reassignment_commitment=commitment,
-                            activities=activities,
-                        ),
-                    )
-            elif action == "resolve_alert":
-                alert = CommitmentAlert.objects.filter(
-                    pk=request.POST.get("alert_id"),
-                    commitment=commitment,
-                    resolved_at__isnull=True,
-                ).first()
-                if alert:
-                    alert.resolved_at = timezone.now()
-                    alert.save(update_fields=["resolved_at", "updated_at"])
-                    messages.success(request, "Alerta resuelta.")
-                else:
-                    messages.error(request, "La alerta no está disponible.")
             else:
                 comment.deleted_at = timezone.now()
                 comment.save(update_fields=["deleted_at", "updated_at"])
                 messages.success(request, "Comentario eliminado.")
+        elif action == "status":
+            if not request.user.has_perm("monitoring_traceability.change_commitment"):
+                raise PermissionDenied("No puedes cambiar estados.")
+            new_status = _query(request.POST.get("status"))
+            valid_statuses = {value for value, _ in Commitment.Status.choices}
+            if new_status not in valid_statuses:
+                messages.error(request, "Estado de compromiso no válido.")
+            else:
+                commitment.status = new_status
+                commitment._audit_actor_user = request.user
+                commitment._status_observation = _query(
+                    request.POST.get("observation")
+                )
+                commitment.save(update_fields=["status", "updated_at"])
+                messages.success(request, "Estado actualizado.")
+        elif action == "reassign":
+            if not request.user.has_perm("monitoring_traceability.change_commitment"):
+                raise PermissionDenied("No puedes reasignar compromisos.")
+            employees = _employee_scope(
+                request, "monitoring_traceability.view_commitment"
+            ).filter(
+                delegation_id=commitment.responsible.delegation_id
+            ).exclude(
+                pk=commitment.responsible_id
+            )
+            reassignment_form = CommitmentReassignmentForm(
+                request.POST, employees=employees
+            )
+            if reassignment_form.is_valid():
+                previous = commitment.responsible
+                new_responsible = reassignment_form.cleaned_data["responsible"]
+                commitment.responsible = new_responsible
+                commitment._audit_actor_user = request.user
+                commitment.save(update_fields=["responsible", "updated_at"])
+                CommitmentReassignment.objects.create(
+                    commitment=commitment,
+                    previous_responsible=previous,
+                    new_responsible=new_responsible,
+                    reason=reassignment_form.cleaned_data["reason"],
+                    changed_by=request.user,
+                )
+                messages.success(request, "Compromiso reasignado.")
+            else:
+                messages.error(request, "Revisa los datos de la reasignación.")
+                return render(
+                    request,
+                    "monitoringfronen/compro.html",
+                    _commitment_list_context(
+                        request,
+                        commitments,
+                        reassignment_form=reassignment_form,
+                        reassignment_commitment=commitment,
+                        activities=activities,
+                    ),
+                )
+        elif action == "resolve_alert":
+            if not request.user.has_perm("monitoring_traceability.change_commitment"):
+                raise PermissionDenied("No puedes resolver alertas.")
+            alert = CommitmentAlert.objects.filter(
+                pk=request.POST.get("alert_id"),
+                commitment=commitment,
+                resolved_at__isnull=True,
+            ).first()
+            if alert:
+                alert.resolved_at = timezone.now()
+                alert.save(update_fields=["resolved_at", "updated_at"])
+                Audit.objects.create(
+                    user=(
+                        getattr(profile, "employee", None)
+                        or commitment.responsible
+                    ),
+                    event="Resolved CommitmentAlert",
+                    entity="CommitmentAlert",
+                    object_identifier=str(alert.pk),
+                    previous_value={"resolved_at": None},
+                    new_value={"resolved_at": alert.resolved_at.isoformat()},
+                )
+                messages.success(request, "Alerta resuelta.")
+            else:
+                messages.error(request, "La alerta no está disponible.")
         else:
             if not request.user.has_perm("monitoring_traceability.add_commitmentcomment"):
                 raise PermissionDenied("No puedes agregar comentarios.")

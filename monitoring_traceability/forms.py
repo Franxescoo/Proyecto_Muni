@@ -111,8 +111,8 @@ class CommitmentForm(forms.ModelForm):
             "style": "pointer-events: none;",
         })
         self.fields["status"].initial = (
-            self.instance.activity.status
-            if self.instance.activity_id
+            self.instance.status
+            if self.instance.pk
             else Commitment.Status.PENDING
         )
         self.fields["activity"].required = not bool(self.instance.pk)
@@ -197,8 +197,9 @@ class CommitmentForm(forms.ModelForm):
                     "activity",
                     "Ya existe un compromiso asociado a esta actividad.",
                 )
-            cleaned["responsible"] = activity.author
-            cleaned["status"] = activity.status
+            if not self.instance.pk:
+                cleaned["responsible"] = activity.author
+                cleaned["status"] = activity.status
             cleaned["commitment_date"] = activity.goal.period.end_date
             attention = activity.attention
             if attention:
