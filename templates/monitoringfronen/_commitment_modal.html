@@ -59,6 +59,7 @@
                         <div class="col-12 col-md-4">
                             {{ field.label_tag }}<button type="button" class="sgr-help-hint" data-help="Territorio del compromiso. Se propone desde la actividad y puede ajustarse cuando corresponda." aria-label="Ayuda sobre territorio">?</button>{{ field }}
                             {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+                            {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
                         </div>
                         {% endwith %}
                         {% with field=commitment_form.commitment_date %}
@@ -70,6 +71,7 @@
                         {% with field=commitment_form.status %}
                         <div class="col-12 col-md-4">
                             {{ field.label_tag }}<button type="button" class="sgr-help-hint" data-help="Estado actual de la actividad asociada. Se completa automáticamente." aria-label="Ayuda sobre estado">?</button>{{ field }}
+                            {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
                         </div>
                         {% endwith %}
                         {% with field=commitment_form.observation %}

@@ -9,7 +9,10 @@ from organization.models import Employee, PositionFunction
 from .models import Goal, Period, MeasurementItem
 
 from .working_days import calculate_computable_days
-from .measurement_rules import (SUPPORTED_PERCENTAGE_FORMULA, canonical_percentage_formula)
+from .measurement_rules import (
+    SUPPORTED_PERCENTAGE_FORMULAS,
+    canonical_percentage_formula,
+)
 from .parameter_history import compliance_cap_value, parameters_version_is_valid
 import re
 from decimal import Decimal
@@ -638,8 +641,8 @@ class MeasurementItemForm(BootstrapMixin, forms.ModelForm):
         _set_text_limit(self.fields["formula"], 500, "La fórmula")
 
         self.fields["formula"].help_text = (
-            "Para ítems porcentuales, fórmula admitida: "
-            + SUPPORTED_PERCENTAGE_FORMULA
+            "Para ítems porcentuales, fórmulas admitidas: "
+            + "; ".join(SUPPORTED_PERCENTAGE_FORMULAS)
         )
 
     def clean(self):
@@ -654,8 +657,9 @@ class MeasurementItemForm(BootstrapMixin, forms.ModelForm):
             if expression is None and not unchanged_legacy:
                 self.add_error(
                     "formula",
-                    "La fórmula porcentual admitida actualmente es: "
-                    + SUPPORTED_PERCENTAGE_FORMULA,
+                    "La fórmula porcentual no está admitida. "
+                    "Fórmulas válidas: "
+                    + "; ".join(SUPPORTED_PERCENTAGE_FORMULAS),
                 )
             elif expression is not None:
                 data["formula"] = expression

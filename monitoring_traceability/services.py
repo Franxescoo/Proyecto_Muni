@@ -9,7 +9,7 @@ from accounts.models import UserProfile
 from institutional_mail.models import InstitutionalMessage
 
 from .models import Commitment, CommitmentAlert, Indicator
-from planning_measurements.measurement_rules import canonical_percentage_formula
+from planning_measurements.measurement_rules import percentage_formula_kind
 from planning_measurements.working_days import calculate_computable_days
 from registration_validation.models import Activity, Evidence
 
@@ -160,24 +160,35 @@ def recalculate_indicator_for_goal(goal, create_if_missing=True):
     actual = Decimal(approved_activities)
 
 
-    # Fórmula porcentual: actividades aprobadas / registradas.
     item = goal.measurement_item
+    formula_kind = (
+        percentage_formula_kind(item.formula)
+        if item and item.item_type == "percentage"
+        else None
+    )
+    if formula_kind == "approved_activities":
+        numerator, denominator = approved_activities, len(activities)
+    elif formula_kind in {"completed_attentions", "resolved_requests"}:
+        attention_activities = [
+            activity for activity in activities if activity.attention_id
+        ]
+        denominator = len(attention_activities)
+        completed_statuses = {"resolved", "closed"}
+        if formula_kind == "resolved_requests":
+            completed_statuses = {"resolved"}
+        numerator = sum(
+            activity.attention.status.casefold() in completed_statuses
+            for activity in attention_activities
+        )
+    else:
+        numerator = denominator = None
 
-    if item and item.item_type == "percentage":
-        if canonical_percentage_formula(item.formula):
-            total_actividades = len(activities)
-
-            if total_actividades > 0:
-                actual = (
-                    Decimal(approved_activities)
-                    / Decimal(total_actividades)
-                    * Decimal("100")
-                ).quantize(
-                    Decimal("0.01"),
-                    ROUND_HALF_UP,
-                )
-            else:
-                actual = Decimal("0.00")
+    if numerator is not None:
+        actual = (
+            Decimal(numerator) / Decimal(denominator) * Decimal("100")
+            if denominator
+            else Decimal("0.00")
+        ).quantize(Decimal("0.01"), ROUND_HALF_UP)
 
 
     if expected <= 0:

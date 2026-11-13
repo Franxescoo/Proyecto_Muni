@@ -103,6 +103,7 @@ class CommitmentForm(forms.ModelForm):
         ]
         self.fields["status"].choices = status_choices
         self.fields["status"].widget.choices = status_choices
+        self.fields["status"].required = False
         self.fields["status"].widget.attrs.update({
             "disabled": "disabled",
             "readonly": "readonly",
@@ -119,6 +120,7 @@ class CommitmentForm(forms.ModelForm):
             self.fields["responsible"].required = False
             self.fields["responsible"].widget = forms.HiddenInput()
         for field_name in ("origin", "requester"):
+            self.fields[field_name].required = False
             self.fields[field_name].widget.attrs["disabled"] = "disabled"
             self.fields[field_name].widget.attrs["readonly"] = "readonly"
             self.fields[field_name].widget.attrs["tabindex"] = "-1"
@@ -129,6 +131,7 @@ class CommitmentForm(forms.ModelForm):
                 "Se completa automáticamente desde la actividad."
             )
         self.fields["commitment_date"].widget.attrs["disabled"] = "disabled"
+        self.fields["commitment_date"].required = False
         self.fields["commitment_date"].widget.attrs["readonly"] = "readonly"
         self.fields["commitment_date"].widget.attrs["tabindex"] = "-1"
         self.fields["commitment_date"].widget.attrs["style"] = (
@@ -185,6 +188,15 @@ class CommitmentForm(forms.ModelForm):
         activity = cleaned.get("activity")
         delegation = cleaned.get("delegation")
         if activity:
+            duplicate = Commitment.objects.filter(
+                activity=activity,
+                deleted_at__isnull=True,
+            ).exclude(pk=self.instance.pk)
+            if duplicate.exists():
+                self.add_error(
+                    "activity",
+                    "Ya existe un compromiso asociado a esta actividad.",
+                )
             cleaned["responsible"] = activity.author
             cleaned["status"] = activity.status
             cleaned["commitment_date"] = activity.goal.period.end_date
@@ -197,11 +209,11 @@ class CommitmentForm(forms.ModelForm):
                     )
                 cleaned["origin"] = activity.goal.item
                 cleaned["requester"] = attention.requester
-                cleaned["territory"] = attention.address
+                if attention.address:
+                    cleaned["territory"] = attention.address
             else:
                 cleaned["origin"] = activity.goal.item
                 cleaned["requester"] = activity.contact
-                cleaned["territory"] = ""
         return cleaned
 
 

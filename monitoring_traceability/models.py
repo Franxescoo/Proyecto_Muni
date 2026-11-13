@@ -231,6 +231,16 @@ class Commitment(BaseModel):
     def clean(self):
         super().clean()
 
+        if self.activity_id:
+            duplicate = Commitment.objects.filter(
+                activity_id=self.activity_id,
+                deleted_at__isnull=True,
+            ).exclude(pk=self.pk)
+            if duplicate.exists():
+                raise ValidationError(
+                    {"activity": "Ya existe un compromiso asociado a esta actividad."}
+                )
+
         if self.responsible_id and self.delegation_id:
             if (
                 self.responsible.delegation_id

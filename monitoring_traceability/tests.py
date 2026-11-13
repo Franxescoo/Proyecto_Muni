@@ -13,7 +13,14 @@ from django.utils import timezone
 from accounts.models import UserProfile
 from organization.models import Delegation, Employee, PositionFunction
 from planning_measurements.models import Goal, MeasurementItem, Period
-from registration_validation.models import Activity, Evidence, Validation
+from registration_validation.models import (
+	Activity,
+	AttentionEntry,
+	AttentionType,
+	Evidence,
+	SubAttention,
+	Validation,
+)
 
 from .admin import AuditAdmin, CommitmentAdmin, IndicatorAdmin
 from .models import Audit, Commitment, CommitmentComment, Indicator
@@ -161,6 +168,69 @@ class TraceabilityModelsTest(TestCase):
 			rendered,
 		)
 
+	def test_commitment_form_derives_fields_and_preserves_manual_territory(self):
+		activity = Activity.objects.create(
+			goal=self.north_goal,
+			author=self.north_employee,
+			date=date(2026, 6, 20),
+			request_problem="Request",
+			action="Action",
+			contact="Contact",
+			phone="555",
+		)
+		form = CommitmentForm(
+			data={
+				"delegation": self.north.pk,
+				"activity": activity.pk,
+				"territory": "Territorio informado",
+				"observation": "Seguimiento",
+			},
+			employees=Employee.objects.filter(pk=self.north_employee.pk),
+			delegations=Delegation.objects.filter(pk=self.north.pk),
+			activities=Activity.objects.filter(pk=activity.pk),
+		)
+
+		self.assertTrue(form.is_valid(), form.errors)
+		self.assertEqual(
+			form.cleaned_data["territory"],
+			"Territorio informado",
+		)
+		self.assertEqual(form.cleaned_data["responsible"], self.north_employee)
+
+	def test_commitment_form_rejects_duplicate_activity(self):
+		activity = Activity.objects.create(
+			goal=self.north_goal,
+			author=self.north_employee,
+			date=date(2026, 6, 20),
+			request_problem="Request",
+			action="Action",
+			contact="Contact",
+			phone="555",
+		)
+		Commitment.objects.create(
+			delegation=self.north,
+			responsible=self.north_employee,
+			activity=activity,
+			origin=self.north_goal.item,
+			requester="Requester",
+			territory="North",
+			commitment_date=self.north_goal.period.end_date,
+		)
+		form = CommitmentForm(
+			data={
+				"delegation": self.north.pk,
+				"activity": activity.pk,
+				"territory": "North",
+				"observation": "",
+			},
+			employees=Employee.objects.filter(pk=self.north_employee.pk),
+			delegations=Delegation.objects.filter(pk=self.north.pk),
+			activities=Activity.objects.filter(pk=activity.pk),
+		)
+
+		self.assertFalse(form.is_valid())
+		self.assertIn("activity", form.errors)
+
 	def test_indicator_recalculates_from_approved_evidence(self):
 		activity = Activity.objects.create(
 			goal=self.north_goal,
@@ -293,6 +363,51 @@ class TraceabilityModelsTest(TestCase):
 				decision="Approved" if approved else "Rejected",
 				date="2026-06-22T10:00:00Z",
 				result="Approved" if approved else "Rejected",
+			)
+
+		indicator = recalculate_indicator_for_goal(self.north_goal)
+
+		self.assertEqual(indicator.actual_progress, Decimal("50.00"))
+		self.assertEqual(indicator.compliance, Decimal("50.00"))
+
+	def test_percentage_measurement_supports_completed_attentions(self):
+		item = MeasurementItem.objects.create(
+			code="PCT-ATTENTION-001",
+			name="Atenciones completadas",
+			item_type=MeasurementItem.ItemType.PERCENTAGE,
+			unit="%",
+			formula="(atenciones completadas / atenciones registradas) * 100",
+		)
+		self.north_goal.measurement_item = item
+		self.north_goal.save(update_fields=["measurement_item"])
+		attention_type = AttentionType.objects.create(
+			code="ATN-TEST-001",
+			name="Atención de prueba",
+		)
+		sub_attention = SubAttention.objects.create(
+			code="SUB-TEST-001",
+			name="Subatención de prueba",
+			attention_type=attention_type,
+		)
+		for number, status in ((1, "RESOLVED"), (2, "PENDING")):
+			attention = AttentionEntry.objects.create(
+				requester=f"Solicitante {number}",
+				attention_type=attention_type,
+				sub_attention=sub_attention,
+				description="Solicitud de atención",
+				delegation=self.north,
+				responsible_employee=self.north_employee,
+				status=status,
+			)
+			Activity.objects.create(
+				goal=self.north_goal,
+				author=self.north_employee,
+				attention=attention,
+				date=date(2026, 6, number + 20),
+				request_problem="Request",
+				action="Action",
+				contact="Contact",
+				phone="555",
 			)
 
 		indicator = recalculate_indicator_for_goal(self.north_goal)
