@@ -134,7 +134,11 @@ CATALOG_ACTIONS = {
         "delete_evidence",
         "view_evidence",
     },
-    ("monitoring_traceability", "commitment"): {"view_commitment"},
+    ("monitoring_traceability", "commitment"): {
+    "view_commitment",
+    "add_commitment",
+    "change_commitment",
+    },
     ("monitoring_traceability", "indicator"): {"view_indicator"},
     ("monitoring_traceability", "audit"): {"view_audit"},
     ("monitoring_traceability", "commitmentcomment"): {
