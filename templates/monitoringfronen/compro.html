@@ -1,11 +1,13 @@
 {% extends "base.html" %}
 {% load i18n %}
 {% load audit_extras %}
+{% load static %}
 
 {% block titulo %}Compromisos · Monitoreo y trazabilidad{% endblock %}
 
 {% block estilos %}
 <style>
+    @import url("{% static 'css/sgr_autoayuda_dos_modulos.css' %}?v=3");
     .monitor-shell { max-width: 1480px; margin: 0 auto; }
     .monitor-hero { background: linear-gradient(135deg, #a60a17, #760710); color: #fff; border-radius: .65rem; padding: 1.5rem 1.75rem; box-shadow: 0 6px 18px rgba(166, 10, 23, .18); }
     .monitor-hero h1 { font-size: clamp(1.35rem, 2vw, 1.85rem); }
@@ -53,6 +55,7 @@
         <div><div class="small text-uppercase fw-semibold opacity-75 mb-2">Monitoreo y trazabilidad</div><h1 class="mb-2 fw-bold">Compromisos institucionales</h1><p class="mb-0">Organiza solicitudes, responsables y fechas de seguimiento.</p></div>
         <i class="bi bi-handshake display-5 opacity-75" aria-hidden="true"></i>
     </section>
+    {% include "shared/_sgr_autoayuda.html" with help_namespace="monitoring" help_section="commitments" only %}
     <div class="row g-3 mb-4">
         <div class="col-12 col-md-4"><div class="section-card metric h-100"><div class="value">{{ total_commitments|default:"0" }}</div><div class="label">Compromisos registrados</div></div></div>
         <div class="col-12 col-md-4"><div class="section-card metric h-100"><div class="value text-warning">{{ pending_commitments|default:"0" }}</div><div class="label">Pendientes</div></div></div>
@@ -60,18 +63,38 @@
         <div class="col-12 col-md-4"><div class="section-card metric h-100"><div class="value text-success">{{ completed_commitments|default:"0" }}</div><div class="label">Completados</div></div></div>
     </div>
     <section class="section-card p-3 p-lg-4">
-        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3"><div><h2 class="h5 mb-1 fw-bold">Listado de compromisos</h2><p class="text-muted small mb-0">Seguimiento por delegación, territorio y responsable.</p></div><button type="button" class="btn btn-outline-secondary btn-sm"><i class="bi bi-download me-1"></i>Exportar</button></div>
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3"><div><h2 class="h5 mb-1 fw-bold">Listado de compromisos</h2><p class="text-muted small mb-0">Seguimiento por delegación, territorio y responsable.</p></div><div class="d-flex gap-2">{% if perms.monitoring_traceability.add_commitment %}<a class="btn btn-success btn-sm" data-help="Crea un compromiso seleccionando una delegación y una actividad relacionada." href="{% url 'monitoring:commitment_list' %}?open_modal=create"><i class="bi bi-plus-lg me-1"></i>Agregar compromiso</a>{% endif %}<a class="btn btn-outline-secondary btn-sm" data-help="Descarga los compromisos usando los filtros actuales." href="{% url 'monitoring:commitment_export' %}?{{ request.GET.urlencode }}"><i class="bi bi-download me-1"></i>Exportar</a></div></div>
         <form class="row g-3 align-items-end mb-3" method="get">
-            <div class="col-12 col-md-4"><label class="filter-label" for="commitment-search">Buscar compromiso</label><input id="commitment-search" name="q" value="{{ request.GET.q }}" class="form-control" placeholder="Origen, solicitante o territorio..." type="search"></div>
+            <div class="col-12 col-md-4"><label class="filter-label" for="commitment-search">Buscar compromiso</label><input id="commitment-search" name="q" value="{{ request.GET.q }}" class="form-control" placeholder="Meta, solicitante o territorio..." type="search"></div>
             <div class="col-12 col-md-3"><label class="filter-label" for="commitment-status">Estado</label><select id="commitment-status" name="status" class="form-select"><option value="">Todos los estados</option><option>Pendiente</option><option>En progreso</option><option>Completado</option></select></div>
-            <div class="col-12 col-md-2"><button class="btn btn-dark w-100" type="submit"><i class="bi bi-funnel me-1"></i>Filtrar</button></div>
+            <div class="col-12 col-md-2"><button class="btn btn-dark w-100" data-help="Aplica la búsqueda y el estado seleccionado." type="submit"><i class="bi bi-funnel me-1"></i>Filtrar</button></div>
         </form>
-        <div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr><th>Área</th><th>Responsable</th><th>Delegación</th><th>Fecha</th><th>Estado</th><th>Comentarios</th></tr></thead><tbody>
+        <div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr><th>Área</th><th>Responsable</th><th>Delegación</th><th>Fecha</th><th>Estado <button type="button" class="sgr-help-hint" data-help="El estado se toma de la actividad asociada. Si está vencido, aparece la opción de reasignación." aria-label="Ayuda sobre estado">?</button></th><th>Comentarios <button type="button" class="sgr-help-hint" data-help="Consulta comentarios, historial y agrega observaciones desde esta columna." aria-label="Ayuda sobre comentarios">?</button></th></tr></thead><tbody>
             {% for commitment in commitments %}
-            <tr><td class="fw-semibold">{{ commitment.territory|visual_es|default:"—" }}</td><td>{{ commitment.responsible|default:"Sin responsable" }}</td><td>{{ commitment.delegation|visual_es|default:"—" }}</td><td class="text-muted small">{% language 'es' %}{{ commitment.commitment_date|date:"d \d\e F \d\e Y"|default:"—" }}{% endlanguage %}</td><td><span class="status {% if commitment.is_overdue %}status-red{% elif commitment.is_completed %}status-green{% elif commitment.status|lower == 'pending' or commitment.status|lower == 'pendiente' %}status-yellow{% else %}status-muted{% endif %}">{{ commitment.display_status|visual_es|default:"Pendiente" }}</span></td><td class="small"><details><summary class="comment-summary">{{ commitment.comments.all|length }} comentario{{ commitment.comments.all|length|pluralize }}</summary><div class="comment-detail border rounded p-2 mt-2 bg-light">{% for comment in commitment.comments.all %}<article class="d-flex gap-2 {% if not forloop.last %}border-bottom pb-2 mb-2{% endif %}">{% if comment.created_by.profile.profile_photo %}<img class="comment-avatar" src="{{ comment.created_by.profile.profile_photo.url }}" alt="Foto de {{ comment.created_by.username }}">{% else %}<span class="comment-avatar comment-avatar-fallback" aria-hidden="true">{{ comment.created_by.username|default:"U"|first|upper }}</span>{% endif %}<div class="flex-grow-1"><div class="d-flex justify-content-between gap-2"><div class="fw-semibold">{% firstof comment.created_by.username comment.author "Usuario" %}</div>{% if comment.created_by_id == request.user.id and perms.monitoring_traceability.delete_commitmentcomment %}<form method="post" class="m-0">{% csrf_token %}<input type="hidden" name="action" value="delete"><input type="hidden" name="commitment_id" value="{{ commitment.pk }}"><input type="hidden" name="comment_id" value="{{ comment.comment_id }}"><button class="btn btn-sm btn-link text-danger p-0" type="submit" title="Eliminar comentario"><i class="bi bi-trash"></i><span class="visually-hidden">Eliminar</span></button></form>{% endif %}</div><div class="text-muted small">{% language 'es' %}{{ comment.created_at|date:"d \d\e F \d\e Y H:i" }}{% endlanguage %}</div><p class="mb-0 mt-1">{{ comment.text }}</p></div></article>{% empty %}<span class="text-muted">No hay comentarios.</span>{% endfor %}</div></details>{% if perms.monitoring_traceability.add_commitmentcomment %}<form method="post" class="d-flex gap-1 mt-2">{% csrf_token %}<input type="hidden" name="commitment_id" value="{{ commitment.pk }}"><input name="comment" class="form-control form-control-sm" placeholder="Agregar comentario..." required><button class="btn btn-sm btn-outline-dark" type="submit" title="Agregar comentario"><i class="bi bi-chat-left-text"></i></button></form>{% endif %}</td></tr>
+            <tr><td class="fw-semibold">{{ commitment.territory|visual_es|default:"—" }}</td><td>{{ commitment.responsible|default:"Sin responsable" }}</td><td>{{ commitment.delegation|visual_es|default:"—" }}</td><td class="text-muted small">{% language 'es' %}{{ commitment.commitment_date|date:"d \d\e F \d\e Y"|default:"—" }}{% endlanguage %}</td><td><span class="status {% if commitment.is_overdue %}status-red{% elif commitment.is_completed %}status-green{% elif commitment.status|lower == 'pending' or commitment.status|lower == 'pendiente' %}status-yellow{% else %}status-muted{% endif %}">{{ commitment.display_status|visual_es|default:"Pendiente" }}</span><div class="mt-2">{% if perms.monitoring_traceability.change_commitment and commitment.is_overdue %}            <a class="btn btn-sm btn-danger" data-help="Abre el formulario para asignar otro responsable disponible sin modificar el responsable original." href="{% url 'monitoring:commitment_list' %}?open_modal=reassign&amp;commitment_id={{ commitment.pk }}">Reasignación pendiente</a>{% endif %}</div></td><td class="small"><details><summary class="comment-summary">{{ commitment.comments.all|length }} comentario{{ commitment.comments.all|length|pluralize }}</summary><div class="comment-detail border rounded p-2 mt-2 bg-light">{% for comment in commitment.comments.all %}<article class="d-flex gap-2 {% if not forloop.last %}border-bottom pb-2 mb-2{% endif %}"><div class="flex-grow-1"><div class="d-flex justify-content-between gap-2"><div class="fw-semibold">{% firstof comment.created_by.username comment.author "Usuario" %}</div>{% if comment.created_by_id == request.user.id and perms.monitoring_traceability.delete_commitmentcomment %}<form method="post" class="m-0">{% csrf_token %}<input type="hidden" name="action" value="delete"><input type="hidden" name="commitment_id" value="{{ commitment.pk }}"><input type="hidden" name="comment_id" value="{{ comment.comment_id }}"><button class="btn btn-sm btn-link text-danger p-0" type="submit" title="Eliminar comentario"><i class="bi bi-trash"></i><span class="visually-hidden">Eliminar</span></button></form>{% endif %}</div><div class="text-muted small">{% language 'es' %}{{ comment.created_at|date:"d \d\e F \d\e Y H:i" }}{% endlanguage %}</div><p class="mb-0 mt-1">{{ comment.text }}</p></div></article>{% empty %}<span class="text-muted">No hay comentarios.</span>{% endfor %}</div></details><details class="mt-2"><summary>Historial</summary>{% for change in commitment.status_history.all %}<div>{{ change.previous_status|default:"Creado" }} → {{ change.new_status }} <span class="text-muted">{{ change.created_at|date:"d/m/Y H:i" }}</span></div>{% empty %}<span class="text-muted">Sin historial.</span>{% endfor %}{% for change in commitment.reassignments.all %}<div>Reasignado: {{ change.previous_responsible }} → {{ change.new_responsible }} <span class="text-muted">{{ change.created_at|date:"d/m/Y" }}</span></div>{% endfor %}</details>{% if perms.monitoring_traceability.add_commitmentcomment %}<form method="post" class="d-flex gap-1 mt-2">{% csrf_token %}<input type="hidden" name="commitment_id" value="{{ commitment.pk }}"><input name="comment" class="form-control form-control-sm" placeholder="Agregar comentario..." required><button class="btn btn-sm btn-outline-dark" type="submit" title="Agregar comentario"><i class="bi bi-chat-left-text"></i></button></form>            {% endif %}</td></tr>
             {% empty %}<tr><td colspan="6" class="text-center py-5"><i class="bi bi-hand-thumbs-up fs-2 text-muted d-block mb-2"></i><span class="text-muted">No hay compromisos para mostrar.</span></td></tr>
             {% endfor %}
         </tbody></table></div>
     </section>
 </div>
+{% include "monitoringfronen/_commitment_modal.html" %}
+{% include "monitoringfronen/_reassignment_modal.html" %}
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'js/sgr_autoayuda_dos_modulos.js' %}?v=4" defer></script>
+{% if open_modal or reassignment_open %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const modal = document.getElementById("commitmentModal");
+    const reassignmentModal = document.getElementById("reassignmentModal");
+    if (modal && window.bootstrap) {
+        bootstrap.Modal.getOrCreateInstance(modal).show();
+    }
+    if (reassignmentModal && window.bootstrap) {
+        bootstrap.Modal.getOrCreateInstance(reassignmentModal).show();
+    }
+});
+</script>
+{% endif %}
 {% endblock %}

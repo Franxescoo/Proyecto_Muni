@@ -1,10 +1,12 @@
 {% extends "base.html" %}
 {% load i18n %}
+{% load static %}
 
 {% block titulo %}Control de actividad · Monitoreo y trazabilidad{% endblock %}
 
 {% block estilos %}
 <style>
+    @import url("{% static 'css/sgr_autoayuda_dos_modulos.css' %}?v=3");
     .monitor-shell { max-width: 1480px; margin: 0 auto; }
     .monitor-hero { background: linear-gradient(135deg, #a60a17, #760710); color: #fff; border-radius: .65rem; padding: 1.5rem 1.75rem; box-shadow: 0 6px 18px rgba(166, 10, 23, .18); }
     .monitor-hero h1 { font-size: clamp(1.35rem, 2vw, 1.85rem); }
@@ -35,30 +37,32 @@
         </div>
         <i class="bi bi-person-check display-5 opacity-75" aria-hidden="true"></i>
     </section>
+    {% include "shared/_sgr_autoayuda.html" with help_namespace="monitoring" help_section="activity" only %}
 
     <section class="section-card p-3 p-lg-4 mb-4">
         <form method="get" class="row g-3 align-items-end">
             <div class="col-12 col-md-3"><label class="filter-label" for="activity-delegation">Delegación</label><select class="form-select" id="activity-delegation" name="delegation"><option value="">Todas</option>{% for delegation in delegations %}<option value="{{ delegation.delegation_id }}" {% if request.GET.delegation == delegation.delegation_id|stringformat:"s" %}selected{% endif %}>{{ delegation.delegation__name }}</option>{% endfor %}</select></div>
             <div class="col-12 col-md-3"><label class="filter-label" for="activity-position">Cargo</label><select class="form-select" id="activity-position" name="position"><option value="">Todos</option>{% for position in positions %}<option value="{{ position.position_id }}" {% if request.GET.position == position.position_id|stringformat:"s" %}selected{% endif %}>{{ position.position__position_name }}</option>{% endfor %}</select></div>
             <div class="col-12 col-md-3"><label class="filter-label" for="activity-period">Período</label><select class="form-select" id="activity-period" name="period"><option value="">Todos</option>{% for period in periods %}<option value="{{ period.pk }}" {% if selected_period.pk == period.pk %}selected{% endif %}>{{ period.start_date }} - {{ period.end_date }}</option>{% endfor %}</select></div>
-            <div class="col-12 col-md-2"><button class="btn btn-dark w-100" type="submit"><i class="bi bi-funnel me-1"></i>Filtrar</button></div>
+            <div class="col-12 col-md-2"><button class="btn btn-dark w-100" data-help="Aplica los filtros de delegación, cargo y período." type="submit"><i class="bi bi-funnel me-1"></i>Filtrar</button></div>
         </form>
     </section>
 
     <section class="section-card p-3 p-lg-4">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
             <div><h2 class="h5 mb-1 fw-bold">Actividad por funcionario</h2><p class="text-muted small mb-0">Identifica inactividad y ritmo de registros del período seleccionado.</p></div>
-            <a class="btn btn-outline-secondary btn-sm" href="{% url 'monitoring:executive_dashboard' %}"><i class="bi bi-speedometer2 me-1"></i>Resumen ejecutivo</a>
+            <a class="btn btn-outline-secondary btn-sm" data-help="Vuelve al consolidado general de indicadores y alertas." href="{% url 'monitoring:executive_dashboard' %}"><i class="bi bi-speedometer2 me-1"></i>Resumen ejecutivo</a>
         </div>
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
-                <thead><tr><th>Funcionario</th><th>Último ingreso</th><th>Días sin ingreso</th><th>Última actividad</th><th class="text-end">Registros válidos</th><th class="text-end">Promedio diario</th></tr></thead>
+                <thead><tr><th>Funcionario</th><th>Último ingreso</th><th>Días sin ingreso</th><th>Última actividad</th><th>Días sin actividad</th><th class="text-end">Registros válidos</th><th class="text-end">Promedio diario</th></tr></thead>
                 <tbody>
-                {% for row in rows %}<tr><td class="fw-semibold">{{ row.employee }}</td><td>{% if row.last_login %}{{ row.last_login|date:"d/m/Y H:i" }}{% else %}<span class="text-muted">Sin registro</span>{% endif %}</td><td>{% if row.days_without_activity is not None %}<span class="activity-status {% if row.days_without_activity > 7 %}activity-status-alert{% else %}activity-status-ok{% endif %}">{{ row.days_without_activity }} días</span>{% else %}<span class="text-muted">Sin registro</span>{% endif %}</td><td>{{ row.last_activity|date:"d/m/Y"|default:"Sin actividad" }}</td><td class="text-end">{{ row.records }}</td><td class="text-end fw-semibold">{{ row.daily_average }}</td></tr>
-                {% empty %}<tr><td colspan="6" class="text-center py-5"><i class="bi bi-person-check fs-2 text-muted d-block mb-2"></i><span class="text-muted">No hay funcionarios para los filtros seleccionados.</span></td></tr>{% endfor %}
+                {% for row in rows %}<tr><td class="fw-semibold">{{ row.employee }}</td><td>{% if row.last_login %}{{ row.last_login|date:"d/m/Y H:i" }}{% else %}<span class="text-muted">Sin registro</span>{% endif %}</td><td>{% if row.days_without_login is not None %}<span class="activity-status {% if row.days_without_login > 7 %}activity-status-alert{% else %}activity-status-ok{% endif %}">{{ row.days_without_login }} días</span>{% else %}<span class="text-muted">Sin registro</span>{% endif %}</td><td>{{ row.last_activity|date:"d/m/Y"|default:"Sin actividad" }}</td><td>{% if row.days_without_activity is not None %}<span class="activity-status {% if row.days_without_activity > 7 %}activity-status-alert{% else %}activity-status-ok{% endif %}">{{ row.days_without_activity }} días</span>{% else %}<span class="text-muted">Sin actividad</span>{% endif %}</td><td class="text-end">{{ row.records }}</td><td class="text-end fw-semibold">{{ row.daily_average }}</td></tr>
+                {% empty %}<tr><td colspan="7" class="text-center py-5"><i class="bi bi-person-check fs-2 text-muted d-block mb-2"></i><span class="text-muted">No hay funcionarios para los filtros seleccionados.</span></td></tr>{% endfor %}
                 </tbody>
             </table>
         </div>
     </section>
 </div>
 {% endblock %}
+{% block scripts %}<script src="{% static 'js/sgr_autoayuda_dos_modulos.js' %}?v=4" defer></script>{% endblock %}

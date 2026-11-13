@@ -1,0 +1,37 @@
+{% if reassignment_open %}
+<div class="modal fade sgr-upgraded-modal" id="reassignmentModal" tabindex="-1" aria-labelledby="reassignmentModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="post" action="{{ modal_action }}">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="reassign">
+                <input type="hidden" name="commitment_id" value="{{ reassignment_commitment.pk }}">
+                <div class="modal-header">
+                    <div class="sgr-modal-title-block">
+                        <div class="sgr-modal-eyebrow">MONITOREO Y TRAZABILIDAD</div>
+                        <h5 class="modal-title" id="reassignmentModalLabel">Reasignación pendiente</h5>
+                        <p class="sgr-modal-subtitle mb-0">El responsable original no será modificado.</p>
+                    </div>
+                    <a href="{% url 'monitoring:commitment_list' %}" class="btn-close" aria-label="Cerrar"></a>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-light border">
+                        <strong>Responsable actual:</strong> {{ reassignment_commitment.responsible }}
+                    </div>
+                    {% for field in reassignment_form %}
+                    <div class="mb-3">
+                        {{ field.label_tag }}
+                        {{ field }}
+                        {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="modal-footer">
+                    <a href="{% url 'monitoring:commitment_list' %}" class="btn btn-outline-secondary">Cancelar</a>
+                    <button type="submit" class="btn btn-danger">Confirmar reasignación</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}

@@ -1,10 +1,15 @@
 import re
 from decimal import Decimal, ROUND_HALF_UP
+from datetime import timedelta
 
+from django.contrib.auth import get_user_model
 from django.utils import timezone
 
-from .models import Commitment, Indicator
-from planning_measurements.measurement_rules import canonical_percentage_formula
+from accounts.models import UserProfile
+from institutional_mail.models import InstitutionalMessage
+
+from .models import Commitment, CommitmentAlert, Indicator
+from planning_measurements.measurement_rules import percentage_formula_kind
 from planning_measurements.working_days import calculate_computable_days
 from registration_validation.models import Activity, Evidence
 
@@ -155,24 +160,35 @@ def recalculate_indicator_for_goal(goal, create_if_missing=True):
     actual = Decimal(approved_activities)
 
 
-    # Fórmula porcentual: actividades aprobadas / registradas.
     item = goal.measurement_item
+    formula_kind = (
+        percentage_formula_kind(item.formula)
+        if item and item.item_type == "percentage"
+        else None
+    )
+    if formula_kind == "approved_activities":
+        numerator, denominator = approved_activities, len(activities)
+    elif formula_kind in {"completed_attentions", "resolved_requests"}:
+        attention_activities = [
+            activity for activity in activities if activity.attention_id
+        ]
+        denominator = len(attention_activities)
+        completed_statuses = {"resolved", "closed"}
+        if formula_kind == "resolved_requests":
+            completed_statuses = {"resolved"}
+        numerator = sum(
+            activity.attention.status.casefold() in completed_statuses
+            for activity in attention_activities
+        )
+    else:
+        numerator = denominator = None
 
-    if item and item.item_type == "percentage":
-        if canonical_percentage_formula(item.formula):
-            total_actividades = len(activities)
-
-            if total_actividades > 0:
-                actual = (
-                    Decimal(approved_activities)
-                    / Decimal(total_actividades)
-                    * Decimal("100")
-                ).quantize(
-                    Decimal("0.01"),
-                    ROUND_HALF_UP,
-                )
-            else:
-                actual = Decimal("0.00")
+    if numerator is not None:
+        actual = (
+            Decimal(numerator) / Decimal(denominator) * Decimal("100")
+            if denominator
+            else Decimal("0.00")
+        ).quantize(Decimal("0.01"), ROUND_HALF_UP)
 
 
     if expected <= 0:
@@ -192,8 +208,25 @@ def recalculate_indicator_for_goal(goal, create_if_missing=True):
 
     expected_progress = _expected_progress(goal.period)
 
+    existing_indicator = (
+        Indicator.objects.filter(
+            goal=goal,
+            deleted_at__isnull=True,
+        )
+        .order_by("-calculation_date", "-indicator_id")
+        .first()
+    )
+    adjustment = (
+        Decimal(existing_indicator.adjustment)
+        if existing_indicator is not None
+        else Decimal("0")
+    )
+    adjusted_compliance = max(
+        Decimal("0"),
+        min(compliance + adjustment, cap),
+    )
     weighted_result = (
-        goal.weight * compliance / Decimal("100")
+        goal.weight * adjusted_compliance / Decimal("100")
     ).quantize(Decimal("0.01"), ROUND_HALF_UP)
 
     difference = (actual - expected).quantize(
@@ -202,14 +235,7 @@ def recalculate_indicator_for_goal(goal, create_if_missing=True):
 
 
 
-    indicator = (
-        Indicator.objects.filter(
-            goal=goal,
-            deleted_at__isnull=True,
-        )
-        .order_by("-calculation_date", "-indicator_id")
-        .first()
-    )
+    indicator = existing_indicator
     if indicator is None and create_if_missing:
         indicator = Indicator(
             goal=goal,
@@ -255,6 +281,108 @@ def recalculate_indicator_for_goal(goal, create_if_missing=True):
         else None
     )
     return indicator
+
+
+def synchronize_commitment_alerts(commitments):
+    """Keep one open alert per current commitment deadline condition."""
+    today = timezone.localdate()
+    for commitment in commitments:
+        if commitment.is_completed:
+            CommitmentAlert.objects.filter(
+                commitment=commitment,
+                resolved_at__isnull=True,
+            ).update(resolved_at=timezone.now(), updated_at=timezone.now())
+            continue
+        alert_type = (
+            "overdue"
+            if commitment.commitment_date < today
+            else "due_soon"
+            if commitment.commitment_date <= today + timedelta(days=7)
+            else None
+        )
+        if alert_type is None:
+            continue
+        message = (
+            "Compromiso vencido."
+            if alert_type == "overdue"
+            else "Compromiso próximo a vencer."
+        )
+        CommitmentAlert.objects.filter(
+            commitment=commitment,
+            alert_type="overdue" if alert_type == "due_soon" else "due_soon",
+            resolved_at__isnull=True,
+        ).update(resolved_at=timezone.now(), updated_at=timezone.now())
+        CommitmentAlert.objects.get_or_create(
+            commitment=commitment,
+            alert_type=alert_type,
+            resolved_at=None,
+            defaults={
+                "message": message,
+                "due_at": commitment.commitment_date,
+            },
+        )
+        if alert_type == "overdue":
+            _notify_overdue_commitment(commitment)
+
+
+def _notify_overdue_commitment(commitment):
+    """Notify the responsible employee and delegation administrator once."""
+    responsible_user = getattr(
+        getattr(commitment.responsible, "user_profile", None),
+        "user",
+        None,
+    )
+    delegation_admin = getattr(commitment.delegation, "responsible", None)
+    admin_user = getattr(
+        getattr(delegation_admin, "user_profile", None),
+        "user",
+        None,
+    )
+    admin_users = UserProfile.objects.filter(
+        delegation=commitment.delegation,
+        user__is_active=True,
+    ).values_list("user_id", flat=True)
+    recipients = {
+        user.pk: user for user in (responsible_user, admin_user) if user
+    }
+    if admin_users:
+        users = get_user_model().objects.filter(pk__in=admin_users)
+        recipients.update({user.pk: user for user in users})
+    admin_fallback = next(iter(recipients.values()), None)
+
+    if not recipients:
+        return
+
+    sender = (
+        commitment.delegation.created_by
+        or responsible_user
+        or admin_user
+        or admin_fallback
+    )
+    if sender is None:
+        return
+    subject = f"Compromiso vencido: {commitment.origin}"
+    body = (
+        f"El compromiso asociado a la meta «{commitment.origin}» "
+        f"venció el {commitment.commitment_date:%d/%m/%Y}.\n"
+        f"Responsable actual: {commitment.responsible.name}.\n"
+        "Revisa el compromiso y gestiona la reasignación pendiente."
+    )
+    for recipient in recipients.values():
+        if InstitutionalMessage.objects.filter(
+            sender=sender,
+            recipient=recipient,
+            subject=subject,
+            body=body,
+        ).exists():
+            continue
+        InstitutionalMessage.objects.create(
+            sender=sender,
+            recipient=recipient,
+            subject=subject,
+            body=body,
+            notice_status=InstitutionalMessage.NoticeStatus.SENT,
+        )
 
 
 def synchronize_indicators_for_goals(goals):

@@ -1,6 +1,7 @@
 from django import forms
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxLengthValidator
+from django.db.models import Q
 from django.utils import timezone
 
 from accounts.permissions import allowed_delegation_ids
@@ -81,12 +82,25 @@ class CampaignForm(BootstrapModelForm):
     text_limits = {"description": 2000}
     class Meta:
         model = Campaign
-        fields = ("title", "year", "description", "attention_type", "edition", "organizing_delegation", "opens_on", "closes_on", "status")
+        fields = ("title", "year", "description", "attention_type", "edition",
+                  "organizing_delegation", "opens_on", "closes_on", "max_age",
+                  "status")
         widgets = {"opens_on": DateInput(), "closes_on": DateInput(), "description": forms.Textarea(attrs={"rows": 3})}
 
     def __init__(self, *args, user=None, permission="municipal_events.add_campaign", **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["attention_type"].queryset = AttentionType.objects.filter(status=True, deleted_at__isnull=True)
+        active_attention_types = AttentionType.objects.filter(
+            status=True, deleted_at__isnull=True
+        )
+        if self.instance and self.instance.pk and self.instance.attention_type_id:
+            active_attention_types = active_attention_types.filter(
+                Q(pk=self.instance.attention_type_id)
+                | Q(pk__in=active_attention_types.values("pk"))
+            )
+        self.fields["attention_type"].queryset = active_attention_types
+        self.fields["max_age"].help_text = (
+            "Edad calculada al 31 de diciembre del año de la campaña."
+        )
         self.fields["edition"].required = False
         self.fields["edition"].queryset = EventEdition.objects.filter(deleted_at__isnull=True, event__deleted_at__isnull=True)
         if user is not None:
@@ -103,6 +117,10 @@ class EnrollmentForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["birth_date"].help_text = (
+            "La edad se calculará al 31 de diciembre del año de la campaña."
+        )
+
         for field in self.fields.values():
             field.widget.attrs["class"] = "form-control"
         configure_text_limits(self, {"observation": 1200})

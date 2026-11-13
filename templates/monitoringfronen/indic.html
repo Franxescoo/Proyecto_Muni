@@ -1,11 +1,13 @@
 {% extends "base.html" %}
 {% load i18n %}
 {% load audit_extras %}
+{% load static %}
 
 {% block titulo %}Indicadores · Monitoreo y trazabilidad{% endblock %}
 
 {% block estilos %}
 <style>
+    @import url("{% static 'css/sgr_autoayuda_dos_modulos.css' %}?v=3");
     .monitor-shell { max-width: 1480px; margin: 0 auto; }
     .monitor-hero { background: linear-gradient(135deg, #a60a17, #760710); color: #fff; border-radius: .65rem; padding: 1.5rem 1.75rem; box-shadow: 0 6px 18px rgba(166, 10, 23, .18); }
     .monitor-hero h1 { font-size: clamp(1.35rem, 2vw, 1.85rem); }
@@ -51,6 +53,8 @@
         </div>
     </section>
 
+    {% include "shared/_sgr_autoayuda.html" with help_namespace="monitoring" help_section="indicators" only %}
+
     <div class="row g-3 mb-4">
         <div class="col-12 col-md-4"><div class="section-card metric h-100"><div class="value">{{ total_indicators|default:"0" }}</div><div class="label">Indicadores registrados</div></div></div>
         <div class="col-12 col-md-4"><div class="section-card metric h-100"><div class="value text-success">{{ compliant_indicators|default:"0" }}</div><div class="label">En cumplimiento</div></div></div>
@@ -59,17 +63,24 @@
 
     <section class="section-card p-3 p-lg-4">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-            <div><h2 class="h5 mb-1 fw-bold">Registro de indicadores</h2><p class="text-muted small mb-0">Los resultados se calculan con las evidencias aprobadas asociadas a cada meta.</p></div>
-            <button type="button" class="btn btn-outline-secondary btn-sm"><i class="bi bi-download me-1"></i>Exportar</button>
+            <div><h2 class="h5 mb-1 fw-bold">Registro de indicadores <button type="button" class="sgr-help-hint" title="El cumplimiento se calcula con el avance aprobado respecto del valor objetivo." aria-label="Ayuda sobre el cálculo del cumplimiento">?</button></h2><p class="text-muted small mb-0">Los resultados se calculan con las evidencias aprobadas asociadas a cada meta.</p></div>
+            <a class="btn btn-outline-secondary btn-sm" data-help="Descarga los indicadores visibles con los filtros y parámetros del período." href="{% url 'monitoring:indicator_export' %}?{{ request.GET.urlencode }}"><i class="bi bi-download me-1"></i>Exportar</a>
         </div>
+        {% if selected_period %}
+        <div class="alert alert-info py-2 small" role="status">
+            <strong>Configuración del semáforo:</strong>
+            {{ selected_period.thresholds|default:"Sin umbrales registrados" }}
+            <span class="text-muted">· Parámetros {{ selected_period.parameters_version }}</span>
+        </div>
+        {% endif %}
         <form class="row g-3 align-items-end mb-3" method="get">
             <div class="col-12 col-md-5"><label class="filter-label" for="indicator-search">Buscar meta o funcionario</label><input id="indicator-search" name="q" value="{{ request.GET.q }}" class="form-control" placeholder="Escribe para buscar..." type="search"></div>
             <div class="col-12 col-md-3"><label class="filter-label" for="indicator-status">Semáforo</label><select id="indicator-status" name="traffic_light" class="form-select"><option value="">Todos los estados</option><option value="green">Verde</option><option value="yellow">Amarillo</option><option value="red">Rojo</option></select></div>
-            <div class="col-12 col-md-2"><button class="btn btn-dark w-100" type="submit"><i class="bi bi-funnel me-1"></i>Filtrar</button></div>
+            <div class="col-12 col-md-2"><button class="btn btn-dark w-100" data-help="Aplica la búsqueda y el semáforo seleccionado." type="submit"><i class="bi bi-funnel me-1"></i>Filtrar</button></div>
         </form>
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
-                <thead><tr><th>Meta</th><th>Responsable</th><th class="text-end">Evidencias requeridas</th><th class="text-end">Evidencias aprobadas</th><th class="text-end">Avance</th><th class="text-end">Diferencia</th><th class="text-end">Cumplimiento</th><th>Estado</th><th>Fecha</th></tr></thead>
+                <thead><tr><th>Meta</th><th>Responsable</th><th class="text-end">Evidencias requeridas <button type="button" class="sgr-help-hint" title="Cantidad objetivo de evidencias definida en la meta." aria-label="Ayuda sobre evidencias requeridas">?</button></th><th class="text-end">Evidencias aprobadas <button type="button" class="sgr-help-hint" title="Solo las evidencias aprobadas contribuyen al avance." aria-label="Ayuda sobre evidencias aprobadas">?</button></th><th class="text-end">Avance</th><th class="text-end">Diferencia</th><th class="text-end">Cumplimiento <button type="button" class="sgr-help-hint" title="Porcentaje de avance respecto del valor objetivo, limitado por la configuración del período." aria-label="Ayuda sobre cumplimiento">?</button></th><th class="text-end">Ajuste <button type="button" class="sgr-help-hint" title="Corrección manual entre -100 y 100 que afecta el resultado ponderado." aria-label="Ayuda sobre ajuste">?</button></th><th>Estado <button type="button" class="sgr-help-hint" title="Semáforo calculado según los umbrales configurados en el período." aria-label="Ayuda sobre estado">?</button></th><th>Fecha</th></tr></thead>
                 <tbody>
                 {% for indicator in indicators %}
                 <tr>
@@ -80,15 +91,51 @@
                     <td class="text-end">{{ indicator.actual_progress|floatformat:"0"|default_if_none:"—" }}</td>
                     <td class="text-end">{{ indicator.difference|floatformat:"0"|default_if_none:"—" }}</td>
                     <td class="text-end fw-semibold">{{ indicator.compliance|default_if_none:"—" }}%</td>
+                    <td class="text-end">{% if perms.monitoring_traceability.change_indicator %}<button type="button" class="btn btn-sm btn-outline-dark" data-help="Permite ingresar una corrección entre -100 y 100 para el resultado ponderado." data-bs-toggle="modal" data-bs-target="#adjustmentModal{{ indicator.pk }}">Ajustar</button>{% else %}{{ indicator.adjustment }}{% endif %}</td>
                     <td><div class="d-flex align-items-center gap-2"><div class="status-track flex-grow-1" title="Estado: {{ indicator.traffic_light|default:'Pendiente' }}"><div class="progress-fill {% if indicator.traffic_light|lower == 'green' or indicator.traffic_light|lower == 'verde' %}progress-green{% elif indicator.traffic_light|lower == 'yellow' or indicator.traffic_light|lower == 'amarillo' %}progress-yellow{% elif indicator.traffic_light|lower == 'red' or indicator.traffic_light|lower == 'rojo' %}progress-red{% else %}progress-muted{% endif %}" style="width: {% widthratio indicator.compliance 100 100 %}%"></div></div><span class="status {% if indicator.traffic_light|lower == 'green' or indicator.traffic_light|lower == 'verde' %}status-green{% elif indicator.traffic_light|lower == 'yellow' or indicator.traffic_light|lower == 'amarillo' %}status-yellow{% elif indicator.traffic_light|lower == 'red' or indicator.traffic_light|lower == 'rojo' %}status-red{% else %}status-muted{% endif %}">{{ indicator.traffic_light|default:"Pendiente" }}</span></div></td>
                     <td class="text-muted small">{% language 'es' %}{{ indicator.calculation_date|date:"d \d\e F \d\e Y"|default:"—" }}{% endlanguage %}</td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="9" class="text-center py-5"><i class="bi bi-bar-chart-line fs-2 text-muted d-block mb-2"></i><span class="text-muted">No hay indicadores para mostrar.</span></td></tr>
+                <tr><td colspan="10" class="text-center py-5"><i class="bi bi-bar-chart-line fs-2 text-muted d-block mb-2"></i><span class="text-muted">No hay indicadores para mostrar.</span></td></tr>
                 {% endfor %}
                 </tbody>
             </table>
         </div>
     </section>
+    {% for indicator in indicators %}
+    {% if perms.monitoring_traceability.change_indicator %}
+    <div class="modal fade sgr-upgraded-modal" id="adjustmentModal{{ indicator.pk }}" tabindex="-1" aria-labelledby="adjustmentModalLabel{{ indicator.pk }}" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="indicator_id" value="{{ indicator.pk }}">
+                    <div class="modal-header">
+                        <div class="sgr-modal-title-block">
+                            <div class="sgr-modal-eyebrow">MONITOREO Y TRAZABILIDAD</div>
+                            <h5 class="modal-title" id="adjustmentModalLabel{{ indicator.pk }}">Ajustar indicador</h5>
+                            <p class="sgr-modal-subtitle mb-0">{{ indicator.goal.item }}</p>
+                        </div>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                    </div>
+                    <div class="modal-body">
+                        <label class="form-label" for="adjustment{{ indicator.pk }}">Ajuste</label>
+                        <input id="adjustment{{ indicator.pk }}" name="adjustment" value="{{ indicator.adjustment }}" class="form-control" type="number" step="0.01" min="-100" max="100" required>
+                        <div class="form-text">Ingresa un valor entre -100 y 100.</div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-primary">Aplicar ajuste</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    {% endfor %}
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'js/sgr_autoayuda_dos_modulos.js' %}?v=3" defer></script>
 {% endblock %}

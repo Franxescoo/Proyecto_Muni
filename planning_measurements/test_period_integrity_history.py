@@ -10,12 +10,17 @@ from django.db import transaction
 from django.test import TestCase
 from django.urls import reverse
 
+from accounts.models import UserProfile
 from organization.models import Delegation, Employee, PositionFunction
 from .calculations import InvalidPeriodWeights, validate_period_weights
 from .forms import PeriodForm, MeasurementItemForm
 from .measurement_rules import SUPPORTED_PERCENTAGE_FORMULA
 from .models import Goal, MeasurementItem, Period, PeriodParameterSnapshot
-from .parameter_history import capture_period_parameters
+from .parameter_history import (
+    advance_period_parameters_version,
+    capture_period_parameters,
+    next_parameters_version,
+)
 
 
 class PlanIntegrityTests(TestCase):
@@ -45,6 +50,11 @@ class PlanIntegrityTests(TestCase):
         self.user = get_user_model().objects.create_user(
             username="historial-funcional", password="PruebaSegura123!",
         )
+        UserProfile.objects.create(
+            user=self.user,
+            employee_code="HIST-001",
+            delegation=self.delegation,
+        )
 
     def item(self, code, name, active=True, percentage=False, formula=""):
         obj = MeasurementItem.objects.create(
@@ -55,6 +65,28 @@ class PlanIntegrityTests(TestCase):
         )
         self.position.catalog_items.add(obj)
         return obj
+
+    def test_parameter_version_increments_only_supported_numeric_suffix(self):
+        self.assertEqual(next_parameters_version("SGR050-v1"), "SGR050-v2")
+        self.assertEqual(next_parameters_version("v1"), "v2")
+        self.assertEqual(next_parameters_version("1"), "2")
+        self.assertEqual(next_parameters_version("initial"), "initial")
+
+    def test_parameter_version_update_is_persisted_in_transaction(self):
+        with transaction.atomic():
+            locked = advance_period_parameters_version(self.period)
+            capture_period_parameters(
+                self.period,
+                actor=self.user,
+                event=PeriodParameterSnapshot.Event.CONFIGURED,
+            )
+
+        self.period.refresh_from_db()
+        self.assertEqual(self.period.parameters_version, "v2")
+        self.assertEqual(
+            self.period.parameter_snapshots.get().content["parameters_version"],
+            "v2",
+        )
 
     def goal(self, employee, item, weight, *, name=None):
         return Goal.objects.create(
@@ -258,6 +290,59 @@ class PlanIntegrityTests(TestCase):
         updated = form.save()
         self.assertIn("Tope: 180.00", updated.thresholds)
 
+    def test_period_form_rejects_invalid_parameter_version(self):
+        data = {
+            "start_date": "2026-11-02", "end_date": "2026-11-30",
+            "status": "Active", "computable_days": "",
+            "thresholds": "Verde: 100, Amarillo: 80, Rojo: 60",
+            "parameters_version": "v1.0.lalala", "compliance_cap": "150",
+        }
+        form = PeriodForm(data=data, instance=Period())
+        self.assertFalse(form.is_valid())
+        self.assertIn("parameters_version", form.errors)
+
+    def test_period_form_accepts_multicomponent_parameter_version(self):
+        data = {
+            "start_date": "2026-11-02", "end_date": "2026-11-30",
+            "status": "Active", "computable_days": "",
+            "thresholds": "Verde: 100, Amarillo: 80, Rojo: 60",
+            "parameters_version": "SGR044-v1.3", "compliance_cap": "150",
+        }
+        form = PeriodForm(data=data, instance=self.period)
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_existing_period_version_is_read_only(self):
+        form = PeriodForm(instance=self.period)
+        self.assertTrue(form.fields["parameters_version"].disabled)
+        self.assertEqual(
+            form.initial["parameters_version"],
+            self.period.parameters_version,
+        )
+
+    def test_post_cannot_change_existing_period_version(self):
+        self.user.user_permissions.add(*Permission.objects.filter(
+            content_type__app_label="planning_measurements",
+            codename__in=("view_period", "change_period"),
+        ))
+        self.client.force_login(self.user)
+        self.period.thresholds = (
+            "Verde: 100, Amarillo: 80, Rojo: 60, Tope: 150.00"
+        )
+        self.period.computable_days = 21
+        self.period.save(update_fields=["thresholds", "computable_days"])
+        data = self._period_post_data(Period.Status.ACTIVE)
+        data["thresholds"] = self.period.thresholds
+        data["parameters_version"] = "v999"
+
+        response = self.client.post(
+            reverse("planning:period_edit", args=[self.period.pk]),
+            data=data,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.period.refresh_from_db()
+        self.assertEqual(self.period.parameters_version, "v1")
+
     def test_snapshot_is_append_only_and_preserves_previous_values(self):
         a = self.item("C013", "Atenciones")
         self.goal(self.juan, a, 100)
@@ -324,6 +409,84 @@ class PlanIntegrityTests(TestCase):
         snap = self.period.parameter_snapshots.get()
         self.assertEqual(snap.event, "CLOSED")
         self.assertEqual(snap.content["goals"][0]["item"], "Atenciones")
+
+    def test_changing_compliance_cap_increments_version_and_history(self):
+        self.user.user_permissions.add(*Permission.objects.filter(
+            content_type__app_label="planning_measurements",
+            codename__in=("view_period", "change_period"),
+        ))
+        self.client.force_login(self.user)
+        data = self._period_post_data(Period.Status.ACTIVE)
+        data["compliance_cap"] = "130"
+
+        response = self.client.post(
+            reverse("planning:period_edit", args=[self.period.pk]),
+            data=data,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.period.refresh_from_db()
+        self.assertEqual(self.period.parameters_version, "v2")
+        self.assertIn("Tope: 130.00", self.period.thresholds)
+        snapshot = self.period.parameter_snapshots.get()
+        self.assertEqual(snapshot.content["compliance_cap"], "130.00")
+
+        response = self.client.post(
+            reverse("planning:period_edit", args=[self.period.pk]),
+            data=data,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.period.refresh_from_db()
+        self.assertEqual(self.period.parameters_version, "v2")
+        self.assertEqual(self.period.parameter_snapshots.count(), 1)
+
+    def test_edit_rejects_goal_with_unauthorized_measurement_item(self):
+        source_period = self._new_period(
+            date(2026, 10, 1),
+            date(2026, 10, 31),
+        )
+        source_period.save()
+        item = self.item("C099", "Ítem no autorizado")
+        source_goal = self.goal(self.juan, item, 100)
+        source_goal.period = source_period
+        source_goal.save(update_fields=["period"])
+        self.position.catalog_items.remove(item)
+
+        self.user.user_permissions.add(*Permission.objects.filter(
+            content_type__app_label="planning_measurements",
+            codename__in=(
+                "view_period", "change_period", "view_goal", "add_goal",
+            ),
+        ))
+        self.client.force_login(self.user)
+        data = self._period_post_data(Period.Status.ACTIVE)
+        data["existing_goal_ids"] = [str(source_goal.pk)]
+
+        response = self.client.post(
+            reverse("planning:period_edit", args=[self.period.pk]),
+            data=data,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["form"].non_field_errors())
+        self.assertEqual(
+            " ".join(
+                str(error)
+                for error in response.context["form"].non_field_errors()
+            ),
+            "El ítem 'C099 - Ítem no autorizado' no está autorizado "
+            "para el cargo 'Administrativo'.",
+        )
+        self.assertFalse(
+            Goal.objects.filter(
+                period=self.period,
+                employee=self.juan,
+                measurement_item=item,
+            ).exists()
+        )
+        self.period.refresh_from_db()
+        self.assertEqual(self.period.parameters_version, "v1")
 
     def test_failed_close_keeps_status_and_creates_no_snapshot(self):
         a = self.item("C015", "Atenciones")

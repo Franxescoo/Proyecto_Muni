@@ -31,6 +31,14 @@ Asignar metas existentes - La Serena
         ítem para el mismo funcionario y cargo.
     </div>
 
+    {% if error_messages %}
+    {% for message in error_messages %}
+    <div class="alert alert-danger" role="alert">
+        {{ message }}
+    </div>
+    {% endfor %}
+    {% endif %}
+
     <form method="post"
           class="bg-white border rounded p-3 shadow-sm">
 
@@ -108,6 +116,22 @@ Asignar metas existentes - La Serena
             </table>
 
         </div>
+
+        {% if unavailable_goals %}
+        <div class="mt-3">
+            <h2 class="h6">Metas no disponibles</h2>
+            <ul class="list-group small">
+                {% for goal, reason in unavailable_goals %}
+                <li class="list-group-item d-flex justify-content-between gap-3">
+                    <span>
+                        {{ goal.item }}:
+                        <span class="text-muted">{{ reason }}</span>
+                    </span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
 
         <div class="d-flex flex-wrap gap-2 justify-content-end">
 

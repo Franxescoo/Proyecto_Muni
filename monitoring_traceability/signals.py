@@ -1,4 +1,4 @@
-from django.db.models.signals import post_delete, post_save
+from django.db.models.signals import post_delete, post_save, pre_save
 from django.dispatch import receiver
 
 from planning_measurements.models import Goal, Period
@@ -7,6 +7,7 @@ from registration_validation.models import Activity, Evidence, Validation
 from .models import (
     Audit,
     Commitment,
+    CommitmentStatusHistory,
     CommitmentComment,
     Indicator,
 )
@@ -146,6 +147,35 @@ def _record_audit(instance, event):
     )
 
 
+@receiver(pre_save, sender=Commitment)
+def commitment_before_save(sender, instance, **kwargs):
+    if not instance.pk:
+        instance._previous_status = ""
+        return
+    instance._previous_status = (
+        sender.objects.filter(pk=instance.pk)
+        .values_list("status", flat=True)
+        .first()
+        or ""
+    )
+
+
+@receiver(post_save, sender=Commitment)
+def commitment_status_changed(sender, instance, created, **kwargs):
+    previous = getattr(instance, "_previous_status", "")
+    if created or previous != instance.status:
+        CommitmentStatusHistory.objects.create(
+            commitment=instance,
+            previous_status=previous,
+            new_status=instance.status,
+            changed_by=getattr(instance, "_audit_actor_user", None),
+            observation=getattr(instance, "_status_observation", ""),
+        )
+    if instance.status.casefold() in {"completed", "completado", "validated", "validado"}:
+        if instance.activity_id:
+            _recalculate_goal(instance.activity.goal_id)
+
+
 
 @receiver(post_save, sender=Commitment)
 @receiver(post_save, sender=CommitmentComment)
@@ -174,8 +204,6 @@ def tracked_object_deleted(sender, instance, **kwargs):
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
-from django.db.models.signals import pre_save
-
 from accounts.models import UserProfile
 from organization.models import (
     Delegation,

@@ -2,7 +2,7 @@
 """Vistas con permisos de Django y alcance territorial comprobados en servidor."""
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models.deletion import ProtectedError
 from django.db.models import Count, Q
@@ -47,6 +47,25 @@ def _saved(request, message, url):
         return JsonResponse({"ok": True, "message": message})
     messages.success(request, message)
     return redirect(url)
+
+
+def _audit_changes(target, actor, relation, action, changes):
+    if not changes:
+        return
+    details = "; ".join(
+        f"{label}: «{old}» → «{new}»"
+        for label, old, new in changes
+    )
+    EventActionAudit.objects.create(
+        **{relation: target},
+        actor=actor,
+        action=action,
+        reason=details,
+    )
+
+
+def _display_value(value):
+    return str(value) if value not in (None, "") else "vacío"
 
 
 def _modal_detail(request, template, context):
@@ -201,9 +220,15 @@ def event_list(request):
 def event_create(request):
     form = EventForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
-        item = form.save(commit=False)
-        item.created_by = request.user
-        item.save()
+        with transaction.atomic():
+            item = form.save(commit=False)
+            item.created_by = request.user
+            item.full_clean()
+            item.save()
+            _audit_changes(
+                item, request.user, "event", "CREADO",
+                [("Registro", "—", item.name)],
+            )
         return _saved(request, "Evento municipal creado.", "municipal_events:event_list")
     return _form_response(request, form, "Crear evento municipal", reverse("municipal_events:event_list"), "events")
 
@@ -213,7 +238,20 @@ def event_edit(request, pk):
     event = get_object_or_404(MunicipalEvent, pk=pk, deleted_at__isnull=True)
     form = EventForm(request.POST or None, instance=event)
     if request.method == "POST" and form.is_valid():
-        form.save()
+        original = MunicipalEvent.objects.get(pk=event.pk)
+        changes = [
+            ("Nombre", original.name, form.cleaned_data["name"]),
+            ("Descripción", _display_value(original.description),
+             _display_value(form.cleaned_data["description"])),
+        ]
+        changes = [change for change in changes if change[1] != change[2]]
+        with transaction.atomic():
+            item = MunicipalEvent.objects.select_for_update().get(pk=event.pk)
+            item.name = form.cleaned_data["name"]
+            item.description = form.cleaned_data["description"]
+            item.full_clean()
+            item.save(update_fields=["name", "description"])
+            _audit_changes(item, request.user, "event", "MODIFICADO", changes)
         return _saved(request, "Evento municipal actualizado.", "municipal_events:event_list")
     return _form_response(request, form, "Modificar evento municipal", reverse("municipal_events:event_list"), "events")
 
@@ -223,20 +261,25 @@ def edition_create(request, event_id):
     event = get_object_or_404(MunicipalEvent, pk=event_id, deleted_at__isnull=True)
     form = EditionForm(request.POST or None, user=request.user)
     if request.method == "POST" and form.is_valid():
-        item = form.save(commit=False)
-        require_delegation(request.user, "municipal_events.add_eventedition", item.delegation_id)
-        item.event = event
-        item.responsible = request.user
-        if EventEdition.objects.filter(event=event, year=item.year).exists():
-            form.add_error("year", "Ya existe una edición de ese evento para el año seleccionado.")
-        else:
-            item.full_clean()
-            try:
-                item.save()
-            except IntegrityError:
+        with transaction.atomic():
+            item = form.save(commit=False)
+            require_delegation(request.user, "municipal_events.add_eventedition", item.delegation_id)
+            item.event = event
+            item.responsible = request.user
+            if EventEdition.objects.filter(event=event, year=item.year).exists():
                 form.add_error("year", "Ya existe una edición de ese evento para el año seleccionado.")
             else:
-                return _saved(request, "Edición anual creada.", "municipal_events:event_list")
+                item.full_clean()
+                try:
+                    item.save()
+                except IntegrityError:
+                    form.add_error("year", "Ya existe una edición de ese evento para el año seleccionado.")
+                else:
+                    _audit_changes(
+                        item, request.user, "edition", "CREADO",
+                        [("Registro", "—", f"{item.year} · {item.place}")],
+                    )
+                    return _saved(request, "Edición anual creada.", "municipal_events:event_list")
     return _form_response(request, form, f"Nueva edición de {event.name}", reverse("municipal_events:event_list"), "events")
 
 
@@ -251,18 +294,45 @@ def edition_edit(request, pk):
     scope = allowed_delegation_ids(request.user, "municipal_events.change_eventedition")
     form.fields["delegation"].queryset = Delegation.objects.filter(pk__in=scope) if scope is not None else Delegation.objects.all()
     if request.method == "POST" and form.is_valid():
-        item = form.save(commit=False)
-        require_delegation(request.user, "municipal_events.change_eventedition", item.delegation_id)
-        if EventEdition.objects.filter(event=edition.event, year=item.year).exclude(pk=item.pk).exists():
-            form.add_error("year", "El evento ya tiene una edición para este año.")
-        else:
-            item.full_clean()
-            try:
-                item.save()
-            except IntegrityError:
+        original = EventEdition.objects.get(pk=edition.pk)
+        fields = (
+            ("Año", "year", "year"), ("Fecha", "date", "date"),
+            ("Lugar", "place", "place"),
+            ("Delegación", "delegation_id", "delegation"),
+            ("Estado", "status", "status"),
+            ("Modalidad", "participation_mode", "participation_mode"),
+            ("Cupos", "participation_capacity", "participation_capacity"),
+            ("Requisitos", "participation_requirements", "participation_requirements"),
+            ("Observaciones", "notes", "notes"),
+        )
+        changes = [
+            (label, _display_value(getattr(original, name)),
+             _display_value(
+                 form.cleaned_data[key].pk
+                 if hasattr(form.cleaned_data[key], "pk")
+                 else form.cleaned_data[key]
+             ))
+            for label, name, key in fields
+            if getattr(original, name) != (
+                form.cleaned_data[key].pk
+                if hasattr(form.cleaned_data[key], "pk")
+                else form.cleaned_data[key]
+            )
+        ]
+        with transaction.atomic():
+            item = form.save(commit=False)
+            require_delegation(request.user, "municipal_events.change_eventedition", item.delegation_id)
+            if EventEdition.objects.filter(event=edition.event, year=item.year).exclude(pk=item.pk).exists():
                 form.add_error("year", "El evento ya tiene una edición para este año.")
             else:
-                return _saved(request, "Edición actualizada sin perder las anteriores.", "municipal_events:event_list")
+                item.full_clean()
+                try:
+                    item.save()
+                except IntegrityError:
+                    form.add_error("year", "El evento ya tiene una edición para este año.")
+                else:
+                    _audit_changes(item, request.user, "edition", "MODIFICADO", changes)
+                    return _saved(request, "Edición actualizada sin perder las anteriores.", "municipal_events:event_list")
     return _form_response(request, form, f"Modificar edición: {edition.event.name}", reverse("municipal_events:event_list"), "events")
 
 
@@ -305,11 +375,16 @@ def campaign_list(request):
 def campaign_create(request):
     form = CampaignForm(request.POST or None, user=request.user)
     if request.method == "POST" and form.is_valid():
-        item = form.save(commit=False)
-        require_delegation(request.user, "municipal_events.add_campaign", item.organizing_delegation_id)
-        item.created_by = request.user
-        item.full_clean()
-        item.save()
+        with transaction.atomic():
+            item = form.save(commit=False)
+            require_delegation(request.user, "municipal_events.add_campaign", item.organizing_delegation_id)
+            item.created_by = request.user
+            item.full_clean()
+            item.save()
+            _audit_changes(
+                item, request.user, "campaign", "CREADO",
+                [("Registro", "—", item.title)],
+            )
         if _is_modal(request):
             return _saved(request, "Campaña municipal creada.", "municipal_events:campaign_list")
         messages.success(request, "Campaña municipal creada.")
@@ -328,10 +403,36 @@ def campaign_edit(request, pk):
     scope = allowed_delegation_ids(request.user, "municipal_events.change_campaign")
     form.fields["organizing_delegation"].queryset = Delegation.objects.filter(pk__in=scope) if scope is not None else Delegation.objects.all()
     if request.method == "POST" and form.is_valid():
-        item = form.save(commit=False)
-        require_delegation(request.user, "municipal_events.change_campaign", item.organizing_delegation_id)
-        item.full_clean()
-        item.save()
+        original = Campaign.objects.get(pk=campaign.pk)
+        fields = (
+            ("Nombre", "title", "title"), ("Año", "year", "year"),
+            ("Descripción", "description", "description"),
+            ("Tipo de atención", "attention_type_id", "attention_type"),
+            ("Edición", "edition_id", "edition"),
+            ("Delegación", "organizing_delegation_id", "organizing_delegation"),
+            ("Inicio", "opens_on", "opens_on"), ("Fin", "closes_on", "closes_on"),
+            ("Edad máxima", "max_age", "max_age"), ("Estado", "status", "status"),
+        )
+        changes = [
+            (label, _display_value(getattr(original, name)),
+             _display_value(
+                 form.cleaned_data[key].pk
+                 if hasattr(form.cleaned_data[key], "pk")
+                 else form.cleaned_data[key]
+             ))
+            for label, name, key in fields
+            if getattr(original, name) != (
+                form.cleaned_data[key].pk
+                if hasattr(form.cleaned_data[key], "pk")
+                else form.cleaned_data[key]
+            )
+        ]
+        with transaction.atomic():
+            item = form.save(commit=False)
+            require_delegation(request.user, "municipal_events.change_campaign", item.organizing_delegation_id)
+            item.full_clean()
+            item.save()
+            _audit_changes(item, request.user, "campaign", "MODIFICADO", changes)
         if _is_modal(request):
             return _saved(request, "Campaña actualizada.", "municipal_events:campaign_list")
         messages.success(request, "Campaña actualizada.")
@@ -390,7 +491,10 @@ def campaigns_for_attention(request, attention_id):
 
 @_gate("municipal_events.add_enrollment")
 def enrollment_create(request, pk):
-    campaign = get_object_or_404(Campaign, pk=pk, deleted_at__isnull=True)
+    campaign = get_object_or_404(
+        Campaign.objects.select_related("attention_type", "edition__event"),
+        pk=pk, deleted_at__isnull=True,
+    )
     attention_id = request.GET.get("attention") if request.method == "GET" else request.POST.get("attention")
     attention = get_object_or_404(AttentionEntry, pk=attention_id, deleted_at__isnull=True)
     if not can_register_from_attention(request.user, attention, campaign):
@@ -399,16 +503,32 @@ def enrollment_create(request, pk):
     if request.method == "POST" and form.is_valid():
         data = form.cleaned_data
         rut = data["rut"]
-        prior = Enrollment.objects.filter(campaign=campaign, beneficiary__rut=rut).first()
-        if prior:
-            # No revelar el nombre ni la delegación de otra inscripción.
-            if prior.deleted_at is not None:
-                form.add_error("rut", "El beneficiario ya está inscrito en esta campaña, pero la inscripción está desactivada. Solicita su reactivación a personal autorizado.")
-            else:
-                form.add_error("rut", "El beneficiario ya está inscrito en esta campaña (incluidas otras delegaciones).")
-        else:
-            try:
-                with transaction.atomic():
+        try:
+            with transaction.atomic():
+                    locked_campaign = Campaign.objects.select_for_update().select_related(
+                        "attention_type", "edition__event"
+                    ).get(pk=campaign.pk)
+                    if not can_register_from_attention(
+                        request.user, attention, locked_campaign
+                    ):
+                        raise PermissionDenied(
+                            "La campaña, el tipo de atención o la delegación "
+                            "no permiten esta inscripción."
+                        )
+                    prior = Enrollment.objects.filter(
+                        campaign=locked_campaign, beneficiary__rut=rut
+                    ).first()
+                    if prior:
+                        if prior.deleted_at is not None:
+                            raise ValueError(
+                                "El beneficiario ya está inscrito en esta campaña, "
+                                "pero la inscripción está desactivada. Solicita "
+                                "su reactivación a personal autorizado."
+                            )
+                        raise ValueError(
+                            "El beneficiario ya está inscrito en esta campaña "
+                            "(incluidas otras delegaciones)."
+                        )
                     beneficiary, created = Beneficiary.objects.get_or_create(rut=rut, defaults={"name": data["name"], "birth_date": data["birth_date"], "sex": data["sex"]})
                     if not created and beneficiary.birth_date != data["birth_date"]:
                         raise ValueError("Los datos del beneficiario no coinciden con un registro existente. Solicita una revisión autorizada.")
@@ -418,28 +538,33 @@ def enrollment_create(request, pk):
                         if not beneficiary.sex:
                             beneficiary.sex = data["sex"]
                             beneficiary.save(update_fields=["sex"])
-                    enrollment = Enrollment(campaign=campaign, beneficiary=beneficiary, attention=attention, delegation=attention.delegation, observation=data["observation"], created_by=request.user)
+                    enrollment = Enrollment(campaign=locked_campaign, beneficiary=beneficiary, attention=attention, delegation=attention.delegation, observation=data["observation"], created_by=request.user)
                     enrollment.full_clean()
                     enrollment.save()
                     CampaignAudit.objects.create(enrollment=enrollment, action="INSCRITA", actor=request.user, reason="Inscripción registrada desde atención")
-            except (IntegrityError, ValueError) as exc:
-                # El conflicto puede ser concurrente: no revelar datos de otras delegaciones.
-                if isinstance(exc, IntegrityError):
-                    form.add_error("rut", "El beneficiario ya está inscrito en esta campaña o existe un registro concurrente. Revisa la bandeja.")
-                else:
-                    form.add_error("rut", str(exc))
-            else:
-                # SGR_CONFIRMACION_INSCRIPCION_UNICA_V1: sesión temporal, sin crear otro Enrollment.
-                request.session["sgr_ultima_inscripcion_creada"] = {
-                    "campaign_id": campaign.pk, "enrollment_id": enrollment.pk,
-                }
-                messages.success(
-                    request,
-                    f"Inscripción registrada correctamente: {beneficiary.name} en "
-                    f"{campaign.title} ({campaign.year}). Pendiente de evaluación; "
-                    "no se ha registrado una entrega.",
+        except (IntegrityError, ValueError, ValidationError) as exc:
+            if isinstance(exc, IntegrityError):
+                message = (
+                    "El beneficiario ya está inscrito en esta campaña o existe "
+                    "un registro concurrente. Revisa la bandeja."
                 )
-                return redirect("municipal_events:campaign_detail", pk=pk)
+                form.add_error("rut", message)
+            elif isinstance(exc, ValidationError):
+                for message in exc.messages:
+                    form.add_error(None, message)
+            else:
+                form.add_error("rut", str(exc))
+        else:
+            request.session["sgr_ultima_inscripcion_creada"] = {
+                "campaign_id": campaign.pk, "enrollment_id": enrollment.pk,
+            }
+            messages.success(
+                request,
+                f"Inscripción registrada correctamente: {beneficiary.name} en "
+                f"{campaign.title} ({campaign.year}). Pendiente de evaluación; "
+                "no se ha registrado una entrega.",
+            )
+            return redirect("municipal_events:campaign_detail", pk=pk)
     return render(request, "municipal_events/enroll_form.html", {"form": form, "campaign": campaign, "attention": attention, "section": "enrollments"})
 
 

@@ -1,0 +1,151 @@
+{% if open_modal %}
+<div class="modal fade sgr-upgraded-modal" id="commitmentModal" tabindex="-1" aria-labelledby="commitmentModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <form method="post" action="{{ modal_action }}" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="action" value="{% if modal_commitment %}edit_commitment{% else %}create_commitment{% endif %}">
+                {% if modal_commitment %}<input type="hidden" name="commitment_id" value="{{ modal_commitment.pk }}">{% endif %}
+                <div class="modal-header">
+                    <div class="sgr-modal-title-block">
+                        <div class="sgr-modal-eyebrow"><i class="bi bi-shield-check me-2" aria-hidden="true"></i>MONITOREO Y TRAZABILIDAD</div>
+                        <h5 class="modal-title" id="commitmentModalLabel">{{ modal_title }}</h5>
+                        <p class="sgr-modal-subtitle mb-0">Completa la información del compromiso de forma segura.</p>
+                    </div>
+                    <a href="{% url 'monitoring:commitment_list' %}" class="btn-close" aria-label="Cerrar"></a>
+                </div>
+                <div class="modal-body">
+                    <div class="sgr-form-section-title"><span class="sgr-section-icon"><i class="bi bi-card-list" aria-hidden="true"></i></span><span>Información del compromiso</span></div>
+                    {% if commitment_form.non_field_errors %}
+                    <div class="alert alert-danger">{% for error in commitment_form.non_field_errors %}<div>{{ error }}</div>{% endfor %}</div>
+                    {% endif %}
+                    <div class="row g-3">
+                        {% with field=commitment_form.delegation %}
+                        <div class="col-12 col-md-4">
+                            {{ field.label_tag }}<button type="button" class="sgr-help-hint" data-help="Selecciona la delegación relacionada. Esta selección determina qué actividades estarán disponibles." aria-label="Ayuda sobre delegación">?</button>
+                            {{ field }}
+                            {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+                            {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                        </div>
+                        {% endwith %}
+                        {% if modal_commitment %}
+                        {% with field=commitment_form.responsible %}
+                        <div class="col-12 col-md-4">
+                            {{ field.label_tag }}<button type="button" class="sgr-help-hint" data-help="Responsable actual del compromiso. En edición se muestra, pero no se modifica desde este formulario." aria-label="Ayuda sobre responsable">?</button>{{ field }}
+                            {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                        </div>
+                        {% endwith %}
+                        {% endif %}
+                        {% with field=commitment_form.activity %}
+                        <div class="col-12 col-md-4">
+                            {{ field.label_tag }}<button type="button" class="sgr-help-hint" data-help="Selecciona una actividad de la delegación elegida. Sus datos completan automáticamente el compromiso." aria-label="Ayuda sobre actividad">?</button>{{ field }}
+                            {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+                            {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                        </div>
+                        {% endwith %}
+                        {% with field=commitment_form.origin %}
+                        <div class="col-12 col-md-4">
+                            {{ field.label_tag }}<button type="button" class="sgr-help-hint" data-help="Meta asociada a la actividad. Se completa automáticamente y no se edita aquí." aria-label="Ayuda sobre meta">?</button>{{ field }}
+                            {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+                        </div>
+                        {% endwith %}
+                        {% with field=commitment_form.requester %}
+                        <div class="col-12 col-md-4">
+                            {{ field.label_tag }}<button type="button" class="sgr-help-hint" data-help="Solicitante asociado a la actividad seleccionada. Se completa automáticamente." aria-label="Ayuda sobre solicitante">?</button>{{ field }}
+                            {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+                        </div>
+                        {% endwith %}
+                        {% with field=commitment_form.territory %}
+                        <div class="col-12 col-md-4">
+                            {{ field.label_tag }}<button type="button" class="sgr-help-hint" data-help="Territorio del compromiso. Se propone desde la actividad y puede ajustarse cuando corresponda." aria-label="Ayuda sobre territorio">?</button>{{ field }}
+                            {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+                            {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                        </div>
+                        {% endwith %}
+                        {% with field=commitment_form.commitment_date %}
+                        <div class="col-12 col-md-4">
+                            {{ field.label_tag }}<button type="button" class="sgr-help-hint" data-help="Fecha de cumplimiento tomada del período de la actividad." aria-label="Ayuda sobre fecha">?</button>{{ field }}
+                            {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+                        </div>
+                        {% endwith %}
+                        {% with field=commitment_form.status %}
+                        <div class="col-12 col-md-4">
+                            {{ field.label_tag }}<button type="button" class="sgr-help-hint" data-help="Estado actual de la actividad asociada. Se completa automáticamente." aria-label="Ayuda sobre estado">?</button>{{ field }}
+                            {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                        </div>
+                        {% endwith %}
+                        {% with field=commitment_form.observation %}
+                        <div class="col-12">
+                            {{ field.label_tag }}<button type="button" class="sgr-help-hint" data-help="Agrega una observación útil para el seguimiento del compromiso." aria-label="Ayuda sobre observación">?</button>{{ field }}
+                            {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                        </div>
+                        {% endwith %}
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <a href="{% url 'monitoring:commitment_list' %}" class="btn btn-outline-secondary" data-help="Cierra la ventana sin guardar cambios.">Cancelar</a>
+                    <button type="submit" class="btn btn-primary" data-help="Guarda el compromiso con la delegación y actividad seleccionadas."><i class="bi bi-check2-circle me-1" aria-hidden="true"></i>Guardar compromiso</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const delegation = document.getElementById("id_delegation");
+    const responsible = document.getElementById("id_responsible");
+    const activity = document.getElementById("id_activity");
+    const origin = document.getElementById("id_origin");
+    const requester = document.getElementById("id_requester");
+    const territory = document.getElementById("id_territory");
+    const commitmentDate = document.getElementById("id_commitment_date");
+    const status = document.getElementById("id_status");
+    const form = document.querySelector("#commitmentModal form");
+    if (!delegation || !activity) return;
+
+    const filterOptions = (select, delegationId) => {
+        if (!select || !select.options) return;
+        Array.from(select.options).forEach((option) => {
+            if (!option.value) {
+                option.hidden = false;
+                return;
+            }
+            const matches = option.dataset.delegationId === delegationId;
+            option.hidden = !matches;
+            option.disabled = !matches;
+        });
+        if (select.selectedOptions[0] && select.selectedOptions[0].disabled) {
+            select.value = "";
+        }
+        select.disabled = !delegationId;
+    };
+
+    const updateFromActivity = () => {
+        const option = activity.selectedOptions[0];
+        const values = option ? option.dataset : {};
+        if (origin) origin.value = values.goal || "";
+        if (requester) requester.value = values.requester || "";
+        if (territory) territory.value = values.territory || "";
+        if (commitmentDate) {
+            commitmentDate.value = values.commitmentDate || "";
+        }
+        if (status) status.value = values.status || "";
+    };
+
+    const refresh = () => {
+        const delegationId = delegation.value;
+        filterOptions(responsible, delegationId);
+        filterOptions(activity, delegationId);
+        updateFromActivity();
+    };
+
+    delegation.addEventListener("change", refresh);
+    activity.addEventListener("change", updateFromActivity);
+    form.addEventListener("submit", () => {
+        responsible.disabled = false;
+        activity.disabled = false;
+    });
+    refresh();
+});
+</script>
+{% endif %}

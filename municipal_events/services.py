@@ -30,4 +30,6 @@ def campaign_active_queryset():
     from .models import Campaign
     today = timezone.localdate()
     return Campaign.objects.filter(status="OPEN", deleted_at__isnull=True,
+                                   attention_type__status=True,
+                                   attention_type__deleted_at__isnull=True,
                                    opens_on__lte=today, closes_on__gte=today)

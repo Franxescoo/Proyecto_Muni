@@ -221,8 +221,25 @@ class Commitment(BaseModel):
             "commitment_id",
         )
 
+    class Status(models.TextChoices):
+        PENDING = "Pending", "No iniciado"
+        IN_PROGRESS = "In progress", "En progreso"
+        COMPLETED = "Completed", "Completado"
+        VALIDATED = "Validated", "Validado"
+        CANCELLED = "Cancelled", "Cancelado"
+
     def clean(self):
         super().clean()
+
+        if self.activity_id:
+            duplicate = Commitment.objects.filter(
+                activity_id=self.activity_id,
+                deleted_at__isnull=True,
+            ).exclude(pk=self.pk)
+            if duplicate.exists():
+                raise ValidationError(
+                    {"activity": "Ya existe un compromiso asociado a esta actividad."}
+                )
 
         if self.responsible_id and self.delegation_id:
             if (
@@ -245,8 +262,14 @@ class Commitment(BaseModel):
         )
 
     @property
+    def effective_status(self):
+        return self.activity.status if self.activity_id and self.activity else self.status
+
+    @property
     def is_completed(self):
-        return self.status.lower() in {"completed", "completado", "realizado"}
+        return self.effective_status.lower() in {
+            "completed", "completado", "realizado", "validated", "validado",
+        }
 
     @property
     def is_overdue(self):
@@ -301,6 +324,84 @@ class CommitmentComment(BaseModel):
 
     def __str__(self):
         return f"Comment {self.comment_id} - {self.commitment}"
+
+
+class CommitmentStatusHistory(BaseModel):
+    history_id = models.BigAutoField(primary_key=True)
+    commitment = models.ForeignKey(
+        Commitment,
+        on_delete=models.PROTECT,
+        related_name="status_history",
+    )
+    previous_status = models.CharField(max_length=50, blank=True)
+    new_status = models.CharField(max_length=50)
+    changed_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="commitment_status_changes",
+    )
+    observation = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ("-created_at", "-history_id")
+
+
+class CommitmentReassignment(BaseModel):
+    reassignment_id = models.BigAutoField(primary_key=True)
+    commitment = models.ForeignKey(
+        Commitment,
+        on_delete=models.PROTECT,
+        related_name="reassignments",
+    )
+    previous_responsible = models.ForeignKey(
+        "organization.Employee",
+        on_delete=models.PROTECT,
+        related_name="commitments_reassigned_from",
+    )
+    new_responsible = models.ForeignKey(
+        "organization.Employee",
+        on_delete=models.PROTECT,
+        related_name="commitments_reassigned_to",
+    )
+    reason = models.TextField()
+    changed_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.PROTECT,
+        related_name="commitment_reassignments",
+    )
+
+    class Meta:
+        ordering = ("-created_at", "-reassignment_id")
+
+
+class CommitmentAlert(BaseModel):
+    alert_id = models.BigAutoField(primary_key=True)
+    commitment = models.ForeignKey(
+        Commitment,
+        on_delete=models.PROTECT,
+        related_name="alerts",
+    )
+    alert_type = models.CharField(max_length=40)
+    message = models.CharField(max_length=255)
+    due_at = models.DateField(null=True, blank=True)
+    read_at = models.DateTimeField(null=True, blank=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("resolved_at", "-due_at", "-created_at")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("commitment", "alert_type"),
+                condition=models.Q(resolved_at=None),
+                name="unique_active_commitment_alert",
+            ),
+        ]
+
+    @property
+    def is_open(self):
+        return self.resolved_at is None
 
 
 class Audit(BaseModel):
