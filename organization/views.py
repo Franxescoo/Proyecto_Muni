@@ -11,7 +11,7 @@ from django.views.decorators.http import require_POST
 from django.utils.http import url_has_allowed_host_and_scheme
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from accounts.services import sync_employee
+from accounts.services import sync_employee, sync_position, validate_employee_role_scope
 from accounts.permissions import allowed_delegation_ids
 
 from .forms import (
@@ -28,7 +28,7 @@ from .models import (
     DelegationResponsibilityLog,
     OrganizationRole,
 )
-from .exports import role_delegations, workbook_response
+from .exports import workbook_response
 from .permission_labels import catalog_permission_queryset
 
 from django.db import IntegrityError
@@ -98,16 +98,6 @@ def organization_pagination(request, queryset):
 def organization_paging_context(request):
     return {"page_size": organization_page_size(request),
             "page_size_options": ORG_PAGE_SIZE_CHOICES}
-
-
-def role_filter_delegation(groups, value):
-    if value and value.isdecimal():
-        groups = groups.filter(
-            Q(organization_role__application_delegations__pk=value)
-            | Q(organization_role__application_delegations__isnull=True,
-                organization_role__delegation_id=value)
-        ).distinct()
-    return groups
 
 
 def user_filter_delegation(users, value):
@@ -230,13 +220,10 @@ def _limit_form_choices(
                 pk__in=permitted
             )
         )
-        form.fields["groups"].queryset = form.fields["groups"].queryset.filter(
-            Q(organization_role__application_delegations__pk__in=permitted)
-            | Q(
-                organization_role__application_delegations__isnull=True,
-                organization_role__delegation_id__in=permitted,
-            )
-        ).distinct()
+        # Los roles del cargo no se filtran por delegación del rol.
+        # Su ámbito de ejecución se limita en accounts.permissions a las
+        # delegaciones autorizadas del usuario.
+
 
 
 def _sync_employee_account(employee, form):
@@ -278,7 +265,7 @@ def _sync_employee_account(employee, form):
         },
     )
     profile.authorized_delegations.set(delegations or [primary])
-    user.groups.set(form.cleaned_data.get("groups") or [])
+    # El cargo es la única fuente de roles para una cuenta vinculada.
     sync_user_groups(user)
 
 
@@ -321,8 +308,14 @@ def _handle_mutations(
             ):
                 messages.error(request, "No se puede archivar esta delegación mientras tenga empleados, usuarios o roles vinculados.")
                 return None
-            record.deleted_at = timezone.now()
-            record.save(update_fields=["deleted_at", "updated_at"])
+            with transaction.atomic():
+                record.deleted_at = timezone.now()
+                record.save(update_fields=["deleted_at", "updated_at"])
+                if isinstance(record, Employee):
+                    # Archivar no puede dejar una cuenta con permisos heredados.
+                    sync_employee(record)
+                elif isinstance(record, PositionFunction):
+                    sync_position(record)
             messages.success(
                 request,
                 f"{object_label.capitalize()} archivado correctamente.",
@@ -389,6 +382,24 @@ def _handle_mutations(
                         )
 
             elif isinstance(form, EmployeeForm):
+                # Nadie puede elevar sus propios roles cambiándose de cargo.
+                actor_employee_id = getattr(getattr(request.user, "profile", None), "employee_id", None)
+                if actor_employee_id and instance and actor_employee_id == instance.pk:
+                    old_role_ids = set(request.user.groups.values_list("pk", flat=True))
+                    new_position = form.cleaned_data.get("position")
+                    new_role_ids = (set(new_position.role_groups.values_list("pk", flat=True))
+                                    if new_position else set())
+                    if old_role_ids != new_role_ids:
+                        raise PermissionDenied("No puedes modificar tus propios roles cambiando de cargo.")
+
+                # No permitir otorgar mediante el cargo permisos que el actor no posee.
+                selected_position = form.cleaned_data.get("position")
+                if selected_position and not request.user.is_superuser:
+                    granted = request.user.get_all_permissions()
+                    for group in selected_position.role_groups.prefetch_related("permissions__content_type"):
+                        if any(f"{permission.content_type.app_label}.{permission.codename}" not in granted
+                               for permission in group.permissions.all()):
+                            raise PermissionDenied("No puedes asignar un cargo con permisos superiores a los tuyos.")
 
                 with transaction.atomic():
 
@@ -408,8 +419,28 @@ def _handle_mutations(
                             )
 
                     _sync_employee_account(saved, form)
-                    # Copiar los roles del Usuario al Funcionario.
+                    # Reemplazar los grupos antiguos por los del cargo actual.
                     sync_employee(saved)
+
+            elif isinstance(form, PositionForm):
+                # Impedir modificar los roles del cargo propio.
+                actor_employee = getattr(getattr(request.user, "profile", None), "employee", None)
+                if (instance is not None and actor_employee is not None
+                    and actor_employee.position_id == instance.pk):
+                    old_ids = set(instance.role_groups.values_list("pk", flat=True))
+                    new_ids = set(form.cleaned_data["role_groups"].values_list("pk", flat=True))
+                    if old_ids != new_ids:
+                        raise PermissionDenied("No puedes modificar los roles de tu propio cargo.")
+                if not request.user.is_superuser:
+                    granted = request.user.get_all_permissions()
+                    for group in form.cleaned_data["role_groups"].prefetch_related("permissions__content_type"):
+                        if any(f"{permission.content_type.app_label}.{permission.codename}" not in granted
+                               for permission in group.permissions.all()):
+                            raise PermissionDenied("No puedes asignar a un cargo permisos superiores a los tuyos.")
+                with transaction.atomic():
+                    saved = form.save()
+                    # Cambiar roles del cargo actualiza a todos sus empleados.
+                    sync_position(saved)
 
             else:
                 saved = form.save()
@@ -485,23 +516,15 @@ def _handle_mutations(
 
 
 def _role_groups_for(user, action="view"):
-    """Roles alcanzables por permiso específico y delegación, sin ser superusuario."""
+    """Roles del catálogo, sin delegaciones por rol; requiere permiso funcional."""
     _require_permission(user, action, "organizationrole")
-    groups = Group.objects.all()
-    if user.is_superuser:
-        return groups
-    scopes = allowed_delegation_ids(user, f"organization.{action}_organizationrole", active_only=False)
-    if not scopes:
-        return groups.none()
-    return groups.filter(
-        Q(organization_role__application_delegations__pk__in=scopes)
-        | Q(organization_role__application_delegations__isnull=True,
-            organization_role__delegation_id__in=scopes)
-        | Q(
-            organization_role__application_delegations__isnull=True,
-            organization_role__delegation__isnull=True,
+    if not user.is_superuser:
+        authorized = allowed_delegation_ids(
+            user, f"organization.{action}_organizationrole", active_only=False
         )
-    ).distinct()
+        if not authorized:
+            return Group.objects.none()
+    return Group.objects.filter(organization_role__isnull=False)
 
 
 def _role_target(user, pk, action):
@@ -520,18 +543,7 @@ def _role_target(user, pk, action):
                 raise PermissionDenied(
                     "El rol contiene permisos fuera de tu autorización."
                 )
-        role = getattr(group, "organization_role", None)
-        if role is not None:
-            allowed = allowed_delegation_ids(
-                user, f"organization.{action}_organizationrole", active_only=False
-            )
-            assigned = set(
-                role.application_delegations.values_list("pk", flat=True)
-            )
-            if not assigned and role.delegation_id:
-                assigned = {role.delegation_id}
-            if assigned and not assigned.issubset(allowed):
-                raise PermissionDenied("El rol incluye delegaciones que no administras.")
+
     return group
 
 
@@ -559,10 +571,7 @@ def role_list(request):
         groups = groups.filter(
             Q(name__icontains=search)
             | Q(organization_role__description__icontains=search)
-            | Q(organization_role__delegation__name__icontains=search)
         ).distinct()
-    selected_delegation = _query(request.GET.get("delegation"))
-    groups = role_filter_delegation(groups, selected_delegation)
     form = None
     modal_action = ""
     object_id = ""
@@ -573,7 +582,12 @@ def role_list(request):
         object_id = request.POST.get("object_id", "")
         if modal_action == "delete":
             group = _role_target(request.user, object_id, "delete")
-            if group.positions.exists() or group.user_set.exists() or group.assigned_employees.exists():
+            if (
+                group.positions.exists()
+                or group.role_positions.exists()
+                or group.user_set.exists()
+                or group.assigned_employees.exists()
+            ):
                 messages.error(
                     request,
                     "No se puede eliminar el rol mientras esté asignado a un cargo, empleado o usuario.",
@@ -658,17 +672,15 @@ def role_export(request):
         groups = groups.filter(
             Q(name__icontains=search)
             | Q(organization_role__description__icontains=search)
-            | Q(organization_role__delegation__name__icontains=search)
         ).distinct()
-    groups = role_filter_delegation(groups, _query(request.GET.get("delegation")))
+    # Los roles son globales; el alcance de acceso se controla en cada cuenta.
     return workbook_response(
         "roles.xlsx",
-        ["Rol", "Descripción", "Delegaciones de aplicación", "Permisos"],
+        ["Rol", "Descripción", "Permisos"],
         [
             (
                 group.name,
                 getattr(getattr(group, "organization_role", None), "description", ""),
-                role_delegations(group),
                 group.permissions.count(),
             )
             for group in groups

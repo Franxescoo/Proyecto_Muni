@@ -63,6 +63,7 @@ SPECIAL = {
     "withdraw_eventparticipation": "Puede retirar participantes de eventos",
     "reactivate_eventparticipation": "Puede reactivar participantes de eventos",
     "delete_closed_period": "Puede eliminar períodos cerrados",
+    "reopen_closed_period": "Puede reabrir períodos cerrados",
     "derivar_solicitud": "Puede derivar solicitudes ciudadanas",
 }
 
@@ -148,27 +149,40 @@ CATALOG_ACTIONS = {
 }
 
 
+
 def catalog_permission_queryset(queryset):
-    """Return only permissions backed by real application operations."""
+    """Devuelve los permisos disponibles para Roles y Permisos."""
     from django.db.models import Q
 
     permission_filter = Q()
+
     for app_label, models in CATALOG_MODELS.items():
         for model in models:
             actions = CATALOG_ACTIONS.get((app_label, model))
+
             model_filter = Q(
                 content_type__app_label=app_label,
                 content_type__model=model,
             )
+
             if actions is not None:
                 model_filter &= Q(codename__in=actions)
+
             permission_filter |= model_filter
 
-    return queryset.filter(permission_filter).order_by(
-        "content_type__app_label",
-        "content_type__model",
-        "codename",
+    return (
+        queryset.filter(permission_filter)
+        .exclude(
+            content_type__app_label="planning_measurements",
+            codename="delete_closed_period",
+        )
+        .order_by(
+            "content_type__app_label",
+            "content_type__model",
+            "codename",
+        )
     )
+
 
 
 def permission_label(permission):

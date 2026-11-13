@@ -98,14 +98,22 @@ class PositionFunction(BaseModel):
     validity_start = models.DateField()
     validity_end = models.DateField()
 
+    # Campo heredado: se conserva para no perder datos históricos.
+    # Las nuevas asignaciones se administran mediante role_groups.
     group = models.ForeignKey(
-    "auth.Group",
-    on_delete=models.PROTECT,
-    null=True,
-    blank=True,
-    related_name="positions",
-    verbose_name="Grupo de permisos",
-)
+        "auth.Group",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="positions",
+        verbose_name="Grupo de permisos",
+    )
+    role_groups = models.ManyToManyField(
+        "auth.Group",
+        blank=True,
+        related_name="role_positions",
+        verbose_name="Roles del cargo",
+    )
 
     class Meta:
         verbose_name = "Position and Role"

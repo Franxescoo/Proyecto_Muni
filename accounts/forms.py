@@ -172,12 +172,13 @@ class GroupForm(BootstrapMixin, forms.ModelForm):
 
 
 class PositionForm(BootstrapMixin, forms.ModelForm):
-    """Gestiona cargos sin asignarles grupos de permisos."""
+    """Gestiona cargos y los roles definidos en Roles y Permisos."""
 
     class Meta:
         model = PositionFunction
         fields = [
             "position_name",
+            "role_groups",
             "catalog_items",
             "catalog_services",
             "weightings",
@@ -186,6 +187,7 @@ class PositionForm(BootstrapMixin, forms.ModelForm):
         ]
         labels = {
             "position_name": "Nombre del cargo",
+            "role_groups": "Roles asociados al cargo",
             "measurable_items": "Ítems medibles",
             "catalog_items": "Ítems de medición",
             "services": "Servicios",
@@ -205,10 +207,21 @@ class PositionForm(BootstrapMixin, forms.ModelForm):
             ),
             "catalog_services": forms.CheckboxSelectMultiple(),
             "catalog_items": forms.CheckboxSelectMultiple(),
+            "role_groups": forms.CheckboxSelectMultiple(),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        # Solo mostrar roles creados en Roles y Permisos.
+        self.fields["role_groups"].queryset = Group.objects.filter(
+            organization_role__isnull=False
+        ).order_by("name")
+        self.fields["role_groups"].required = True
+        self.fields["role_groups"].help_text = (
+            "Selecciona uno o varios roles existentes. "
+            "Los empleados vinculados heredarán automáticamente estos roles."
+        )
 
         # Servicios asociados previamente al cargo.
         selected_ids = (
@@ -342,18 +355,13 @@ def _active_delegations():
 
 
 def _role_scope_valid(groups, delegations):
-    """Los roles solo actúan donde coincide su alcance con la autorización."""
-    permitted = set(delegations.values_list("pk", flat=True))
-    for group in groups:
-        role = getattr(group, "organization_role", None)
-        if role is None:
-            return False
-        scope = set(role.application_delegations.values_list("pk", flat=True))
-        if not scope:
-            scope = {role.delegation_id}  # Compatibilidad con roles antiguos.
-        if not permitted.intersection(scope):
-            return False
-    return True
+    """Los roles del catálogo operan solo en las delegaciones de la cuenta.
+
+    No existen delegaciones seleccionables por rol. Conservar esta función
+    valida que los grupos provengan del catálogo institucional.
+    """
+    return all(getattr(group, "organization_role", None) is not None
+               for group in groups)
 
 
 def _restrict_account_actor_choices(form, actor, action):
@@ -377,30 +385,21 @@ def _restrict_account_actor_choices(form, actor, action):
     permitted_groups = []
 
     for group in form.fields["groups"].queryset.prefetch_related(
-        "permissions__content_type", "organization_role__application_delegations"
+        "permissions__content_type"
     ):
+        if not hasattr(group, "organization_role"):
+            continue
         if any(
             f"{perm.content_type.app_label}.{perm.codename}" not in allowed_permissions
             for perm in group.permissions.all()
         ):
             continue
-
-        role = getattr(group, "organization_role", None)
-        if role is None:
-            continue
-
-        role_scope = set(
-            role.application_delegations.values_list("pk", flat=True)
-        )
-        if not role_scope:
-            role_scope = {role.delegation_id}
-
-        if role_scope.issubset(scope):
-            permitted_groups.append(group.pk)
+        permitted_groups.append(group.pk)
 
     form.fields["groups"].queryset = form.fields["groups"].queryset.filter(
         pk__in=permitted_groups
     )
+
 
 
 class AccountCreateForm(BootstrapMixin, UserCreationForm):
@@ -430,10 +429,10 @@ class AccountCreateForm(BootstrapMixin, UserCreationForm):
     )
 
     groups = forms.ModelMultipleChoiceField(
-        label="Roles asignados",
+        label="Roles asignados (automáticos si hay empleado)",
         queryset=Group.objects.none(),
         widget=forms.CheckboxSelectMultiple,
-        required=True,
+        required=False,
     )
 
     class Meta:
@@ -513,6 +512,17 @@ class AccountCreateForm(BootstrapMixin, UserCreationForm):
         delegations = data.get("authorized_delegations")
         groups = data.get("groups")
 
+        if employee:
+            data["groups"] = employee.position.role_groups.all()
+            groups = data["groups"]
+            if self.actor and not self.actor.is_superuser:
+                allowed_perms = self.actor.get_all_permissions()
+                for group in groups.prefetch_related("permissions__content_type"):
+                    if any(f"{perm.content_type.app_label}.{perm.codename}" not in allowed_perms
+                           for perm in group.permissions.all()):
+                        self.add_error("employee", "No puedes crear una cuenta con permisos superiores a los tuyos.")
+                        break
+            self.fields["groups"].required = False
         if (
             employee
             and delegations
@@ -530,7 +540,7 @@ class AccountCreateForm(BootstrapMixin, UserCreationForm):
         ):
             self.add_error(
                 "groups",
-                "Cada rol debe coincidir con alguna delegación autorizada.",
+                "Solo se permiten roles creados en Roles y Permisos.",
             )
 
         return data
@@ -566,16 +576,7 @@ class AccountEditForm(BootstrapMixin, forms.ModelForm):
         label="Roles asignados",
         queryset=Group.objects.none(),
         widget=forms.CheckboxSelectMultiple,
-        required=True,
-    )
-
-    can_delete_closed_period = forms.BooleanField(
-        label="Permiso individual: eliminar períodos cerrados",
         required=False,
-        help_text=(
-            "Requiere además permiso normal de eliminación de períodos; "
-            "no se hereda de un rol."
-        ),
     )
 
     class Meta:
@@ -590,7 +591,6 @@ class AccountEditForm(BootstrapMixin, forms.ModelForm):
             "employee_code",
             "authorized_delegations",
             "groups",
-            "can_delete_closed_period",
         ]
 
         labels = {
@@ -656,30 +656,27 @@ class AccountEditForm(BootstrapMixin, forms.ModelForm):
             "organization_role__application_delegations"
         ).order_by("name")
 
-        self.fields["groups"].initial = self.instance.groups.all()
-
-        self.fields["can_delete_closed_period"].initial = (
-            self.instance.user_permissions.filter(
-                codename="delete_closed_period",
-                content_type__app_label="planning_measurements",
-            ).exists()
-            if self.instance.pk
-            else False
-        )
+        if self.profile and self.profile.employee_id:
+            inherited = self.profile.employee.position.role_groups.all()
+            self.fields["groups"].initial = inherited
+            self.fields["groups"].required = False
+            self.fields["groups"].disabled = True
+            self.fields["groups"].help_text = (
+                "Solo lectura: los roles se administran desde Cargos y Funciones."
+            )
+        else:
+            self.fields["groups"].initial = self.instance.groups.all()
 
         self.fields["email"].required = True
 
         _restrict_account_actor_choices(
             self, self.actor, "change"
         )
-
-        if self.actor is not None and not self.actor.is_superuser:
-            # La facultad de borrar períodos cerrados
-            # solo puede delegarse de forma individual.
-            self.fields["can_delete_closed_period"].disabled = (
-                not self.actor.has_perm(
-                    "planning_measurements.delete_closed_period"
-                )
+        if self.profile and self.profile.employee_id:
+            # La edición de otros datos no debe fallar porque el actor
+            # no pueda delegar un rol que el cargo ya tiene.
+            self.fields["groups"].queryset = (
+                Group.objects.filter(pk__in=self.profile.employee.position.role_groups.values("pk"))
             )
 
         self.apply_bootstrap()
@@ -721,6 +718,17 @@ class AccountEditForm(BootstrapMixin, forms.ModelForm):
         employee = data.get("employee")
         delegations = data.get("authorized_delegations")
         groups = data.get("groups")
+        if employee:
+            data["groups"] = employee.position.role_groups.all()
+            groups = data["groups"]
+            if (self.actor and not self.actor.is_superuser and self.profile
+                and self.profile.employee_id != employee.pk):
+                allowed_perms = self.actor.get_all_permissions()
+                for group in groups.prefetch_related("permissions__content_type"):
+                    if any(f"{perm.content_type.app_label}.{perm.codename}" not in allowed_perms
+                           for perm in group.permissions.all()):
+                        self.add_error("employee", "No puedes vincular una cuenta con permisos superiores a los tuyos.")
+                        break
 
         if not self.profile:
             raise forms.ValidationError(
@@ -744,7 +752,7 @@ class AccountEditForm(BootstrapMixin, forms.ModelForm):
         ):
             self.add_error(
                 "groups",
-                "Cada rol debe coincidir con alguna delegación autorizada.",
+                "Solo se permiten roles creados en Roles y Permisos.",
             )
 
         if (
@@ -787,7 +795,6 @@ class AccountEditForm(BootstrapMixin, forms.ModelForm):
         with transaction.atomic():
             account = super().save(commit=False)
             account.save()
-            account.groups.set(self.cleaned_data["groups"])
 
             profile = UserProfile.objects.select_for_update().get(
                 pk=self.profile.pk
@@ -826,30 +833,19 @@ class AccountEditForm(BootstrapMixin, forms.ModelForm):
 
             if (
                 old_employee
-                and old_employee.pk
-                != getattr(new_employee, "pk", None)
+                and old_employee.pk != getattr(new_employee, "pk", None)
             ):
-                old_employee.assigned_groups.clear()
+                from .services import sync_employee
+                sync_employee(old_employee)  # El empleado conserva roles del cargo para su listado.
 
-            # Solo permiso otorgado de forma directa, no por grupos.
-            privilege = Permission.objects.filter(
-                codename="delete_closed_period",
-                content_type__app_label="planning_measurements",
-            ).first()
-
-            if privilege and (
-                self.actor is None
-                or self.actor.is_superuser
-                or self.actor.has_perm(
-                    "planning_measurements.delete_closed_period"
-                )
-            ):
-                if self.cleaned_data["can_delete_closed_period"]:
-                    account.user_permissions.add(privilege)
-                else:
-                    account.user_permissions.remove(privilege)
-
-            sync_user_groups(account)
+            if new_employee:
+                sync_user_groups(account)
+            elif old_employee:
+                # Al desvincular una cuenta, nunca conservar roles heredados.
+                account.groups.clear()
+                account.user_permissions.clear()
+            else:
+                account.groups.set(self.cleaned_data.get("groups") or [])
 
             return account
 

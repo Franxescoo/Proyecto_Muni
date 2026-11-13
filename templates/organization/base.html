@@ -122,32 +122,19 @@ document.addEventListener("DOMContentLoaded", function () {
     const modalState = document.getElementById("organization-modal-open");
     const modal = document.getElementById("organization-record-modal");
     
-    // Mostrar automáticamente los roles de la cuenta seleccionada.
-    const userAccountSelect = document.querySelector(
-        '#organization-record-modal select[name="user_account"]'
+    // Roles heredados del cargo seleccionado, nunca de una cuenta previa.
+    const positionSelect = document.querySelector(
+        '#organization-record-modal select[name="position"]'
     );
-
     const assignedRolesInput = document.querySelector(
         '#organization-record-modal input[name="assigned_roles_display"]'
     );
-
-    if (userAccountSelect && assignedRolesInput) {
-
+    if (positionSelect && assignedRolesInput) {
         function updateAssignedRoles() {
-            const selectedOption =
-                userAccountSelect.options[userAccountSelect.selectedIndex];
-
-            assignedRolesInput.value =
-                selectedOption?.dataset.roles || "";
+            const selectedOption = positionSelect.options[positionSelect.selectedIndex];
+            assignedRolesInput.value = selectedOption?.dataset.roles || "";
         }
-
-        // Actualizar al seleccionar otro usuario.
-        userAccountSelect.addEventListener(
-            "change",
-            updateAssignedRoles
-        );
-
-        // Mostrar los roles al abrir el formulario.
+        positionSelect.addEventListener("change", updateAssignedRoles);
         updateAssignedRoles();
     }
 
