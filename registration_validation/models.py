@@ -537,12 +537,16 @@ class Evidence(BaseModel):
 
     @property
     def review_status_label(self):
-        if (self.review_status or "").strip().casefold() in {
-            "pending",
-            "pendiente",
-        }:
-            return "Pendiente"
-        return self.review_status
+        labels = {
+            "pending": "Pendiente",
+            "pendiente": "Pendiente",
+            "in review": "En revisión",
+            "observed": "Con observaciones",
+            "approved": "Aprobada",
+            "rejected": "Rechazada",
+        }
+        current = (self.review_status or "").strip()
+        return labels.get(current.casefold(), self.review_status)
 
     @property
     def safe_file_link(self):

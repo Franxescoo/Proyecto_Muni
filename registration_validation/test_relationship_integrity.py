@@ -517,6 +517,57 @@ class RegistrationRelationshipIntegrityTests(TestCase):
         self.assertFalse(invalid_update.is_valid())
         self.assertIn("author", invalid_update.errors)
 
+    def test_evidence_review_status_selector_accepts_predefined_and_historical_values(self):
+        activity = self.make_activity()
+        create_data = self.evidence_form_data(
+            activity,
+            self.north_employee,
+        )
+        create_data["review_status"] = "Observed"
+        create_form = EvidenceForm(
+            data=create_data,
+            files=self.evidence_files(),
+        )
+        self.assertIn("<select", str(create_form["review_status"]))
+        self.assertEqual(
+            dict(create_form.fields["review_status"].widget.choices)[
+                "Observed"
+            ],
+            "Con observaciones",
+        )
+        self.assertTrue(create_form.is_valid(), create_form.errors)
+
+        invalid_form = EvidenceForm(
+            data=dict(create_data, review_status="Unrecognized"),
+            files=self.evidence_files(),
+        )
+        self.assertFalse(invalid_form.is_valid())
+        self.assertIn("review_status", invalid_form.errors)
+
+        existing = self.make_evidence(
+            activity,
+            self.north_employee,
+            code="REL-EVID-LEGACY-STATUS",
+        )
+        existing.review_status = "Legacy review state"
+        existing.save(update_fields=("review_status",))
+        update_data = self.evidence_form_data(
+            activity,
+            self.north_employee,
+            code=existing.code,
+        )
+        update_data["review_status"] = existing.review_status
+        update_form = EvidenceForm(
+            data=update_data,
+            files=self.evidence_files(),
+            instance=existing,
+        )
+        self.assertIn(
+            "Legacy review state",
+            dict(update_form.fields["review_status"].widget.choices),
+        )
+        self.assertTrue(update_form.is_valid(), update_form.errors)
+
     def test_evidence_code_is_generated_and_unique_when_omitted(self):
         first = self.make_evidence()
         second = self.make_evidence()
@@ -783,6 +834,59 @@ class RegistrationRelationshipIntegrityTests(TestCase):
         )
         self.assertFalse(invalid_update.is_valid())
         self.assertIn("verifier", invalid_update.errors)
+
+    def test_validation_decision_selector_preserves_historical_values(self):
+        evidence = self.make_evidence()
+        create_data = self.validation_form_data(
+            evidence,
+            self.north_employee,
+        )
+        create_data["decision"] = "Observed"
+        create_form = ValidationForm(data=create_data)
+        self.assertIn("<select", str(create_form["decision"]))
+        self.assertEqual(
+            dict(create_form.fields["decision"].widget.choices)["Approved"],
+            "Aprobada",
+        )
+        self.assertEqual(
+            create_form.fields["result"].widget.input_type,
+            "text",
+        )
+        self.assertTrue(create_form.is_valid(), create_form.errors)
+
+        legacy_label_data = self.validation_form_data(
+            evidence,
+            self.north_employee,
+        )
+        legacy_label_data["decision"] = "Aprobada"
+        legacy_label_form = ValidationForm(data=legacy_label_data)
+        self.assertTrue(legacy_label_form.is_valid(), legacy_label_form.errors)
+        self.assertEqual(
+            legacy_label_form.cleaned_data["decision"],
+            "Approved",
+        )
+
+        invalid_form = ValidationForm(
+            data=dict(create_data, decision="Unrecognized"),
+        )
+        self.assertFalse(invalid_form.is_valid())
+        self.assertIn("decision", invalid_form.errors)
+
+        existing = self.make_validation(evidence=evidence)
+        existing.decision = "Historical decision"
+        existing.save(update_fields=("decision",))
+        update_data = self.validation_form_data(
+            evidence,
+            self.north_employee,
+            version=existing.version,
+        )
+        update_data["decision"] = existing.decision
+        update_form = ValidationForm(data=update_data, instance=existing)
+        self.assertIn(
+            "Historical decision",
+            dict(update_form.fields["decision"].widget.choices),
+        )
+        self.assertTrue(update_form.is_valid(), update_form.errors)
 
     def test_validation_update_cannot_move_across_goals(self):
         north_evidence = self.make_evidence(code="REL-EVID-NORTH-VAL")

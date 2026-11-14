@@ -33,8 +33,17 @@ class BootstrapMixin:
 
     def _apply_bootstrap(self):
         for field in self.fields.values():
+            # Traduce los textos vacíos de los selectores de relaciones.
+            # No cambia el valor que se guarda en la base de datos.
+            if isinstance(field, forms.ModelChoiceField):
+                if field.empty_label == "---------":
+                    field.empty_label = "Seleccione una opción"
             if isinstance(field.widget, forms.Select):
                 css_class = "form-select"
+                # Útil si la plantilla utiliza un selector enriquecido.
+                field.widget.attrs.setdefault(
+                    "data-placeholder", "Seleccione una opción"
+                )
             elif isinstance(field.widget, forms.CheckboxInput):
                 css_class = "form-check-input"
             else:
@@ -299,6 +308,31 @@ class ActivityForm(BootstrapMixin, forms.ModelForm):
 
 
 class EvidenceForm(BootstrapMixin, forms.ModelForm):
+    # Los códigos almacenados se conservan para no romper filtros o registros.
+    REVIEW_STATUS_CHOICES = [
+        ("Pending", "Pendiente"),
+        ("In review", "En revisión"),
+        ("Observed", "Con observaciones"),
+        ("Approved", "Aprobada"),
+        ("Rejected", "Rechazada"),
+    ]
+    # CharField conserva la validación histórica del largo máximo (50).
+    # El widget muestra únicamente las opciones disponibles y el método
+    # clean_review_status verifica la selección también en el servidor.
+    review_status = forms.CharField(
+        label="Estado de revisión",
+        widget=forms.Select(
+            choices=[
+                ("", "Seleccione un estado de revisión"),
+                *REVIEW_STATUS_CHOICES,
+            ],
+        ),
+        required=True,
+        error_messages={
+            "required": "Selecciona un estado de revisión.",
+        },
+    )
+
     code = forms.CharField(
         label="Código",
         required=False,
@@ -355,9 +389,6 @@ class EvidenceForm(BootstrapMixin, forms.ModelForm):
             "file_link": forms.TextInput(
                 attrs={"placeholder": "https://..."},
             ),
-            "review_status": forms.TextInput(
-                attrs={"placeholder": "Ej.: Pending (pendiente)"},
-            ),
         }
 
     def __init__(self, *args, user=None, **kwargs):
@@ -401,9 +432,24 @@ class EvidenceForm(BootstrapMixin, forms.ModelForm):
         self.fields["author"].queryset = employees
         self.fields["file_link"].required = False
         self.fields["review_status"].help_text = (
-            "Para indicar que una evidencia está pendiente, ingresa Pending. "
-            "Se conserva ese valor por compatibilidad con el sistema."
+            "Selecciona el estado correspondiente a la revisión de la evidencia."
         )
+        # Al editar una evidencia histórica, permite conservar su estado
+        # original aunque no forme parte de los estados predefinidos nuevos.
+        previous_status = (
+            (self.instance.review_status or "").strip()
+            if self.instance.pk else ""
+        )
+        status_widget = self.fields["review_status"].widget
+        allowed_status_values = {
+            value for value, _label in status_widget.choices
+        }
+        if previous_status and previous_status not in allowed_status_values:
+            current_choices = list(status_widget.choices)
+            current_choices.append(
+                (previous_status, f"{previous_status} (estado anterior)")
+            )
+            status_widget.choices = current_choices
         # Archivos que se seleccionan para quitar.
         self.files_to_remove = []
         # Archivos que ya pertenecen a esta evidencia.
@@ -423,6 +469,20 @@ class EvidenceForm(BootstrapMixin, forms.ModelForm):
             ),
         )
         self._apply_bootstrap()
+
+    def clean_review_status(self):
+        """Acepta solo estados del selector, incluso al manipular el POST."""
+        status = self.cleaned_data["review_status"]
+        allowed_values = {
+            value for value, _label in self.fields["review_status"].widget.choices
+            if value
+        }
+        if status not in allowed_values:
+            raise forms.ValidationError(
+                "Selecciona un estado de revisión válido.",
+                code="invalid_choice",
+            )
+        return status
 
     def clean_file_link(self):
         file_link = (self.cleaned_data.get("file_link") or "").strip()
@@ -547,6 +607,24 @@ class EvidenceForm(BootstrapMixin, forms.ModelForm):
 
 
 class ValidationForm(BootstrapMixin, forms.ModelForm):
+    DECISION_CHOICES = [
+        ("Approved", "Aprobada"),
+        ("Observed", "Con observaciones"),
+        ("Rejected", "Rechazada"),
+    ]
+    decision = forms.CharField(
+        label="Decisión",
+        widget=forms.Select(
+            choices=[
+                ("", "Seleccione una decisión"),
+                *DECISION_CHOICES,
+            ],
+        ),
+        required=True,
+        error_messages={
+            "required": "Seleccione una decisión.",
+        },
+    )
     version = forms.IntegerField(
         label="Versión",
         min_value=1,
@@ -582,9 +660,6 @@ class ValidationForm(BootstrapMixin, forms.ModelForm):
             "version": "Versión",
         }
         widgets = {
-            "decision": forms.TextInput(
-                attrs={"placeholder": "Ingrese la decisión"},
-            ),
             "observation": forms.Textarea(
                 attrs={
                     "rows": 3,
@@ -646,6 +721,20 @@ class ValidationForm(BootstrapMixin, forms.ModelForm):
         self.fields["evidence"].queryset = evidences
         self.fields["verifier"].queryset = employees
         self.fields["observation"].required = False
+        previous_decision = (
+            (self.instance.decision or "").strip()
+            if self.instance.pk else ""
+        )
+        decision_widget = self.fields["decision"].widget
+        allowed_decisions = {
+            value for value, _label in decision_widget.choices
+        }
+        if previous_decision and previous_decision not in allowed_decisions:
+            current_choices = list(decision_widget.choices)
+            current_choices.append(
+                (previous_decision, f"{previous_decision} (valor histórico)")
+            )
+            decision_widget.choices = current_choices
         self.fields["version"].help_text = (
             "Número de versión de la validación."
         )
@@ -658,6 +747,22 @@ class ValidationForm(BootstrapMixin, forms.ModelForm):
             ),
         )
         self._apply_bootstrap()
+
+    def clean_decision(self):
+        decision = self.cleaned_data["decision"].strip()
+        allowed_decisions = {
+            value for value, _label in self.fields["decision"].widget.choices
+            if value
+        }
+        # Formularios antiguos podían enviar la etiqueta en español.
+        if decision == "Aprobada" and decision not in allowed_decisions:
+            return "Approved"
+        if decision not in allowed_decisions:
+            raise forms.ValidationError(
+                "Seleccione una decisión válida.",
+                code="invalid_choice",
+            )
+        return decision
 
     def clean(self):
         cleaned_data = super().clean()

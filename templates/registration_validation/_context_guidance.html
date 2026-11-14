@@ -50,7 +50,7 @@
         <div class="fw-bold">Guía rápida · Validaciones</div>
         <p>Busca por evidencia, verificador, decisión o resultado. En la lista puedes consultar las revisiones registradas, sus versiones y antecedentes.</p>
         {% if perms.registration_validation.add_validation %}
-        <p>Para registrar una revisión, selecciona la evidencia y el funcionario verificador, e ingresa la decisión, la fecha y el resultado. La observación es opcional; decisión y resultado son campos de texto.</p>
+        <p>Para registrar una revisión, selecciona la evidencia, el funcionario verificador y la decisión; luego completa la fecha y el resultado. La observación es opcional y el resultado se conserva como texto libre.</p>
         {% endif %}
         {% if perms.registration_validation.change_validation %}
         <p>Al modificar una validación, revisa la versión y los antecedentes de la revisión antes de guardar los cambios.</p>
