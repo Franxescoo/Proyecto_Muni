@@ -26,6 +26,27 @@
   </aside>
 </div>
 <style>
+/* Panel lateral flotante: no altera el ancho ni la posición de las tablas. */
+@media (min-width: 992px) {
+  .organization-shell:has(> .org-help) { display: block; }
+  .organization-shell > .org-help { display: block; }
+  .organization-shell .org-help-toolbar { margin-bottom: 1rem; }
+  .organization-shell > :not(.organization-hero):not(.org-help) {
+    min-width: 0;
+  }
+  .organization-shell .org-help-guide {
+    position: fixed;
+    z-index: 1040;
+    right: max(18px, env(safe-area-inset-right));
+    top: 100px;
+    width: min(320px, calc(100vw - 36px));
+    max-height: calc(100vh - 120px);
+    overflow-y: auto;
+    margin-top: 0;
+    box-shadow: 0 12px 36px rgba(25, 29, 38, .19);
+  }
+}
+
 .org-help {margin:0 0 1.25rem;}
 .org-help-toolbar {display:flex;flex-wrap:wrap;align-items:center;gap:.65rem;background:#fff;border:1px solid #e1e3e6;border-radius:.65rem;padding:.8rem 1rem;box-shadow:0 2px 10px rgba(23,31,40,.04)}
 .org-help-toolbar>span {font-weight:600;color:#343a40;margin-right:auto}
