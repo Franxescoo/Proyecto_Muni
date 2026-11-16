@@ -64,6 +64,9 @@ SPECIAL = {
     "reactivate_eventparticipation": "Puede reactivar participantes de eventos",
     "delete_closed_period": "Puede eliminar períodos cerrados",
     "derivar_solicitud": "Puede derivar solicitudes ciudadanas",
+    "view_citizenrequestaction": "Puede consultar gestiones operativas",
+    "add_citizenrequestaction": "Puede registrar gestiones operativas",
+    "change_citizenrequestaction": "Puede editar gestiones operativas",
 }
 
 CATALOG_MODELS = {
@@ -77,6 +80,7 @@ CATALOG_MODELS = {
     },
     "citizen_requests": {
         "citizenrequest",
+        "citizenrequestaction",
     },
     "organization": {
         "delegation",
@@ -122,6 +126,11 @@ CATALOG_ACTIONS = {
     },
     ("municipal_events", "giftdelivery"): {"add_giftdelivery", "view_giftdelivery"},
     ("citizen_requests", "citizenrequest"): {"derivar_solicitud"},
+    ("citizen_requests", "citizenrequestaction"): {
+        "view_citizenrequestaction",
+        "add_citizenrequestaction",
+        "change_citizenrequestaction",
+    },
     ("monitoring_traceability", "activity"): {
         "add_activity",
         "change_activity",

@@ -55,6 +55,26 @@ urlpatterns = [
         name="request_detail",
     ),
     path(
+        "solicitudes/bandeja/<int:request_id>/gestiones/",
+        views.request_action_list,
+        name="request_action_list",
+    ),
+    path(
+        "solicitudes/bandeja/<int:request_id>/gestiones/nueva/",
+        views.create_request_action,
+        name="create_request_action",
+    ),
+    path(
+        "solicitudes/bandeja/<int:request_id>/gestiones/<int:action_id>/editar/",
+        views.edit_request_action,
+        name="edit_request_action",
+    ),
+    path(
+        "solicitudes/bandeja/<int:request_id>/gestiones/<int:action_id>/adjuntos/<int:attachment_id>/descargar/",
+        views.download_request_action_attachment,
+        name="download_request_action_attachment",
+    ),
+    path(
         "solicitudes/bandeja/<int:request_id>/crear-atencion/",
         views.create_attention_from_request,
         name="create_attention_from_request",

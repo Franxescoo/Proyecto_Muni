@@ -870,6 +870,8 @@ document.addEventListener("DOMContentLoaded", function () {
     const inboxUrl = "{% url 'citizen_requests:request_inbox' %}";
     const pendingCountUrl = "{% url 'citizen_requests:pending_request_count' %}";
     const detailBaseUrl = "{% url 'citizen_requests:request_detail' 0 %}";
+    const actionListBaseUrl = "{% url 'citizen_requests:request_action_list' 0 %}";
+    const actionCreateBaseUrl = "{% url 'citizen_requests:create_request_action' 0 %}";
     const createAttentionBaseUrl = "{% url 'registration:attention_entry_create' %}";
     const viewAttentionBaseUrl = "{% url 'registration:attention_entry_detail' 0 %}";
     const feedback = document.getElementById("solicitudes-feedback");
@@ -1115,20 +1117,32 @@ document.addEventListener("DOMContentLoaded", function () {
             .then(data => {
                 if (activeDetailId !== String(requestId)) return;
                 const item = data.request;
-                const history = item.events.length
+                const timeline = item.timeline || item.events;
+                const history = timeline.length
                     ? `<ol class="list-group list-group-numbered">
-                        ${item.events.map(event => `
-                            <li class="list-group-item">
-                                <div class="fw-semibold">${escapeHtml(event.type)}</div>
-                                <div class="small text-muted">${escapeHtml(new Date(event.created_at).toLocaleString())}</div>
-                                <div>${escapeHtml(event.actor)}</div>
-                                ${event.previous_delegation && event.new_delegation
-                                    ? `<div>${escapeHtml(event.previous_delegation)} &rarr; ${escapeHtml(event.new_delegation)}</div>`
+                        ${timeline.map(entry => entry.kind === "action"
+                            ? `<li class="list-group-item border-start border-4 border-danger">
+                                <div class="fw-semibold">${escapeHtml(entry.action_type)}</div>
+                                <div class="small text-muted">${escapeHtml(new Date(entry.occurred_at).toLocaleString())}</div>
+                                <div>Responsable: ${escapeHtml(entry.responsible)}</div>
+                                <div class="mt-2">${escapeHtml(entry.description)}</div>
+                                ${entry.outcome ? `<div class="mt-2"><span class="fw-semibold">Resultado u observaciones:</span> ${escapeHtml(entry.outcome)}</div>` : ""}
+                                ${entry.attachments.length
+                                    ? `<ul class="small mt-2 mb-0">${entry.attachments.map(file => `<li><a href="${escapeHtml(file.url)}">${escapeHtml(file.name)}</a> · ${escapeHtml(file.type)} · ${escapeHtml((file.size / 1024).toLocaleString())} KB</li>`).join("")}</ul>`
                                     : ""}
-                                ${event.previous_status !== event.new_status
-                                    ? `<div>Estado: ${escapeHtml(event.previous_status)} &rarr; ${escapeHtml(event.new_status)}</div>`
+                                ${entry.can_edit ? `<a class="btn btn-sm btn-outline-danger mt-2" href="${escapeHtml(entry.edit_url)}">Editar gestión</a>` : ""}
+                            </li>`
+                            : `<li class="list-group-item border-start border-4 border-secondary">
+                                <div class="fw-semibold">Movimiento administrativo: ${escapeHtml(entry.type)}</div>
+                                <div class="small text-muted">${escapeHtml(new Date(entry.occurred_at || entry.created_at).toLocaleString())}</div>
+                                <div>${escapeHtml(entry.actor)}</div>
+                                ${entry.previous_delegation && entry.new_delegation
+                                    ? `<div>${escapeHtml(entry.previous_delegation)} &rarr; ${escapeHtml(entry.new_delegation)}</div>`
                                     : ""}
-                                <div>Motivo: ${escapeHtml(event.reason || event.observation)}</div>
+                                ${entry.previous_status !== entry.new_status
+                                    ? `<div>Estado: ${escapeHtml(entry.previous_status)} &rarr; ${escapeHtml(entry.new_status)}</div>`
+                                    : ""}
+                                <div>Motivo: ${escapeHtml(entry.reason || entry.observation)}</div>
                             </li>`).join("")}
                     </ol>`
                     : '<p class="text-muted mb-0">No hay movimientos registrados</p>';
@@ -1176,6 +1190,12 @@ document.addEventListener("DOMContentLoaded", function () {
                         ${item.followup_email_pending ? '<div class="alert alert-warning small">Correo de seguimiento pendiente de verificación: no se envían detalles del caso hasta que se confirme.</div>' : ''}
                         <h6 class="border-top pt-3 mt-3">Historial de movimientos</h6>
                         ${history}
+                        ${item.can_view_actions
+                            ? `<a class="btn btn-outline-danger btn-sm mt-3" href="${actionListBaseUrl.replace("/0/", "/" + encodeURIComponent(item.id) + "/")}">Consultar gestiones operativas</a>`
+                            : ""}
+                        ${item.can_add_actions
+                            ? `<a class="btn btn-danger btn-sm mt-3 ms-2" href="${actionCreateBaseUrl.replace("/0/", "/" + encodeURIComponent(item.id) + "/")}">Registrar gestión</a>`
+                            : ""}
                     </div>
                 </div>`;
                 const linkButton = detail.querySelector('[data-citizen-request-link]');

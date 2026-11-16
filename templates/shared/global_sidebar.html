@@ -719,7 +719,7 @@
             <div id="globalSidebarRegistration" class="accordion-collapse collapse {% if request.resolver_match.namespace == 'registration' or request.resolver_match.namespace == 'citizen_registry' %}show{% endif %}">
                 <div class="accordion-body">
                     {% if perms.citizen_registry.view_citizen %}
-                        <a class="global-sidebar-link{% if request.resolver_match.namespace == 'citizen_registry' %} active{% endif %}" href="{% url 'citizen_registry:list' %}"><i class="bi bi-people"></i> Ciudadanos</a>
+                        <a class="global-sidebar-link{% if request.resolver_match.namespace == 'citizen_registry' %} active{% endif %}" href="{% url 'citizen_registry:list' %}{% if request.resolver_match.namespace == 'registration' or request.resolver_match.namespace == 'citizen_registry' and request.GET.sgr_context == 'registration_validation' %}?sgr_context=registration_validation{% endif %}"><i class="bi bi-people"></i> Ciudadanos</a>
                     {% endif %}
 
                     {% if perms.registration_validation.view_activity %}

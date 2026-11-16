@@ -124,6 +124,75 @@ class OrganizationListTests(TestCase):
         }
         self.assertTrue(expected.issubset(permissions))
 
+    def test_request_action_permissions_are_catalogued_without_being_assigned(self):
+        content_type, _ = ContentType.objects.get_or_create(
+            app_label="citizen_requests",
+            model="citizenrequestaction",
+            defaults={"name": "gestiones operativas de solicitudes"},
+        )
+        action_permissions = {
+            codename: Permission.objects.get_or_create(
+                content_type=content_type,
+                codename=codename,
+                defaults={"name": codename},
+            )[0]
+            for codename in (
+                "view_citizenrequestaction",
+                "add_citizenrequestaction",
+                "change_citizenrequestaction",
+            )
+        }
+
+        catalog = GroupForm().fields["permissions"].queryset
+        catalog_ids = set(catalog.values_list("pk", flat=True))
+        self.assertTrue(
+            {permission.pk for permission in action_permissions.values()}
+            .issubset(catalog_ids)
+        )
+        self.assertFalse(
+            catalog.filter(
+                content_type=content_type,
+                codename="delete_citizenrequestaction",
+            ).exists()
+        )
+
+        expected_labels = {
+            "view_citizenrequestaction": "Puede consultar gestiones operativas",
+            "add_citizenrequestaction": "Puede registrar gestiones operativas",
+            "change_citizenrequestaction": "Puede editar gestiones operativas",
+        }
+        for codename, permission in action_permissions.items():
+            with self.subTest(codename=codename):
+                self.assertEqual(
+                    permission.content_type.app_label,
+                    "citizen_requests",
+                )
+                self.assertEqual(
+                    permission_label(permission),
+                    expected_labels[codename],
+                )
+                self.assertEqual(
+                    GroupForm().fields["permissions"].label_from_instance(
+                        permission
+                    ),
+                    expected_labels[codename],
+                )
+                self.assertFalse(
+                    Group.objects.filter(permissions=permission).exists()
+                )
+                self.assertFalse(
+                    get_user_model()
+                    .objects.filter(user_permissions=permission)
+                    .exists()
+                )
+
+        self.assertTrue(
+            catalog.filter(
+                content_type__app_label="citizen_requests",
+                codename="derivar_solicitud",
+            ).exists()
+        )
+
     def test_role_catalog_limits_read_only_monitoring_models(self):
         catalog = GroupForm().fields["permissions"].queryset
         permissions = {
