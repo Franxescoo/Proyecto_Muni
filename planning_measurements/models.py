@@ -30,7 +30,10 @@ class Period(BaseModel):
     class Meta:
         verbose_name = "Period"
         verbose_name_plural = "Periods"
-        permissions = [("delete_closed_period", "Puede archivar períodos cerrados sin historial")]
+        permissions = [
+            ("delete_closed_period", "Puede archivar períodos cerrados sin historial"),
+            ("reopen_closed_period", "Puede reabrir períodos cerrados"),
+        ]
 
     class Status(models.TextChoices):
         ACTIVE = "Active", "Activo"

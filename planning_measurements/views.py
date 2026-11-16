@@ -89,14 +89,18 @@ def scoped_goals(user, permission="planning_measurements.view_goal"):
     return goals.filter(employee__delegation_id__in=delegation_ids)
 
 
-
 def may_archive_period(user, period):
-    """Solo permite archivar períodos activos con el permiso general."""
+    """
+    Permite archivar únicamente períodos activos,
+    con permiso de eliminación y sin metas asociadas.
+    Los períodos cerrados quedan protegidos.
+    """
     return (
         user.has_perm("planning_measurements.delete_period")
         and period.status == Period.Status.ACTIVE
         and not period.goals.exists()
     )
+
 
 
 def run_bulk_delete(request, queryset):
@@ -634,6 +638,8 @@ def get_period_list_context(request):
         "closed_periods": all_periods.filter(
             status=Period.Status.CLOSED
         ).count(),
+
+        "can_archive_closed_period": False,
     }
 
 
@@ -681,6 +687,8 @@ def period_list(request):
         "closed_periods": base_periods.filter(
             Q(status="Closed") | Q(status="Cerrado")
         ).count(),
+
+        "can_archive_closed_period": False,
     }
 
     return render(request, "planning/period_list.html", context)
@@ -903,7 +911,7 @@ def period_edit(request, period_id):
     if request.method == "POST" and request.POST.get("_action") == "reopen":
         from monitoring_traceability.models import Audit
 
-        if not user.has_perm("planning_measurements.change_period"):
+        if not user.has_perm("planning_measurements.reopen_closed_period"):
             raise PermissionDenied
 
         motivo = request.POST.get("reason", "").strip()

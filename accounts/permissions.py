@@ -31,23 +31,12 @@ def allowed_delegation_ids(user, permission=None, *, active_only=True):
         codename=codename, content_type__app_label=app_label
     ).exists():
         return authorized  # Permiso directo, nunca delegaciones no autorizadas.
-    groups = user.groups.filter(
+    # El rol determina la OPERACIÓN; el perfil determina la DELEGACIÓN.
+    # Los campos históricos OrganizationRole.delegation y
+    # application_delegations NO limitan ni amplían el alcance.
+    allowed_by_role = user.groups.filter(
         permissions__codename=codename,
         permissions__content_type__app_label=app_label,
         organization_role__isnull=False,
-    ).select_related("organization_role").prefetch_related(
-        "organization_role__application_delegations"
-    ).distinct()
-    scopes = set()
-    for group in groups:
-        role = group.organization_role
-        role_delegations = set(
-            role.application_delegations.values_list("pk", flat=True)
-        )
-        if role_delegations:
-            scopes.update(role_delegations)
-        elif role.delegation_id:
-            scopes.add(role.delegation_id)
-        else:
-            scopes.update(authorized)
-    return authorized.intersection(scopes)
+    ).exists()
+    return authorized if allowed_by_role else set()

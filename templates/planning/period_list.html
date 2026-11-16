@@ -471,7 +471,7 @@
                                         Ver
                                     </a>
 
-                                    {% if perms.planning_measurements.change_period and period.status == "Closed" %}
+                                    {% if perms.planning_measurements.reopen_closed_period and period.status == "Closed" %}
                                     <button type="button"
                                             class="btn btn-sm btn-outline-success"
                                             data-bs-toggle="modal"
@@ -545,7 +545,7 @@
 </div>
 
 
-{% if perms.planning_measurements.change_period %}
+{% if perms.planning_measurements.reopen_closed_period %}
     {% for period in page %}
         {% if period.status == "Closed" %}
         <form id="reopen-{{ period.pk }}"
@@ -561,7 +561,7 @@
 {% endif %}
 
 
-{% if perms.planning_measurements.change_period %}
+{% if perms.planning_measurements.reopen_closed_period %}
 <div class="modal fade"
      id="reopenPeriodModal"
      tabindex="-1"
