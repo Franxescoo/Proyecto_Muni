@@ -80,6 +80,21 @@
       box-shadow:0 7px 16px rgba(22,35,54,.11);
       position:relative;
   }
+  /* Alertas exclusivas del funcionario conectado, sin tocar otras pantallas. */
+  .sgr-inicio-alertas {margin:0 0 18px;padding:18px 20px;background:#fff;border:1px solid #e4e7ee;border-radius:17px;box-shadow:0 5px 16px rgba(22,35,54,.08);}
+  .sgr-inicio-alertas h2 {font-size:1.15rem;font-weight:850;color:#263446;margin:0 0 5px;}
+  .sgr-inicio-alertas-intro {color:#596579;font-size:.87rem;margin:0 0 13px;}
+  .sgr-inicio-alertas-grid {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:10px;}
+  .sgr-inicio-alerta-personal {display:flex;align-items:flex-start;gap:10px;border:1px solid #e7e9ef;border-left:4px solid #ca8d00;border-radius:9px;padding:11px 12px;background:#fffdf7;min-width:0;}
+  .sgr-inicio-alerta-personal--danger {border-left-color:#bb2434;background:#fff8f8;}
+  .sgr-inicio-alerta-personal-icono {color:#a57200;font-size:1.15rem;line-height:1.4;}
+  .sgr-inicio-alerta-personal--danger .sgr-inicio-alerta-personal-icono {color:#bb2434;}
+  .sgr-inicio-alerta-personal-datos {min-width:0;flex:1;}
+  .sgr-inicio-alerta-personal-titulo {font-size:.91rem;font-weight:800;color:#263446;line-height:1.3;margin:0 0 4px;}
+  .sgr-inicio-alerta-personal-cantidad {font-variant-numeric:tabular-nums;}
+  .sgr-inicio-alerta-personal-detalle {font-size:.8rem;color:#485466;margin:0 0 5px;overflow-wrap:anywhere;}
+  .sgr-inicio-alerta-personal a {font-size:.82rem;font-weight:750;color:#951527;}
+  .sgr-inicio-alerta-personal a:focus-visible {outline:2px solid #183b75;outline-offset:3px;}
   .sgr-inicio-alerta-vencimiento {position:absolute;top:10px;right:11px;color:#c1121f;font-size:1.35rem;z-index:2;animation:sgr-alerta-pulso 1.15s ease-in-out infinite;}
   @keyframes sgr-alerta-pulso {0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(1.18)}}
   @media(prefers-reduced-motion:reduce){.sgr-inicio-alerta-vencimiento{animation:none;}}
@@ -180,11 +195,30 @@
     </div>
   </section>
 
+  {% if personal_alerts %}
+  <section class="sgr-inicio-alertas" aria-labelledby="tituloMisAlertas">
+    <h2 id="tituloMisAlertas"><i class="bi bi-bell me-2" aria-hidden="true"></i>Mis alertas de seguimiento</h2>
+    <p class="sgr-inicio-alertas-intro">Solo se muestran avisos del funcionario vinculado a tu cuenta, según tus permisos y delegación activa.</p>
+    <div class="sgr-inicio-alertas-grid">
+      {% for alert in personal_alerts %}
+      <div class="sgr-inicio-alerta-personal{% if alert.severity == 'danger' %} sgr-inicio-alerta-personal--danger{% endif %}">
+        <i class="bi bi-exclamation-circle-fill sgr-inicio-alerta-personal-icono" aria-hidden="true"></i>
+        <div class="sgr-inicio-alerta-personal-datos">
+          <div class="sgr-inicio-alerta-personal-titulo"><span class="sgr-inicio-alerta-personal-cantidad">{{ alert.count }}</span> · {{ alert.title }}</div>
+          <p class="sgr-inicio-alerta-personal-detalle">{{ alert.detail }}</p>
+          <a href="{{ alert.href }}">Revisar <span class="visually-hidden">{{ alert.title }}</span><i class="bi bi-arrow-right ms-1" aria-hidden="true"></i></a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
   {% if sections %}
   <div class="sgr-inicio-rejilla" aria-label="Módulos habilitados">
     {% for section in sections %}
       <section class="sgr-inicio-tarjeta{% if section.title == 'Planificación' %} sgr-inicio-tarjeta--planificacion{% elif section.title == 'Organización' %} sgr-inicio-tarjeta--organizacion{% elif section.title == 'Registro y validación' %} sgr-inicio-tarjeta--registro{% elif section.title == 'Eventos y Campañas' %} sgr-inicio-tarjeta--eventos{% elif section.title == 'Monitoreo y trazabilidad' %} sgr-inicio-tarjeta--monitoreo{% endif %}" aria-labelledby="sgrTarjeta{{ forloop.counter }}">
-        {% if section.title == 'Monitoreo y trazabilidad' and has_overdue_commitments %}<span class="sgr-inicio-alerta-vencimiento" title="Hay compromisos vencidos" aria-label="Hay compromisos vencidos"><i class="bi bi-exclamation-circle-fill" aria-hidden="true"></i></span>{% endif %}
+        {% if section.title == 'Monitoreo y trazabilidad' and has_personal_alerts %}<span class="sgr-inicio-alerta-vencimiento" title="Tienes alertas de seguimiento" aria-label="Tienes alertas de seguimiento"><i class="bi bi-exclamation-circle-fill" aria-hidden="true"></i></span>{% endif %}
         <div class="sgr-inicio-tarjeta-cabecera">
           <div class="sgr-inicio-tarjeta-icono" aria-hidden="true">
             {% if section.title == 'Planificación' %}<i class="bi bi-calendar-check"></i>

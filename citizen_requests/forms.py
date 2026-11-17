@@ -1,6 +1,7 @@
 from django import forms
 from django.core.exceptions import ValidationError
 from django.db.models import Q
+from django.utils import timezone
 
 from accounts.permissions import allowed_delegation_ids
 from organization.models import Employee
@@ -158,6 +159,17 @@ class CitizenRequestActionForm(forms.ModelForm):
         self.user = user
         self.is_editing = self.instance.pk is not None
         self.original_values = None
+
+        # Una gestión nueva toma por defecto la hora local de registro.
+        # Se puede ajustar si el trabajo se realizó con anterioridad.
+        if not self.is_bound and not self.is_editing:
+            self.fields["performed_at"].initial = (
+                timezone.localtime().replace(second=0, microsecond=0)
+            )
+        self.fields["performed_at"].help_text = (
+            "Se completa con la fecha y hora actuales. "
+            "Modifícala solo si la gestión se realizó en otro momento."
+        )
 
         if self.is_editing:
             self.original_values = (

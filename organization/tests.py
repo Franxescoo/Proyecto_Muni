@@ -1514,3 +1514,97 @@ class OrganizationUserMaintenanceTests(TestCase):
         user.refresh_from_db()
         self.assertTrue(user.is_active)
         self.assertIsNone(user.profile.deleted_at)
+
+
+class DelegationReactivationScopeTests(TestCase):
+    """Administración histórica sin ampliar el acceso operativo por delegación."""
+
+    def setUp(self):
+        self.url = reverse("organization:delegation_list")
+        self.owned = Delegation.objects.create(
+            code="TEST-OWNED", name="Prueba autorizada", address="Calle Uno 1",
+            commune="La Serena", scope="Urbano", status="Inactive",
+        )
+        self.foreign = Delegation.objects.create(
+            code="TEST-OTHER", name="Prueba sin autorización", address="Calle Dos 2",
+            commune="Coquimbo", scope="Rural", status="Inactive",
+        )
+        self.user = get_user_model().objects.create_user(
+            username="admin_delegaciones_normal", password="clave-test-interna",
+        )
+        profile = UserProfile.objects.create(
+            user=self.user, employee_code="TEST-ADMIN-DEL", delegation=self.owned,
+        )
+        profile.authorized_delegations.add(self.owned)
+        self.group = Group.objects.create(name="Pruebas administrador delegaciones")
+        OrganizationRole.objects.create(group=self.group)
+        self.view_perm = Permission.objects.get(
+            content_type__app_label="organization", codename="view_delegation",
+        )
+        self.change_perm = Permission.objects.get(
+            content_type__app_label="organization", codename="change_delegation",
+        )
+        self.group.permissions.add(self.view_perm, self.change_perm)
+        self.user.groups.add(self.group)
+        self.client.force_login(self.user)
+
+    def _edit(self, delegation, status):
+        return self.client.post(self.url, {
+            "action": "edit", "object_id": delegation.pk,
+            "code": delegation.code, "name": delegation.name,
+            "address": delegation.address, "commune": delegation.commune,
+            "scope": delegation.scope, "responsible": "", "status": status,
+        })
+
+    def test_inactive_can_be_listed_filtered_and_reactivated(self):
+        listing = self.client.get(self.url)
+        self.assertEqual(listing.status_code, 200)
+        self.assertContains(listing, "Prueba autorizada")
+        self.assertContains(listing, 'value="Inactive"')
+        filtered = self.client.get(self.url, {"status": "Inactive"})
+        self.assertContains(filtered, "Prueba autorizada")
+        modal = self.client.get(self.url, {"modal": "edit", "id": self.owned.pk})
+        self.assertEqual(modal.status_code, 200)
+        self.assertEqual(self._edit(self.owned, "Active").status_code, 302)
+        self.owned.refresh_from_db()
+        self.assertEqual(self.owned.status, "Active")
+
+    def test_no_foreign_inactive_delegation_is_exposed_or_editable(self):
+        listing = self.client.get(self.url)
+        self.assertNotContains(listing, "Prueba sin autorización")
+        self.assertEqual(self.client.get(
+            self.url, {"modal": "edit", "id": self.foreign.pk}
+        ).status_code, 404)
+        self.assertEqual(self._edit(self.foreign, "Active").status_code, 404)
+        self.foreign.refresh_from_db()
+        self.assertEqual(self.foreign.status, "Inactive")
+
+    def test_without_change_permission_user_cannot_reactivate(self):
+        self.group.permissions.remove(self.change_perm)
+        # Invalidar el usuario autenticado en memoria: permisos recién modificados.
+        self.client.logout()
+        self.user = get_user_model().objects.get(pk=self.user.pk)
+        self.client.force_login(self.user)
+        self.assertContains(self.client.get(self.url), "Prueba autorizada")
+        self.assertEqual(self.client.get(
+            self.url, {"modal": "edit", "id": self.owned.pk}
+        ).status_code, 403)
+        self.assertEqual(self._edit(self.owned, "Active").status_code, 403)
+        self.owned.refresh_from_db()
+        self.assertEqual(self.owned.status, "Inactive")
+
+    def test_inactive_still_not_usable_in_global_selector(self):
+        from accounts.delegation_context import authorized_delegations
+        from accounts.permissions import allowed_delegation_ids
+        self.assertEqual(authorized_delegations(self.user), [])
+        self.assertEqual(allowed_delegation_ids(self.user, active_only=False), set())
+
+    def test_archived_delegation_does_not_reappear(self):
+        from django.utils import timezone
+        self.owned.deleted_at = timezone.now()
+        self.owned.save(update_fields=["deleted_at"])
+        self.assertNotContains(self.client.get(self.url), "Prueba autorizada")
+        self.assertEqual(self.client.get(
+            self.url, {"modal": "edit", "id": self.owned.pk}
+        ).status_code, 404)
+

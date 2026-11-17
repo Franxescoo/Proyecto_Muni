@@ -3,6 +3,7 @@ from django.core.validators import MaxLengthValidator
 from accounts.permissions import allowed_delegation_ids
 from django.core.validators import FileExtensionValidator
 from django.db.models import Q
+from django.utils import timezone
 from organization.models import Delegation, Employee
 from citizen_registry.models import Citizen
 from planning_measurements.models import Goal, Period
@@ -679,6 +680,22 @@ class ValidationForm(BootstrapMixin, forms.ModelForm):
 
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
+        # La fecha de validación refleja cuándo se tomó la decisión.
+        # No aceptamos fechas enviadas por el navegador, tampoco al editar.
+        self.fields["date"].disabled = True
+        if self.instance.pk:
+            self.fields["date"].help_text = (
+                "Fecha y hora originales de la validación. "
+                "No se modifican al editar."
+            )
+        else:
+            self.fields["date"].initial = (
+                timezone.localtime().replace(second=0, microsecond=0)
+            )
+            self.fields["date"].help_text = (
+                "Fecha y hora actuales de Chile, asignadas "
+                "automáticamente al guardar."
+            )
         if self.instance.pk and self.instance.version < 1:
             self.fields["version"].min_value = None
         evidences = (

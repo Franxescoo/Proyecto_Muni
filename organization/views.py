@@ -133,6 +133,47 @@ def _delegation_id(user):
 
 
 
+def _delegation_management_ids(user, permission):
+    """Ámbito histórico SOLO del mantenedor de Delegaciones.
+
+    El permiso sigue determinando la operación y las delegaciones de la
+    cuenta siguen determinando cuáles puede administrar. La exclusión
+    operativa de delegaciones inactivas permanece en accounts.permissions.
+    """
+    if not user.is_authenticated or not user.is_active or not user.has_perm(permission):
+        return set()
+
+    profile = UserProfile.objects.filter(
+        user=user, deleted_at__isnull=True,
+    ).first()
+    if profile is None:
+        return set()
+
+    app_label, codename = permission.split(".", 1)
+    direct = user.user_permissions.filter(
+        codename=codename,
+        content_type__app_label=app_label,
+    ).exists()
+    inherited = user.groups.filter(
+        permissions__codename=codename,
+        permissions__content_type__app_label=app_label,
+        organization_role__isnull=False,
+    ).exists()
+    if not (direct or inherited):
+        return set()
+
+    ids = set(profile.authorized_delegations.values_list("pk", flat=True))
+    if not ids and profile.delegation_id:
+        ids.add(profile.delegation_id)
+
+    # Compatible con delegaciones creadas desde este mantenedor (rama Organización).
+    ids.update(Delegation.objects.filter(
+        created_by_id=user.pk,
+        deleted_at__isnull=True,
+    ).values_list("pk", flat=True))
+    return ids
+
+
 def _delegation_ids(
     user,
     permission=None,
@@ -146,6 +187,18 @@ def _delegation_ids(
     Se conserva respect_role_scope para compatibilidad con
     las llamadas existentes, pero ya no limita por el rol.
     """
+    # Solo consulta/modificación administrativa: incluir inactivas previamente
+    # autorizadas; el selector global y los otros módulos continúan bloqueándolas.
+    if (
+        not respect_role_scope
+        and not active_only
+        and not user.is_superuser
+        and permission in (
+            "organization.view_delegation",
+            "organization.change_delegation",
+        )
+    ):
+        return _delegation_management_ids(user, permission)
     return allowed_delegation_ids(
         user,
         permission,

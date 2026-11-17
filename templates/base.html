@@ -451,6 +451,9 @@
     </style>
     <link rel="stylesheet" href="{% static 'css/chat_flotante.css' %}?v=20261111-chat-menu-3">
     {% block estilos %}{% endblock %}
+    {% if user.is_authenticated %}
+    <link rel="stylesheet" href="{% static 'css/sgr_ancho_completo.css' %}?v=20261117-1">
+    {% endif %}
 </head>
 <body>
 {% block public_navigation %}
@@ -1335,5 +1338,6 @@ document.addEventListener("DOMContentLoaded", function () {
 }
 </style>
 <!-- SGR_MENU_TRES_RAYAS_FIN -->
+<script src="{% static 'js/sgr_textos_es.js' %}?v=2" defer></script>
 </body>
 </html>

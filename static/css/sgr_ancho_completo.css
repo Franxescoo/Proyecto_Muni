@@ -1,0 +1,89 @@
+/* SGR — ancho completo de los módulos internos.
+   Este archivo modifica solo presentación: no interviene en formularios,
+   botones, modales, permisos, enlaces ni datos. */
+
+/* El diseño base ya deja los márgenes laterales (px-4). Mantenerlos. */
+.global-page-content > .container-fluid,
+.global-page-content .workspace-layout,
+.global-page-content .workspace-content,
+.global-page-content .workspace-content > main {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+}
+
+/* Contenedores principales: mismo aprovechamiento de pantalla que Períodos. */
+.global-page-content .workspace-content > main > :is(
+    .monitor-shell,
+    .registration-shell,
+    .organization-shell,
+    .mec,
+    .container,
+    .container-sm,
+    .container-md,
+    .container-lg,
+    .container-xl,
+    .container-xxl,
+    .container-fluid
+) {
+    box-sizing: border-box;
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+}
+
+/* La página ya trae su propio margen mediante el contenedor exterior.
+   Evitar duplicarlo en pantallas internas que usan .container de Bootstrap. */
+.global-page-content .workspace-content > main > :is(
+    .container,
+    .container-sm,
+    .container-md,
+    .container-lg,
+    .container-xl,
+    .container-xxl,
+    .container-fluid
+) {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
+
+/* Permitir que las secciones ocupen toda la anchura sin forzar cambios
+   en el diseño original de las tarjetas ni de las guías laterales. */
+.global-page-content .workspace-content > main > :is(
+    .monitor-shell,
+    .registration-shell,
+    .organization-shell,
+    .mec
+) > :is(.sgr-guide-layout, .sgr-guide-main, .row, .section-card, .sgr-catalog),
+.global-page-content .workspace-content > main > .mec .mec-body,
+.global-page-content .workspace-content > main > .mec .sgr-guide-main {
+    min-width: 0;
+    max-width: 100%;
+}
+
+/* Desplazamiento interno de las tablas anchas, sin estirar la ventana
+   ni achicar obligatoriamente los textos y botones. */
+.global-page-content .workspace-content > main > :is(
+    .monitor-shell,
+    .registration-shell,
+    .organization-shell,
+    .mec,
+    .container,
+    .container-fluid
+) .table-responsive,
+.global-page-content .workspace-content > main > .mec .mec-table-wrap {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Teléfonos y tablets: conservar el ancho disponible sin alterar modales. */
+@media (max-width: 767.98px) {
+    .global-page-content > .container-fluid {
+        padding-left: 12px !important;
+        padding-right: 12px !important;
+    }
+}
