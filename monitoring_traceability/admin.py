@@ -221,31 +221,9 @@ class CommitmentAdmin(admin.ModelAdmin):
             delegation_id=profile.delegation_id
         )
 
-    def has_change_permission(
-        self,
-        request,
-        obj=None,
-    ):
-        if not super().has_change_permission(
-            request,
-            obj,
-        ):
-            return False
-
-        if obj is None or request.user.is_superuser:
-            return True
-
-        profile = getattr(
-            request.user,
-            "profile",
-            None,
-        )
-
-        return bool(
-            profile
-            and profile.delegation_id
-            == obj.delegation_id
-        )
+    def has_change_permission(self, request, obj=None):
+        # Modificar no es una acción disponible, ni desde el administrador Django.
+        return False
 
     def formfield_for_foreignkey(
         self,

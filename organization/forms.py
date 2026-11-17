@@ -30,9 +30,12 @@ STATUS_CHOICES = (
     ("Inactive", "Inactivo"),
 )
 
+# Estado adicional EXCLUSIVO de empleados; no se aplica a delegaciones.
+EMPLOYEE_STATUS_CHOICES = STATUS_CHOICES + (("On leave", "Con licencia"),)
 
-def _configure_status_choices(form):
-    choices = list(STATUS_CHOICES)
+
+def _configure_status_choices(form, selected_choices=None):
+    choices = list(STATUS_CHOICES if selected_choices is None else selected_choices)
     current_status = getattr(form.instance, "status", "")
     if current_status and current_status not in dict(choices):
         choices.append((current_status, current_status))
@@ -472,7 +475,7 @@ class EmployeeForm(AccountsEmployeeForm):
             Q(deleted_at__isnull=True) | Q(pk=old_position)
         ).order_by("position_name")
 
-        _configure_status_choices(self)
+        _configure_status_choices(self, EMPLOYEE_STATUS_CHOICES)
         self.fields["position"].widget = PositionRolesSelect()
         self.fields["position"].widget.choices = self.fields["position"].choices
 

@@ -4,8 +4,7 @@
         <div class="modal-content">
             <form method="post" action="{{ modal_action }}" novalidate>
                 {% csrf_token %}
-                <input type="hidden" name="action" value="{% if modal_commitment %}edit_commitment{% else %}create_commitment{% endif %}">
-                {% if modal_commitment %}<input type="hidden" name="commitment_id" value="{{ modal_commitment.pk }}"><input type="hidden" name="commitment_version" value="{{ modal_commitment.version_token }}">{% endif %}
+                <input type="hidden" name="action" value="create_commitment">
                 <div class="modal-header">
                     <div class="sgr-modal-title-block">
                         <div class="sgr-modal-eyebrow"><i class="bi bi-shield-check me-2" aria-hidden="true"></i>MONITOREO Y TRAZABILIDAD</div>
@@ -30,7 +29,7 @@
                         {% endwith %}
                         {% with field=commitment_form.responsible %}
                         <div class="col-12 col-md-4">
-                            {{ field.label_tag }}<button type="button" class="sgr-help-hint" data-help="Responsable actual del compromiso. En edición se muestra, pero no se modifica desde este formulario." aria-label="Ayuda sobre responsable">?</button>{{ field }}
+                            {{ field.label_tag }}<button type="button" class="sgr-help-hint" data-help="Responsable actual del compromiso. Se define al crear el compromiso; después se cambia mediante Reasignar responsable." aria-label="Ayuda sobre responsable">?</button>{{ field }}
                             {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
                         </div>
                         {% endwith %}
@@ -106,11 +105,6 @@ document.addEventListener("DOMContentLoaded", function () {
     const status = document.getElementById("id_status");
     const form = document.querySelector("#commitmentModal form");
     if (!delegation || !activity || !form) return;
-    // Edits have read-only relationships and a historical territory/date.
-    // Do not rewrite them with the activity's defaults while opening the modal.
-    if (form.querySelector('input[name="action"]')?.value === "edit_commitment") {
-        return;
-    }
     let autoDate = "";
 
     const filterOptions = (select, delegationId) => {

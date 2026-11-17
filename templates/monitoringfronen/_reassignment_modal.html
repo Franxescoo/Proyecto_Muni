@@ -9,8 +9,8 @@
                 <div class="modal-header">
                     <div class="sgr-modal-title-block">
                         <div class="sgr-modal-eyebrow">MONITOREO Y TRAZABILIDAD</div>
-                        <h5 class="modal-title" id="reassignmentModalLabel">Reasignación pendiente</h5>
-                        <p class="sgr-modal-subtitle mb-0">El responsable anterior se conservará en el historial de reasignaciones.</p>
+                        <h5 class="modal-title" id="reassignmentModalLabel">Reasignar responsable</h5>
+                        <p class="sgr-modal-subtitle mb-0">Indica si corresponde a ausencia del funcionario o vencimiento. Se conservarán el responsable anterior y la justificación.</p>
                     </div>
                     <a href="{% url 'monitoring:commitment_list' %}" class="btn-close" aria-label="Cerrar"></a>
                 </div>
@@ -22,6 +22,7 @@
                     <div class="mb-3">
                         {{ field.label_tag }}
                         {{ field }}
+                        {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
                         {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
                     </div>
                     {% endfor %}

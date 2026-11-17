@@ -1,3 +1,4 @@
+{% load static %}
 
 {% if open_modal %}
 
@@ -152,26 +153,33 @@
                                     puede superar 50 MB.
                                 </p>
 
-                                <label for="{{ form.new_files.id_for_label }}"
-                                       class="form-label fw-semibold">
-                                    Seleccionar archivos
-                                </label>
-
-                                {{ form.new_files }}
+                                <div data-sgr-multi-upload
+                                     data-max-files="5" data-min-files="2"
+                                     data-max-bytes="52428800"
+                                     data-existing-files="{{ form.existing_evidence_files|length }}">
+                                    <div class="form-label fw-semibold mb-2">Seleccionar archivos</div>
+                                    <div data-sgr-original-input>
+                                        {{ form.new_files }}
+                                    </div>
+                                    <button type="button"
+                                            class="btn btn-outline-primary btn-sm d-none"
+                                            data-sgr-add-files>
+                                        <i class="bi bi-plus-circle me-1" aria-hidden="true"></i>
+                                        Agregar archivos
+                                    </button>
+                                    <div class="small text-muted mt-2"
+                                         data-sgr-file-summary aria-live="polite">
+                                        No hay archivos nuevos seleccionados.
+                                    </div>
+                                    <div class="small text-danger mt-2 d-none"
+                                         data-sgr-file-message role="alert"></div>
+                                    <ul class="list-group mt-2 d-none"
+                                        data-sgr-file-list aria-label="Archivos nuevos seleccionados"></ul>
+                                </div>
 
                                 {% if form.new_files.help_text %}
-
-                                <div class="form-text">
-                                    {{ form.new_files.help_text }}
-                                </div>
-
+                                <div class="form-text">{{ form.new_files.help_text }}</div>
                                 {% endif %}
-
-                                <div id="selectedEvidenceFiles"
-                                     class="small text-muted mt-2"
-                                     aria-live="polite">
-                                    No hay archivos nuevos seleccionados.
-                                </div>
 
                                 {% for error in form.new_files.errors %}
 
@@ -377,76 +385,7 @@
 </div>
 
 
-<script>
-    document.addEventListener(
-        "DOMContentLoaded",
-        function () {
 
-            const fileInput = document.getElementById(
-                "{{ form.new_files.id_for_label }}"
-            );
-
-            const fileSummary = document.getElementById(
-                "selectedEvidenceFiles"
-            );
-
-            if (!fileInput || !fileSummary) {
-                return;
-            }
-
-            fileInput.addEventListener(
-                "change",
-                function () {
-
-                    const files = Array.from(
-                        fileInput.files || []
-                    );
-
-                    if (files.length === 0) {
-                        fileSummary.textContent =
-                            "No hay archivos nuevos seleccionados.";
-                        fileSummary.className =
-                            "small text-muted mt-2";
-                        return;
-                    }
-
-                    const totalBytes = files.reduce(
-                        function (sum, file) {
-                            return sum + file.size;
-                        },
-                        0
-                    );
-
-                    const totalMB =
-                        totalBytes / (1024 * 1024);
-
-                    fileSummary.textContent =
-                        "Archivos nuevos seleccionados: "
-                        + files.length
-                        + " · Peso conjunto de los nuevos: "
-                        + totalMB.toFixed(2)
-                        + " MB";
-
-                    if (
-                        files.length > 5 ||
-                        totalBytes > 50 * 1024 * 1024
-                    ) {
-
-                        fileSummary.className =
-                            "small text-danger fw-semibold mt-2";
-
-                    } else {
-
-                        fileSummary.className =
-                            "small text-success mt-2";
-
-                    }
-
-                }
-            );
-
-        }
-    );
-</script>
+<script src="{% static 'js/sgr_multi_file_picker.js' %}" defer></script>
 
 {% endif %}

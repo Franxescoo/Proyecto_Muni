@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block titulo %}
     {% if is_editing %}Editar gestión operativa{% else %}Registrar gestión operativa{% endif %}
@@ -23,7 +24,27 @@
         {% for field in form %}
         <div class="mb-3">
             <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-            {{ field }}
+        {% if field.name == "attachments" %}
+        <div data-sgr-multi-upload
+             data-max-files="5" data-min-files="0"
+             data-max-bytes="52428800"
+             data-existing-files="{% if is_editing %}{{ action.attachments.count }}{% else %}0{% endif %}">
+            <div data-sgr-original-input>{{ field }}</div>
+            <button type="button" class="btn btn-outline-primary btn-sm mt-2 d-none"
+                    data-sgr-add-files>
+                <i class="bi bi-plus-circle me-1" aria-hidden="true"></i>
+                Agregar archivos
+            </button>
+            <div class="small text-muted mt-2" data-sgr-file-summary aria-live="polite">
+                No hay archivos nuevos seleccionados.
+            </div>
+            <div class="small text-danger mt-2 d-none" data-sgr-file-message role="alert"></div>
+            <ul class="list-group mt-2 d-none" data-sgr-file-list
+                aria-label="Archivos nuevos seleccionados"></ul>
+        </div>
+        {% else %}
+        {{ field }}
+        {% endif %}
             {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
             {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
         </div>
@@ -62,4 +83,5 @@
         </div>
     </form>
 </div>
+<script src="{% static 'js/sgr_multi_file_picker.js' %}" defer></script>
 {% endblock %}

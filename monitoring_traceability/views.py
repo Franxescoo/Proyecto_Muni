@@ -699,12 +699,40 @@ def commitment_create(request):
 
 
 @login_required
-@permission_required("monitoring_traceability.change_commitment", raise_exception=True)
 def commitment_edit(request, commitment_id):
-    return redirect(
-        f"{reverse('monitoring:commitment_list')}?open_modal=edit"
-        f"&commitment_id={commitment_id}"
+    # SGR_COMPROMISOS_RESTRICCIONES_20261117: compatibilidad URL, edición prohibida.
+    raise PermissionDenied(
+        "No está permitido modificar compromisos. Usa Actualizar estado o Reasignar responsable."
     )
+
+
+def _responsible_unavailable(employee):
+    """El estado real del empleado debe justificar una ausencia anticipada."""
+    return bool(
+        employee is not None
+        and (
+            employee.deleted_at is not None
+            or (employee.status or "").strip().casefold() in {
+                "inactive", "inactivo", "on leave", "on_leave", "con licencia", "licencia",
+            }
+        )
+    )
+
+
+def _commitment_can_be_reassigned(commitment):
+    """Por vencimiento, o anticipadamente por empleado inactivo/con licencia."""
+    current = Commitment.LEGACY_STATUS_MAP.get(commitment.status, commitment.status)
+    return (
+        commitment.deleted_at is None
+        and current in {Commitment.Status.PENDING, Commitment.Status.IN_PROGRESS}
+        and (
+            commitment.is_overdue
+            or _responsible_unavailable(commitment.responsible)
+        )
+    )
+
+
+# SGR_REASIGNACION_ESTADO_FUNCIONARIO_20261117
 
 
 def _commitment_list_context(
@@ -729,6 +757,7 @@ def _commitment_list_context(
             resolved_at__isnull=True
         )
         commitment.transition_options = commitment.available_transitions()
+        commitment.can_be_reassigned = _commitment_can_be_reassigned(commitment)
 
     # RF-021: los mismos filtros que el listado se aplican al resumen colectivo.
     summary_rows = list(commitments.values(
@@ -763,7 +792,7 @@ def _commitment_list_context(
         "reassignment_employees": _employee_scope(
             request, "monitoring_traceability.view_commitment"
         ).order_by("name"),
-        "open_modal": modal in {"create", "edit"},
+        "open_modal": modal == "create",
         "commitment_form": form,
         "modal_commitment": modal_commitment,
         "modal_title": modal_title,
@@ -779,7 +808,7 @@ def _commitment_list_context(
 @permission_required("monitoring_traceability.view_commitment", raise_exception=True)
 def commitment_export(request):
     commitments = _scoped_queryset(
-        Commitment.objects.select_related("delegation", "responsible"),
+        Commitment.objects.select_related("delegation", "responsible", "activity__goal"),
         request.user,
         "responsible",
         "monitoring_traceability.view_commitment",
@@ -791,6 +820,8 @@ def commitment_export(request):
             Q(origin__icontains=search)
             | Q(requester__icontains=search)
             | Q(territory__icontains=search)
+            | Q(activity__action__icontains=search)
+            | Q(activity__goal__item__icontains=search)
             | Q(responsible__name__icontains=search)
         )
     if status:
@@ -801,8 +832,8 @@ def commitment_export(request):
     )
     return workbook_response(
         "compromisos_monitoreo.xlsx",
-        ["ID", "Delegación", "Responsable", "Meta", "Solicitante",
-         "Territorio", "Fecha límite", "Estado", "Metadatos"],
+        ["ID", "Delegación", "Responsable", "Origen", "Solicitante",
+         "Territorio", "Fecha límite", "Estado", "Actividad", "Meta", "Metadatos"],
         [
             (
                 commitment.pk,
@@ -813,6 +844,10 @@ def commitment_export(request):
                 commitment.territory,
                 commitment.commitment_date,
                 commitment.status,
+                (f"#{commitment.activity_id} - {commitment.activity.action}"
+                 if commitment.activity_id else "Sin actividad asociada"),
+                (commitment.activity.goal.item
+                 if commitment.activity_id else "Sin meta asociada"),
                 metadata,
             )
             for commitment in commitments.order_by("-commitment_date", "pk")
@@ -827,7 +862,7 @@ def commitment_list(request):
         Commitment.objects.select_related(
             "delegation",
             "responsible",
-            "activity",
+            "activity__goal",
         ).prefetch_related(
             Prefetch(
                 "comments",
@@ -871,21 +906,7 @@ def commitment_list(request):
     reassignment_form = None
     reassignment_commitment = None
     if modal == "edit":
-        if not request.user.has_perm("monitoring_traceability.change_commitment"):
-            raise PermissionDenied("No puedes modificar compromisos.")
-        modal_commitment = commitments.filter(
-            pk=request.GET.get("commitment_id")
-        ).first()
-        if modal_commitment is None:
-            raise PermissionDenied("No tienes acceso a ese compromiso.")
-        modal_commitment.version_token = modal_commitment.updated_at.isoformat()
-        modal_form = CommitmentForm(
-            instance=modal_commitment,
-            employees=employees,
-            delegations=delegations,
-            activities=activities,
-        )
-        modal_title = "Editar compromiso"
+        raise PermissionDenied("Los compromisos no admiten edición general.")
     elif modal == "create":
         if not request.user.has_perm("monitoring_traceability.add_commitment"):
             raise PermissionDenied("No puedes crear compromisos.")
@@ -903,36 +924,30 @@ def commitment_list(request):
         ).first()
         if reassignment_commitment is None:
             raise PermissionDenied("No tienes acceso a ese compromiso.")
-        if not reassignment_commitment.is_overdue:
-            raise PermissionDenied("Solo puedes reasignar compromisos vencidos y pendientes.")
+        if not _commitment_can_be_reassigned(reassignment_commitment):
+            raise PermissionDenied("Solo se pueden reasignar compromisos no finalizados.")
         reassignment_form = CommitmentReassignmentForm(
             employees=employees.filter(
                 delegation_id=reassignment_commitment.delegation_id,
                 status__iexact="Active",
             ).exclude(
                 pk=reassignment_commitment.responsible_id
-            )
+            ),
+            is_overdue=reassignment_commitment.is_overdue,
+            employee_unavailable=_responsible_unavailable(reassignment_commitment.responsible),
         )
 
     if request.method == "POST":
         action = request.POST.get("action", "add")
-        if action in {"create_commitment", "edit_commitment"}:
-            required_permission = (
-                "monitoring_traceability.add_commitment"
-                if action == "create_commitment"
-                else "monitoring_traceability.change_commitment"
+        if action == "edit_commitment":
+            raise PermissionDenied(
+                "No está permitido editar compromisos. Usa Actualizar estado o Reasignar."
             )
-            if not request.user.has_perm(required_permission):
-                raise PermissionDenied("No tienes autorización para guardar compromisos.")
-            commitment_id = request.POST.get("commitment_id")
-            instance = None
-            if action == "edit_commitment":
-                instance = commitments.filter(pk=commitment_id).first()
-                if instance is None:
-                    raise PermissionDenied("No tienes acceso a ese compromiso.")
+        if action == "create_commitment":
+            if not request.user.has_perm("monitoring_traceability.add_commitment"):
+                raise PermissionDenied("No puedes crear compromisos.")
             form = CommitmentForm(
                 request.POST,
-                instance=instance,
                 employees=employees,
                 delegations=delegations,
                 activities=activities,
@@ -941,18 +956,8 @@ def commitment_list(request):
                 commitment = form.save(commit=False)
                 commitment._audit_actor_user = request.user
                 with transaction.atomic():
-                    if instance is not None:
-                        locked = Commitment.objects.select_for_update().get(pk=instance.pk)
-                        version = request.POST.get("commitment_version")
-                        if version and version != locked.updated_at.isoformat():
-                            messages.error(
-                                request,
-                                "El compromiso fue modificado por otro usuario. "
-                                "Actualiza la pantalla antes de guardar.",
-                            )
-                            return redirect("monitoring:commitment_list")
-                    elif commitment.activity_id:
-                        # Evitar dos compromisos concurrentes para una sola actividad.
+                    if commitment.activity_id:
+                        # Evita compromisos duplicados creados al mismo tiempo.
                         Activity.objects.select_for_update().get(pk=commitment.activity_id)
                         if Commitment.objects.filter(
                             activity_id=commitment.activity_id,
@@ -964,17 +969,8 @@ def commitment_list(request):
                             )
                             return redirect("monitoring:commitment_list")
                     commitment.save()
-                messages.success(
-                    request,
-                    "Compromiso actualizado correctamente."
-                    if instance else "Compromiso creado correctamente.",
-                )
+                messages.success(request, "Compromiso creado correctamente.")
                 return redirect("monitoring:commitment_list")
-            if instance is not None:
-                instance.version_token = instance.updated_at.isoformat()
-            commitments = commitments.filter(
-                pk=commitment_id
-            ) if instance else commitments
             return render(
                 request,
                 "monitoringfronen/compro.html",
@@ -982,12 +978,8 @@ def commitment_list(request):
                     request,
                     commitments,
                     form=form,
-                    modal="edit" if instance else "create",
-                    modal_commitment=instance,
-                    modal_title=(
-                        "Editar compromiso" if instance
-                        else "Nuevo compromiso"
-                    ),
+                    modal="create",
+                    modal_title="Nuevo compromiso",
                     activities=activities,
                     reassignment_form=reassignment_form,
                     reassignment_commitment=reassignment_commitment,
@@ -1042,8 +1034,8 @@ def commitment_list(request):
         elif action == "reassign":
             if not request.user.has_perm("monitoring_traceability.change_commitment"):
                 raise PermissionDenied("No puedes reasignar compromisos.")
-            if not commitment.is_overdue:
-                raise PermissionDenied("Solo puedes reasignar compromisos vencidos y pendientes.")
+            if not _commitment_can_be_reassigned(commitment):
+                raise PermissionDenied("Solo se pueden reasignar compromisos no finalizados.")
             employees = _employee_scope(
                 request, "monitoring_traceability.view_commitment"
             ).filter(
@@ -1053,19 +1045,33 @@ def commitment_list(request):
                 pk=commitment.responsible_id
             )
             reassignment_form = CommitmentReassignmentForm(
-                request.POST, employees=employees
+                request.POST,
+                employees=employees,
+                is_overdue=commitment.is_overdue,
+                employee_unavailable=_responsible_unavailable(commitment.responsible),
             )
             if reassignment_form.is_valid():
                 with transaction.atomic():
                     locked = Commitment.objects.select_for_update().get(
                         pk=commitment.pk
                     )
-                    if not locked.is_overdue or locked.deleted_at is not None:
-                        raise PermissionDenied("El compromiso ya no admite reasignación.")
+                    # Revalidar también la situación del empleado dentro de la transacción.
+                    locked.responsible = Employee.objects.select_for_update().get(pk=locked.responsible_id)
+                    if not _commitment_can_be_reassigned(locked):
+                        raise PermissionDenied("Solo puedes reasignar por vencimiento o por funcionario inactivo/con licencia.")
+                    cause = reassignment_form.cleaned_data["cause"]
+                    if cause == "overdue" and not locked.is_overdue:
+                        raise PermissionDenied("No puedes declarar vencido un compromiso vigente.")
+                    if cause == "absence" and not _responsible_unavailable(locked.responsible):
+                        raise PermissionDenied("La ausencia requiere que el funcionario esté inactivo o con licencia.")
+                    if locked.responsible_id != commitment.responsible_id:
+                        raise PermissionDenied("Cambió el responsable. Actualiza el listado.")
                     previous = locked.responsible
                     new_responsible = reassignment_form.cleaned_data["responsible"]
                     if new_responsible.delegation_id != locked.delegation_id:
                         raise PermissionDenied("El nuevo responsable debe ser de la misma delegación.")
+                    if new_responsible.deleted_at is not None or new_responsible.status.casefold() != "active":
+                        raise PermissionDenied("El nuevo responsable debe estar activo.")
                     locked.responsible = new_responsible
                     locked._audit_actor_user = request.user
                     locked.save(update_fields=["responsible", "updated_at"])
@@ -1073,7 +1079,10 @@ def commitment_list(request):
                         commitment=locked,
                         previous_responsible=previous,
                         new_responsible=new_responsible,
-                        reason=reassignment_form.cleaned_data["reason"],
+                        reason=(
+                            f"{dict(CommitmentReassignmentForm.CAUSE_CHOICES)[cause]}: "
+                            f"{reassignment_form.cleaned_data['reason']}"
+                        ),
                         changed_by=request.user,
                     )
                 messages.success(request, "Compromiso reasignado.")
@@ -1138,6 +1147,8 @@ def commitment_list(request):
             Q(origin__icontains=search)
             | Q(requester__icontains=search)
             | Q(territory__icontains=search)
+            | Q(activity__action__icontains=search)
+            | Q(activity__goal__item__icontains=search)
             | Q(observation__icontains=search)
             | Q(responsible__name__icontains=search)
         )
@@ -1154,6 +1165,7 @@ def commitment_list(request):
             resolved_at__isnull=True
         )
         commitment.transition_options = commitment.available_transitions()
+        commitment.can_be_reassigned = _commitment_can_be_reassigned(commitment)
 
     total = commitments.count()
     pending = commitments.filter(

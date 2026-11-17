@@ -237,7 +237,8 @@ class FormulaAndCommitmentIntegrationTests(TestCase):
         self.assertEqual(summary[0]["pending"], 1)
         self.assertEqual(summary[0]["pct_realized"], 50)
 
-    def test_edit_rejects_stale_version_instead_of_overwriting(self):
+    def test_edit_with_stale_version_is_forbidden_instead_of_overwriting(self):
+        # La edición general se bloquea aunque se envíe una versión antigua.
         self.grant("change_commitment")
         commitment = self.commitment()
         old_version = commitment.updated_at.isoformat()
@@ -248,7 +249,7 @@ class FormulaAndCommitmentIntegrationTests(TestCase):
             "commitment_version": old_version,
             "territory": "Cambio atrasado", "observation": "Prueba de conflicto",
         })
-        self.assertEqual(res.status_code, 302)
+        self.assertEqual(res.status_code, 403)
         commitment.refresh_from_db()
         self.assertEqual(commitment.territory, "Territorio cambiado por otro funcionario")
 

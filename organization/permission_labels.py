@@ -67,6 +67,7 @@ SPECIAL = {
     "reopen_closed_period": "Puede reabrir períodos cerrados",
     "derivar_solicitud": "Puede derivar solicitudes ciudadanas",
     "change_indicator": "Puede ajustar indicadores",
+    "change_commitment": "Puede actualizar estados, reasignar responsables y gestionar alertas de compromisos",
     "change_monitoringsettings": "Puede configurar alertas y ajustes de Monitoreo",
     "view_citizenrequestaction": "Puede consultar gestiones operativas",
     "add_citizenrequestaction": "Puede registrar gestiones operativas",

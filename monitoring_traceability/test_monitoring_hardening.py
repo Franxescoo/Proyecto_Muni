@@ -83,46 +83,74 @@ class CommitmentHardeningTests(TestCase):
             "action": "edit_commitment", "commitment_id": commitment.pk,
         }).status_code, 403)
 
-    def test_normal_edit_keeps_responsible_activity_and_delegation(self):
+    def test_normal_edit_is_forbidden_even_with_change_permission(self):
+        # Tener permiso para cambiar el estado NO autoriza a editar el compromiso.
         self.grant("change_commitment")
         commitment = self.commitment()
         original_date = commitment.commitment_date
+        original_observation = commitment.observation
+        self.assertEqual(
+            self.client.get(
+                reverse("monitoring:commitment_edit", args=[commitment.pk])
+            ).status_code, 403,
+        )
+        self.assertEqual(
+            self.client.get(
+                self.path + f"?open_modal=edit&commitment_id={commitment.pk}"
+            ).status_code, 403,
+        )
         response = self.client.post(self.path, {
             "action": "edit_commitment", "commitment_id": commitment.pk,
             "delegation": self.south.pk, "responsible": self.outsider.pk,
             "activity": "", "status": "Validated", "commitment_date": "2099-01-01",
             "territory": "Territorio ajustado", "observation": "Nueva observación",
         })
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 403)
         commitment.refresh_from_db()
         self.assertEqual(commitment.responsible_id, self.owner.pk)
         self.assertEqual(commitment.activity_id, self.activity.pk)
         self.assertEqual(commitment.delegation_id, self.north.pk)
         self.assertEqual(commitment.commitment_date, original_date)
         self.assertEqual(commitment.status, "Pending")
-        self.assertEqual(commitment.territory, "Territorio ajustado")
-        self.assertFalse(CommitmentReassignment.objects.filter(commitment=commitment).exists())
+        self.assertEqual(commitment.territory, "Norte")
+        self.assertEqual(commitment.observation, original_observation)
+        self.assertFalse(commitment.reassignments.exists())
 
-    def test_non_overdue_cannot_reassign_even_by_direct_request(self):
+    def test_non_overdue_active_no_reassign_but_inactive_yes(self):
         self.grant("change_commitment")
         commitment = self.commitment()
         uri = self.path + f"?open_modal=reassign&commitment_id={commitment.pk}"
         self.assertEqual(self.client.get(uri).status_code, 403)
+        denied = self.client.post(self.path, {
+            "action": "reassign", "commitment_id": commitment.pk,
+            "cause": "absence", "responsible": self.replacement.pk,
+            "reason": "No hay licencia registrada",
+        })
+        self.assertEqual(denied.status_code, 403)
+        self.assertFalse(commitment.reassignments.exists())
+        self.owner.status = "Inactive"
+        self.owner.save(update_fields=["status", "updated_at"])
+        commitment.refresh_from_db()
+        self.assertEqual(self.client.get(uri).status_code, 200)
         response = self.client.post(self.path, {
             "action": "reassign", "commitment_id": commitment.pk,
-            "responsible": self.replacement.pk, "reason": "Relevo",
+            "cause": "absence", "responsible": self.replacement.pk,
+            "reason": "Funcionario inactivo, queda encargado el reemplazo",
         })
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 302)
         commitment.refresh_from_db()
-        self.assertEqual(commitment.responsible_id, self.owner.pk)
-        self.assertFalse(commitment.reassignments.exists())
+        self.assertEqual(commitment.responsible_id, self.replacement.pk)
+        entry = CommitmentReassignment.objects.get(commitment=commitment)
+        self.assertEqual(entry.changed_by_id, self.user.pk)
+        self.assertIn("Ausencia del funcionario", entry.reason)
 
     def test_overdue_reassignment_is_logged_atomically(self):
         self.grant("change_commitment")
         commitment = self.commitment(overdue=True)
         response = self.client.post(self.path, {
             "action": "reassign", "commitment_id": commitment.pk,
-            "responsible": self.replacement.pk, "reason": "Ausencia del responsable",
+            "cause": "overdue", "responsible": self.replacement.pk,
+            "reason": "Compromiso vencido y sin completar",
         })
         self.assertEqual(response.status_code, 302)
         commitment.refresh_from_db()
@@ -131,14 +159,17 @@ class CommitmentHardeningTests(TestCase):
         self.assertEqual(entry.previous_responsible_id, self.owner.pk)
         self.assertEqual(entry.new_responsible_id, self.replacement.pk)
         self.assertEqual(entry.changed_by_id, self.user.pk)
+        self.assertIn("Compromiso vencido", entry.reason)
 
     def test_cross_delegation_reassignment_is_not_accepted(self):
         self.grant("change_commitment")
         commitment = self.commitment(overdue=True)
-        self.client.post(self.path, {
+        response = self.client.post(self.path, {
             "action": "reassign", "commitment_id": commitment.pk,
-            "responsible": self.outsider.pk, "reason": "Intento ajeno",
+            "cause": "overdue", "responsible": self.outsider.pk,
+            "reason": "Intento ajeno",
         })
+        self.assertEqual(response.status_code, 200)
         commitment.refresh_from_db()
         self.assertEqual(commitment.responsible_id, self.owner.pk)
         self.assertFalse(commitment.reassignments.exists())

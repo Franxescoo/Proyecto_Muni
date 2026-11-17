@@ -244,6 +244,15 @@ class CommitmentForm(forms.ModelForm):
 
 
 class CommitmentReassignmentForm(forms.Form):
+    CAUSE_CHOICES = (
+        ("absence", "Ausencia del funcionario"),
+        ("overdue", "Compromiso vencido"),
+    )
+    cause = forms.ChoiceField(
+        choices=CAUSE_CHOICES,
+        label="Causa de la reasignación",
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
     responsible = forms.ModelChoiceField(
         queryset=Employee.objects.none(),
         label="Nuevo responsable",
@@ -251,13 +260,23 @@ class CommitmentReassignmentForm(forms.Form):
         widget=forms.Select(attrs={"class": "form-select"}),
     )
     reason = forms.CharField(
-        label="Motivo de reasignación",
+        label="Justificación de la reasignación",
+        help_text="Explica brevemente la ausencia o el vencimiento. Es obligatorio.",
         widget=forms.Textarea(attrs={"class": "form-control", "rows": 3}),
     )
 
-    def __init__(self, *args, employees=None, **kwargs):
+    def __init__(self, *args, employees=None, is_overdue=False,
+                 employee_unavailable=False, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["responsible"].queryset = employees or Employee.objects.none()
+        self.fields["responsible"].queryset = (
+            employees if employees is not None else Employee.objects.none()
+        )
+        causes = []
+        if employee_unavailable:
+            causes.append(self.CAUSE_CHOICES[0])  # Ausencia: solo Inactivo o Con licencia.
+        if is_overdue:
+            causes.append(self.CAUSE_CHOICES[1])  # Vencimiento: regla independiente.
+        self.fields["cause"].choices = causes
 
 
 class MonitoringSettingsForm(forms.ModelForm):
