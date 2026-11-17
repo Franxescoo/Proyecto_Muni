@@ -211,8 +211,13 @@ def _limit_form_choices(
             active_only=False,
             respect_role_scope=respect_role_scope,
         )
-        form.fields["delegation"].queryset = Delegation.objects.filter(
-            pk__in=permitted, deleted_at__isnull=True,
+        # SGR_ORG_ETAPA3_VIEW_V2: el histórico permanece dentro del alcance.
+        old_id = form.instance.delegation_id if form.instance.pk else None
+        form.fields["delegation"].queryset = form.fields["delegation"].queryset.filter(
+            pk__in=permitted
+        ).filter(
+            (Q(deleted_at__isnull=True) & (Q(status__iexact="Active") | Q(status__iexact="Activo")))
+            | Q(pk=old_id)
         )
         form.fields["user_account"].queryset = (
             form.fields["user_account"].queryset.filter(
@@ -389,7 +394,9 @@ def _handle_mutations(
                     if instance is None:
                         form.instance.created_by = request.user
                     saved = form.save()
-                    if instance is None and not request.user.is_superuser:
+                    if (instance is None and not request.user.is_superuser
+                        and str(saved.status).casefold() in ("active", "activo")
+                        and saved.deleted_at is None):
                         profile = UserProfile.objects.filter(
                             user=request.user,
                             deleted_at__isnull=True,
