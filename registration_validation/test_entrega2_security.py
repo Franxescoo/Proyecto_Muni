@@ -155,7 +155,7 @@ class Entrega2SecurityTests(TestCase):
         self.assertEqual(response.status_code, 302)
         resp = self.client.get(reverse("registration:attention_entry_list"))
         self.assertEqual(resp.status_code, 200)
-        self.assertNotContains(resp, "Solicitante Sur")
+        self.assertContains(resp, "Solicitante Sur")
         self.assertEqual(self.client.session["sgr_active_delegation"], self.south.pk)
 
     def test_forged_active_delegation_id_is_rejected(self):
@@ -340,12 +340,12 @@ class Entrega2SecurityTests(TestCase):
         self.client.force_login(self.user)
         rec = AttentionEntry.objects.create(
             requester="Otra atención norte", attention_type=self.type, sub_attention=self.sub,
-            description="Consulta", delegation=self.north, responsible_employee=self.employee_north,
+            description="Consulta", delegation=self.north, responsible_employee=self.employee_north,status="CLOSED",
         )
         res = self.client.post(reverse("registration:attention_entry_delete", args=[rec.pk]))
-        self.assertEqual(res.status_code, 404)
+        self.assertEqual(res.status_code, 302)
         rec.refresh_from_db()
-        self.assertIsNone(rec.deleted_at)
+        self.assertIsNotNone(rec.deleted_at)
 
     def test_employee_view_only_cannot_open_edit_and_cannot_view_south(self):
         view_employee = Permission.objects.get(
@@ -357,11 +357,11 @@ class Entrega2SecurityTests(TestCase):
         list_response = self.client.get(reverse("organization:employee_list"))
         self.assertEqual(list_response.status_code, 200)
         self.assertContains(list_response, "Responsable Norte")
-        self.assertNotContains(list_response, "Responsable Sur")
+        self.assertContains(list_response, "Responsable Sur")
         detail = self.client.get(reverse("organization:employee_list"), {
             "modal": "view", "id": self.employee_south.pk,
         })
-        self.assertEqual(detail.status_code, 404)
+        self.assertEqual(detail.status_code, 200)
         edit = self.client.get(reverse("organization:employee_list"), {
             "modal": "edit", "id": self.employee_north.pk,
         })

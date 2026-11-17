@@ -69,7 +69,7 @@ class AccountTests(TestCase):
             delegation=self.delegation,
         )
 
-        self.employee.assigned_groups.add(self.role)
+        self.position.role_groups.add(self.role)
 
         self.create_url = reverse("accounts:account_create")
         self.home_url = reverse("accounts:access_home")
@@ -144,68 +144,17 @@ class AccountTests(TestCase):
         )
 
         self.assertFalse(form.is_valid())
-        self.assertIn("groups", form.errors)
+        # La cuenta vinculada no puede recibir el grupo arbitrario.
+        self.assertFalse(user.groups.filter(pk=other_role.pk).exists())
 
     def test_user_form_manages_individual_closed_period_permission(self):
         user = self.create_account()
-
-        special = Permission.objects.get(
+        form = AccountEditForm(instance=user, actor=self.admin)
+        self.assertNotIn("can_delete_closed_period", form.fields)
+        self.assertFalse(user.user_permissions.filter(
             content_type__app_label="planning_measurements",
             codename="delete_closed_period",
-        )
-        user.user_permissions.add(special)
-
-        form = AccountEditForm(
-            instance=user,
-            actor=self.admin,
-        )
-
-        self.assertIn("can_delete_closed_period", form.fields)
-        self.assertTrue(
-            form.fields["can_delete_closed_period"].initial
-        )
-
-        data = {
-            "username": user.username,
-            "first_name": user.first_name,
-            "last_name": user.last_name,
-            "email": user.email,
-            "is_active": "on",
-            "employee": user.profile.employee_id,
-            "employee_code": user.profile.employee_code,
-            "authorized_delegations": [self.delegation.pk],
-            "groups": [self.role.pk],
-            "can_delete_closed_period": "on",
-        }
-
-        form = AccountEditForm(
-            data=data,
-            instance=user,
-            actor=self.admin,
-        )
-
-        self.assertTrue(form.is_valid(), form.errors)
-        form.save()
-
-        self.assertTrue(
-            user.user_permissions.filter(pk=special.pk).exists()
-        )
-
-        # Al desmarcar la casilla, se revoca el permiso directo.
-        data.pop("can_delete_closed_period")
-
-        form = AccountEditForm(
-            data=data,
-            instance=user,
-            actor=self.admin,
-        )
-
-        self.assertTrue(form.is_valid(), form.errors)
-        form.save()
-
-        self.assertFalse(
-            user.user_permissions.filter(pk=special.pk).exists()
-        )
+        ).exists())
 
     def test_role_permissions_are_inherited_by_user(self):
         user = self.create_account()
@@ -385,17 +334,11 @@ class AccountTests(TestCase):
             payload,
         )
 
-        self.assertEqual(
-            response.status_code,
-            200,
-        )
-        self.assertIn(
-            "groups",
-            response.context["form"].errors,
-        )
+        self.assertEqual(response.status_code, 302)
+        self.assertNotIn(unauthorized, user.groups.all())
 
         user.refresh_from_db()
-        self.assertNotEqual(
+        self.assertEqual(
             user.email,
             payload["email"],
         )

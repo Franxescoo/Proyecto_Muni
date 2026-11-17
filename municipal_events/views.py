@@ -371,73 +371,213 @@ def campaign_list(request):
     })
 
 
+
 @_gate("municipal_events.add_campaign")
 def campaign_create(request):
-    form = CampaignForm(request.POST or None, user=request.user)
+    form = CampaignForm(
+        request.POST or None,
+        user=request.user,
+    )
+
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
             item = form.save(commit=False)
-            require_delegation(request.user, "municipal_events.add_campaign", item.organizing_delegation_id)
+
+            require_delegation(
+                request.user,
+                "municipal_events.add_campaign",
+                item.organizing_delegation_id,
+            )
+
             item.created_by = request.user
             item.full_clean()
             item.save()
-            _audit_changes(
-                item, request.user, "campaign", "CREADO",
-                [("Registro", "—", item.title)],
+
+            # Guardar las delegaciones seleccionadas.
+            form.save_m2m()
+
+            nombres = ", ".join(
+                item.participating_delegations
+                .order_by("name")
+                .values_list("name", flat=True)
             )
+
+            _audit_changes(
+                item,
+                request.user,
+                "campaign",
+                "CREADO",
+                [
+                    ("Registro", "—", item.title),
+                    ("Delegaciones participantes", "—", nombres),
+                ],
+            )
+
         if _is_modal(request):
-            return _saved(request, "Campaña municipal creada.", "municipal_events:campaign_list")
-        messages.success(request, "Campaña municipal creada.")
-        return redirect("municipal_events:campaign_detail", pk=item.pk)
-    return _form_response(request, form, "Crear campaña municipal", reverse("municipal_events:campaign_list"), "campaigns")
+            return _saved(
+                request,
+                "Campaña municipal creada.",
+                "municipal_events:campaign_list",
+            )
+
+        messages.success(
+            request,
+            "Campaña municipal creada.",
+        )
+
+        return redirect(
+            "municipal_events:campaign_detail",
+            pk=item.pk,
+        )
+
+    return _form_response(
+        request,
+        form,
+        "Crear campaña municipal",
+        reverse("municipal_events:campaign_list"),
+        "campaigns",
+    )
 
 
 @_gate("municipal_events.change_campaign")
 def campaign_edit(request, pk):
-    campaign = get_object_or_404(Campaign, pk=pk, deleted_at__isnull=True)
-    require_delegation(request.user, "municipal_events.change_campaign", campaign.organizing_delegation_id)
-    form = CampaignForm(request.POST or None, instance=campaign, user=request.user, permission="municipal_events.change_campaign")
-    # El formulario de edición usa el mismo ámbito que el permiso de cambio.
-    from accounts.permissions import allowed_delegation_ids
+    campaign = get_object_or_404(
+        Campaign,
+        pk=pk,
+        deleted_at__isnull=True,
+    )
+
+    require_delegation(
+        request.user,
+        "municipal_events.change_campaign",
+        campaign.organizing_delegation_id,
+    )
+
+    form = CampaignForm(
+        request.POST or None,
+        instance=campaign,
+        user=request.user,
+        permission="municipal_events.change_campaign",
+    )
+
     from organization.models import Delegation
-    scope = allowed_delegation_ids(request.user, "municipal_events.change_campaign")
-    form.fields["organizing_delegation"].queryset = Delegation.objects.filter(pk__in=scope) if scope is not None else Delegation.objects.all()
+
     if request.method == "POST" and form.is_valid():
         original = Campaign.objects.get(pk=campaign.pk)
+
         fields = (
-            ("Nombre", "title", "title"), ("Año", "year", "year"),
+            ("Nombre", "title", "title"),
+            ("Año", "year", "year"),
             ("Descripción", "description", "description"),
             ("Tipo de atención", "attention_type_id", "attention_type"),
             ("Edición", "edition_id", "edition"),
-            ("Delegación", "organizing_delegation_id", "organizing_delegation"),
-            ("Inicio", "opens_on", "opens_on"), ("Fin", "closes_on", "closes_on"),
-            ("Edad máxima", "max_age", "max_age"), ("Estado", "status", "status"),
+            (
+                "Delegación",
+                "organizing_delegation_id",
+                "organizing_delegation",
+            ),
+            ("Inicio", "opens_on", "opens_on"),
+            ("Fin", "closes_on", "closes_on"),
+            ("Edad máxima", "max_age", "max_age"),
+            ("Estado", "status", "status"),
         )
-        changes = [
-            (label, _display_value(getattr(original, name)),
-             _display_value(
-                 form.cleaned_data[key].pk
-                 if hasattr(form.cleaned_data[key], "pk")
-                 else form.cleaned_data[key]
-             ))
-            for label, name, key in fields
-            if getattr(original, name) != (
-                form.cleaned_data[key].pk
-                if hasattr(form.cleaned_data[key], "pk")
-                else form.cleaned_data[key]
+
+        changes = []
+
+        for label, name, key in fields:
+            anterior = getattr(original, name)
+            nuevo = form.cleaned_data[key]
+
+            if hasattr(nuevo, "pk"):
+                nuevo = nuevo.pk
+
+            if anterior != nuevo:
+                changes.append(
+                    (
+                        label,
+                        _display_value(anterior),
+                        _display_value(nuevo),
+                    )
+                )
+
+        anteriores = set(
+            original.participating_delegations.values_list(
+                "pk", flat=True
             )
-        ]
+        )
+
+        nuevas = set(
+            form.cleaned_data[
+                "participating_delegations"
+            ].values_list("pk", flat=True)
+        )
+
+        if anteriores != nuevas:
+
+            def nombres(ids):
+                return ", ".join(
+                    Delegation.objects.filter(
+                        pk__in=ids
+                    ).order_by("name").values_list(
+                        "name", flat=True
+                    )
+                ) or "Ninguna"
+
+            changes.append(
+                (
+                    "Delegaciones participantes",
+                    nombres(anteriores),
+                    nombres(nuevas),
+                )
+            )
+
         with transaction.atomic():
             item = form.save(commit=False)
-            require_delegation(request.user, "municipal_events.change_campaign", item.organizing_delegation_id)
+
+            require_delegation(
+                request.user,
+                "municipal_events.change_campaign",
+                item.organizing_delegation_id,
+            )
+
             item.full_clean()
             item.save()
-            _audit_changes(item, request.user, "campaign", "MODIFICADO", changes)
+
+            # Guardar cambios en las delegaciones.
+            form.save_m2m()
+
+            _audit_changes(
+                item,
+                request.user,
+                "campaign",
+                "MODIFICADO",
+                changes,
+            )
+
         if _is_modal(request):
-            return _saved(request, "Campaña actualizada.", "municipal_events:campaign_list")
-        messages.success(request, "Campaña actualizada.")
-        return redirect("municipal_events:campaign_detail", pk=pk)
-    return _form_response(request, form, "Modificar campaña", reverse("municipal_events:campaign_list"), "campaigns")
+            return _saved(
+                request,
+                "Campaña actualizada.",
+                "municipal_events:campaign_list",
+            )
+
+        messages.success(
+            request,
+            "Campaña actualizada.",
+        )
+
+        return redirect(
+            "municipal_events:campaign_detail",
+            pk=pk,
+        )
+
+    return _form_response(
+        request,
+        form,
+        "Modificar campaña",
+        reverse("municipal_events:campaign_list"),
+        "campaigns",
+    )
 
 
 @_gate("municipal_events.view_campaign")
@@ -482,7 +622,17 @@ def campaign_detail(request, pk):
 def campaigns_for_attention(request, attention_id):
     attention = get_object_or_404(AttentionEntry.objects.select_related("attention_type", "delegation"), pk=attention_id, deleted_at__isnull=True)
     require_delegation(request.user, "registration_validation.view_attentionentry", attention.delegation_id)
-    campaigns = [c for c in campaign_active_queryset().filter(attention_type_id=attention.attention_type_id).order_by("title") if can_register_from_attention(request.user, attention, c)]
+    campaigns = [
+        c for c in campaign_active_queryset().filter(
+            attention_type_id=attention.attention_type_id,
+            participating_delegations=attention.delegation,
+        ).distinct().order_by("title")
+        if can_register_from_attention(
+            request.user,
+            attention,
+            c,
+        )
+    ]
     if not campaigns:
         messages.info(request, "No hay campañas abiertas o autorizadas para este tipo de atención.")
         return redirect("registration:attention_entry_list")
@@ -614,7 +764,13 @@ def enrollment_reactivate(request, pk):
         reason = request.POST.get("reason", "").strip()[:500]
         if not reason:
             return HttpResponse("Indica el motivo de la reactivación.", status=400)
+        blocked_message = None
         with transaction.atomic():
+            edition = None
+            if enrollment.campaign.edition_id:
+                edition = EventEdition.objects.select_for_update().get(
+                    pk=enrollment.campaign.edition_id
+                )
             item = Enrollment.objects.select_for_update().get(pk=pk)
             if item.deleted_at is None:
                 return _saved(request, "La inscripción ya estaba activa.", "municipal_events:enrollment_list")
@@ -627,14 +783,34 @@ def enrollment_reactivate(request, pk):
                 )
             ):
                 raise PermissionDenied("Reactiva primero la campaña y su edición.")
-            # La reactivación preserva campaña, beneficiario, atención, estado e historial.
-            item.deleted_at = None
-            item.save(update_fields=["deleted_at"])
-            CampaignAudit.objects.create(enrollment=item, actor=request.user, action="REACTIVADA", reason=reason)
+            if (item.status == "APPROVED" and edition is not None
+                    and edition.participation_capacity is not None
+                    and edition.occupied_capacity() >= edition.participation_capacity):
+                blocked_message = "No quedan cupos disponibles para reactivar esta inscripción aprobada."
+            else:
+                item.deleted_at = None
+                item.save(update_fields=["deleted_at"])
+                CampaignAudit.objects.create(enrollment=item, actor=request.user, action="REACTIVADA", reason=reason)
+        if blocked_message:
+            if _is_modal(request):
+                return render(request, "municipal_events/_confirm_enrollment_state.html", {
+                    "item": enrollment, "action_label": "Reactivar inscripción",
+                    "action_icon": "bi-arrow-counterclockwise", "blocked": blocked_message,
+                    "note": blocked_message, "section": "enrollments",
+                }, status=409)
+            messages.error(request, blocked_message)
+            return redirect("municipal_events:enrollment_list")
         return _saved(request, "Inscripción original reactivada, sin duplicar el RUT.", "municipal_events:enrollment_list")
+    blocked_message = "Esta inscripción ya se encuentra activa." if enrollment.deleted_at is None else ""
+    if (not blocked_message and enrollment.status == "APPROVED"
+            and enrollment.campaign.edition_id):
+        edition = enrollment.campaign.edition
+        if (edition.participation_capacity is not None
+                and edition.occupied_capacity() >= edition.participation_capacity):
+            blocked_message = "No quedan cupos disponibles para reactivar esta inscripción aprobada."
     return _modal_detail(request, "municipal_events/_confirm_enrollment_state.html", {
         "item": enrollment, "action_label": "Reactivar inscripción", "action_icon": "bi-arrow-counterclockwise",
-        "blocked": "Esta inscripción ya se encuentra activa." if enrollment.deleted_at is None else "",
+        "blocked": blocked_message,
         "note": "Se recuperará la inscripción original y todo su historial.",
         "section": "enrollments",
     })
@@ -648,20 +824,36 @@ def enrollment_review(request, pk):
     form = ReviewForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
-            enrollment = Enrollment.objects.select_for_update().get(pk=pk)
-            if enrollment.deleted_at is not None:
-                raise PermissionDenied("La inscripción está desactivada.")
-            if GiftDelivery.objects.filter(enrollment=enrollment).exists():
+            # Todas las operaciones que consumen cupos bloquean primero la edición.
+            edition = None
+            if enrollment.campaign.edition_id:
+                edition = EventEdition.objects.select_for_update().get(
+                    pk=enrollment.campaign.edition_id
+                )
+            locked = Enrollment.objects.select_for_update().get(pk=pk)
+            if locked.deleted_at is not None or locked.campaign.deleted_at is not None:
+                raise PermissionDenied("La inscripción o la campaña está desactivada.")
+            if GiftDelivery.objects.filter(enrollment=locked).exists():
                 raise PermissionDenied("No se puede cambiar una inscripción con entrega registrada.")
-            enrollment.status = form.cleaned_data["status"]
-            enrollment.reviewed_by = request.user
-            enrollment.reviewed_at = timezone.now()
-            enrollment.save(update_fields=["status", "reviewed_by", "reviewed_at"])
-            CampaignAudit.objects.create(enrollment=enrollment, action=enrollment.status, actor=request.user, reason=form.cleaned_data["reason"])
-        if _is_modal(request):
-            return _saved(request, "Decisión registrada en el historial.", "municipal_events:enrollment_list")
-        messages.success(request, "Decisión registrada en el historial.")
-        return redirect("municipal_events:campaign_detail", pk=enrollment.campaign_id)
+            new_status = form.cleaned_data["status"]
+            if (new_status == "APPROVED" and locked.status != "APPROVED"
+                    and edition is not None and edition.participation_capacity is not None
+                    and edition.occupied_capacity() >= edition.participation_capacity):
+                form.add_error("status", "No quedan cupos disponibles en la edición. La inscripción conserva su estado actual.")
+            else:
+                locked.status = new_status
+                locked.reviewed_by = request.user
+                locked.reviewed_at = timezone.now()
+                locked.save(update_fields=["status", "reviewed_by", "reviewed_at"])
+                CampaignAudit.objects.create(
+                    enrollment=locked, action=locked.status, actor=request.user,
+                    reason=form.cleaned_data["reason"],
+                )
+        if not form.errors:
+            if _is_modal(request):
+                return _saved(request, "Decisión registrada en el historial.", "municipal_events:enrollment_list")
+            messages.success(request, "Decisión registrada en el historial.")
+            return redirect("municipal_events:campaign_detail", pk=enrollment.campaign_id)
     return _form_response(request, form, "Evaluar inscripción", reverse("municipal_events:enrollment_list"), "enrollments", note=f"Inscripción #{enrollment.pk} · {enrollment.campaign.title}")
 
 
@@ -930,10 +1122,7 @@ def _participation_state(request, item, *, reactivate):
         if not reactivate and participant.withdrawn_at is not None:
             return "El participante ya fue retirado."
         if reactivate and participant.status in ("ACCEPTED", "REGISTERED") and edition.participation_capacity is not None:
-            occupied = edition.participations.filter(
-                withdrawn_at__isnull=True, status__in=("ACCEPTED", "REGISTERED")
-            ).count()
-            if occupied >= edition.participation_capacity:
+            if edition.occupied_capacity() >= edition.participation_capacity:
                 return "No quedan cupos disponibles para reactivar a este participante."
         return None
 
@@ -1008,8 +1197,7 @@ def participation_create(request, pk):
                 else:
                     status = "PENDING" if edition.participation_mode == "APPLICATION" else "REGISTERED"
                     if status == "REGISTERED" and edition.participation_capacity is not None and (
-                        edition.participations.filter(status__in=("ACCEPTED", "REGISTERED"), withdrawn_at__isnull=True).count()
-                        >= edition.participation_capacity
+                        edition.occupied_capacity() >= edition.participation_capacity
                     ):
                         raise ValueError("La edición ya completó sus cupos.")
                     item = form.save(commit=False)
@@ -1047,8 +1235,7 @@ def participation_review(request, pk):
                 raise PermissionDenied("La postulación ya no puede ser evaluada.")
             decision = form.cleaned_data["decision"]
             if decision == "ACCEPTED" and edition.participation_capacity is not None and (
-                edition.participations.filter(status__in=("ACCEPTED", "REGISTERED"), withdrawn_at__isnull=True).count()
-                >= edition.participation_capacity
+                edition.occupied_capacity() >= edition.participation_capacity
             ):
                 form.add_error("decision", "No quedan cupos disponibles para aceptar la postulación.")
             else:

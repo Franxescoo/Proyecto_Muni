@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% load monitoring_settings_extras %}
+{% block titulo %}Reglas y alertas · Monitoreo{% endblock %}
+{% block top_links %}{% endblock %}
+{% block sidebar %}{% include "shared/global_sidebar.html" %}{% endblock %}
+{% block contenido %}
+<div class="container-fluid py-4" style="max-width:1080px">
+  <div class="rounded p-4 mb-4 text-white" style="background:linear-gradient(135deg,#a60a17,#760710)">
+    <h1 class="h4 mb-2">Reglas de Monitoreo</h1>
+    <p class="mb-0">Umbrales, ajustes y destinatarios de avisos. Todo cambio conserva su vigencia e historial.</p>
+  </div>
+
+  <p><a href="{% url 'monitoring:executive_dashboard' %}" class="btn btn-outline-secondary btn-sm">Volver al Resumen Ejecutivo</a></p>
+
+  <div class="card mb-4"><div class="card-body">
+    <h2 class="h5">Configurar reglas</h2>
+    <form method="post">{% csrf_token %}
+      <input type="hidden" name="effective_from" value="{{ effective_from }}">
+      {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+      <div class="row g-3">
+        {% for field in form %}
+          <div class="col-12 {% if field.name == 'recipient_users' %}col-md-12{% else %}col-md-6{% endif %}">
+            <label class="form-label fw-semibold" for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% for err in field.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+      <p class="text-muted small mt-3">Los destinatarios adicionales recibirán avisos de compromisos vencidos; no altera los permisos ni permite acceder a otras delegaciones.</p>
+      <button type="submit" class="btn btn-danger">Guardar reglas</button>
+    </form>
+  </div></div>
+
+  <div class="card"><div class="card-body">
+    <h2 class="h5 mb-2">Historial de cambios</h2>
+    <p class="text-muted small mb-3">Se muestran solo los parámetros que cambiaron. Los registros de auditoría originales se conservan.</p>
+
+    {% for revision in revisions %}
+      <div class="border rounded mb-3 overflow-hidden">
+        <div class="px-3 py-2 bg-light d-flex flex-wrap align-items-center gap-2">
+          <strong>{{ revision.changed_at|date:"d/m/Y H:i" }}</strong>
+          <span class="text-muted">·</span>
+          <span>Modificado por: <strong>{{ revision.changed_by.get_username }}</strong></span>
+        </div>
+        {% with changes=revision.previous_value|monitoring_settings_changes:revision.new_value %}
+          {% if changes %}
+            <div class="table-responsive">
+              <table class="table table-sm mb-0 align-middle">
+                <thead>
+                  <tr>
+                    <th scope="col" style="width:42%">Parámetro modificado</th>
+                    <th scope="col" style="width:29%">Valor anterior</th>
+                    <th scope="col" style="width:29%">Valor nuevo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for change in changes %}
+                    <tr>
+                      <th scope="row" class="fw-normal">{{ change.label }}</th>
+                      <td class="text-break">{{ change.before }}</td>
+                      <td class="fw-semibold text-break">{{ change.after }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <p class="text-muted small px-3 py-2 mb-0">Se guardó la configuración sin modificar los valores.</p>
+          {% endif %}
+        {% endwith %}
+      </div>
+    {% empty %}
+      <p class="text-muted mb-0">Todavía no hay cambios de configuración.</p>
+    {% endfor %}
+  </div></div>
+</div>
+{% endblock %}

@@ -79,9 +79,16 @@ class PlanningTests(TestCase):
         )
 
         self.form_user = SimpleNamespace(
+            is_authenticated=True,
+            is_active=True,
             is_superuser=False,
+            has_perm=lambda permission: True,
             profile=SimpleNamespace(
-                delegation_id=self.delegation.pk
+                delegation_id=self.delegation.pk,
+                deleted_at=None,
+                authorized_delegations=Delegation.objects.filter(
+                    pk=self.delegation.pk
+                ),
             ),
         )
 
@@ -730,7 +737,7 @@ class PlanningTests(TestCase):
             name="Prueba porcentual",
             item_type=MeasurementItem.ItemType.PERCENTAGE,
             unit="%",
-            formula="(Atenciones completadas / Total de atenciones) * 100",
+            formula="(Atenciones completadas / atenciones_desconocidas) * 100",
         )
         self.position.catalog_items.add(item)
         source = Goal.objects.create(

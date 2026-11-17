@@ -103,6 +103,29 @@ class Indicator(BaseModel):
         verbose_name_plural = "Indicators"
         ordering = ("-calculation_date", "indicator_id")
 
+    @property
+    def evidence_remaining(self):
+        """Evidencias independientes pendientes (no archivos adjuntos)."""
+        required = self.goal.required_evidence_count or 0
+        return max(0, required - (self.approved_evidences or 0))
+
+    @property
+    def evidence_accreditation_met(self):
+        """Acreditación documental independiente del avance calculado."""
+        return self.evidence_remaining == 0
+
+    @property
+    def accreditation_label(self):
+        return (
+            "Acreditada" if self.evidence_accreditation_met
+            else "Pendiente de evidencias"
+        )
+
+    @property
+    def effective_traffic_light(self):
+        """Evita declarar verde una meta sin evidencias suficientes."""
+        return self.traffic_light if self.evidence_accreditation_met else "Pending"
+
     def clean(self):
         super().clean()
 
@@ -228,6 +251,32 @@ class Commitment(BaseModel):
         VALIDATED = "Validated", "Validado"
         CANCELLED = "Cancelled", "Cancelado"
 
+    # Estados heredados conservados por compatibilidad con la base y la UI.
+    # Los cambios se realizan con observación, no mediante edición normal.
+    ALLOWED_TRANSITIONS = {
+        "Pending": {"In progress", "Completed", "Cancelled"},
+        "In progress": {"Pending", "Completed", "Cancelled"},
+        "Completed": {"In progress", "Validated"},
+        "Validated": set(),
+        "Cancelled": {"Pending"},
+    }
+
+    LEGACY_STATUS_MAP = {
+        "Pendiente": "Pending", "No iniciado": "Pending",
+        "En progreso": "In progress", "En proceso": "In progress",
+        "Realizado": "Completed", "Completado": "Completed",
+        "Validado": "Validated", "Cancelado": "Cancelled",
+    }
+
+    def can_transition_to(self, new_status):
+        current = self.LEGACY_STATUS_MAP.get(self.status, self.status)
+        return new_status in self.ALLOWED_TRANSITIONS.get(current, set())
+
+    def available_transitions(self):
+        labels = dict(self.Status.choices)
+        current = self.LEGACY_STATUS_MAP.get(self.status, self.status)
+        return [(value, labels[value]) for value in sorted(self.ALLOWED_TRANSITIONS.get(current, ()))]
+
     def clean(self):
         super().clean()
 
@@ -272,8 +321,24 @@ class Commitment(BaseModel):
         }
 
     @property
+    def is_completed_late(self):
+        """RF-019: identifica compromisos realizados después de su plazo."""
+        if not self.is_completed:
+            return False
+        completion = self.status_history.filter(
+            new_status__in=["Completed", "Validated", "Completado", "Realizado", "Validado"],
+        ).order_by("created_at", "pk").first()
+        if completion is None:
+            return False  # No inferir una fecha histórica inexistente.
+        return timezone.localtime(completion.created_at).date() > self.commitment_date
+
+    @property
     def is_overdue(self):
-        return not self.is_completed and self.commitment_date < timezone.localdate()
+        return (
+            not self.is_completed
+            and self.status.casefold() not in {"cancelled", "cancelado"}
+            and self.commitment_date < timezone.localdate()
+        )
 
 
 class CommitmentComment(BaseModel):
@@ -473,3 +538,65 @@ class Audit(BaseModel):
             f"{self.event} - "
             f"{self.entity} {self.object_identifier}"
         )
+
+class MonitoringSettings(models.Model):
+    """Configuración global versionada, editable solo con permiso explícito."""
+    key = models.CharField(max_length=20, primary_key=True, default="global", editable=False)
+    low_compliance_threshold = models.DecimalField(max_digits=6, decimal_places=2, default=80)
+    inactivity_workdays = models.PositiveSmallIntegerField(default=5)
+    due_soon_days = models.PositiveSmallIntegerField(default=7)
+    positive_adjustment_max = models.DecimalField(max_digits=6, decimal_places=2, default=100)
+    negative_adjustment_max = models.DecimalField(max_digits=6, decimal_places=2, default=100)
+    recipient_users = models.ManyToManyField(
+        "auth.User", blank=True, related_name="monitoring_alert_recipient_settings"
+    )
+    effective_from = models.DateTimeField(default=timezone.now)
+    updated_by = models.ForeignKey(
+        "auth.User", null=True, blank=True, on_delete=models.PROTECT,
+        related_name="monitoring_settings_updated",
+    )
+
+    class Meta:
+        verbose_name = "Reglas operativas de monitoreo"
+        verbose_name_plural = "Reglas operativas de monitoreo"
+        default_permissions = ("view", "change")
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        if not (0 <= self.low_compliance_threshold <= 150):
+            errors["low_compliance_threshold"] = "Debe estar entre 0 y 150."
+        if not (1 <= self.inactivity_workdays <= 365):
+            errors["inactivity_workdays"] = "Debe estar entre 1 y 365."
+        if not (0 <= self.due_soon_days <= 365):
+            errors["due_soon_days"] = "Debe estar entre 0 y 365."
+        if not (0 <= self.positive_adjustment_max <= 100):
+            errors["positive_adjustment_max"] = "Debe estar entre 0 y 100."
+        if not (0 <= self.negative_adjustment_max <= 100):
+            errors["negative_adjustment_max"] = "Debe estar entre 0 y 100."
+        if errors:
+            raise ValidationError(errors)
+
+
+class MonitoringSettingsRevision(models.Model):
+    """Historial inmutable de los parámetros y destinatarios anteriores/nuevos."""
+    changed_at = models.DateTimeField(auto_now_add=True)
+    changed_by = models.ForeignKey("auth.User", on_delete=models.PROTECT)
+    previous_value = models.JSONField(default=dict)
+    new_value = models.JSONField(default=dict)
+
+    class Meta:
+        ordering = ("-changed_at", "-pk")
+        default_permissions = ("add", "view")
+
+
+class MonitoringAlertReview(models.Model):
+    """Constancia de revisión; no elimina ni resuelve el evento original."""
+    alert_key = models.CharField(max_length=200, unique=True)
+    reviewed_by = models.ForeignKey("auth.User", on_delete=models.PROTECT)
+    reviewed_at = models.DateTimeField(auto_now_add=True)
+    comment = models.CharField(max_length=250, blank=True)
+
+    class Meta:
+        ordering = ("-reviewed_at", "-pk")
+        default_permissions = ("add", "view")

@@ -274,26 +274,52 @@ class Goal(BaseModel):
                     )
 
 
-        # Evitar metas duplicadas en el mismo período.
+        # Impedir duplicados nuevos sin bloquear metas históricas ya guardadas.
+        # Al modificar solo las fechas del período, el formset vuelve a validar
+        # cada meta existente aunque sus claves no hayan cambiado.
         if (
             self.period_id
             and self.employee_id
             and self.position_id
             and self.measurement_item_id
         ):
-            duplicada = Goal.objects.filter(
-                period_id=self.period_id,
-                employee_id=self.employee_id,
-                position_id=self.position_id,
-                measurement_item_id=self.measurement_item_id,
-                deleted_at__isnull=True,
-            ).exclude(pk=self.pk).exists()
-
-            if duplicada:
-                errors.setdefault("__all__", []).append(
-                    "Ya existe una meta con este período, "
-                    "funcionario, cargo e ítem de medición."
+            unique_fields = (
+                "period_id",
+                "employee_id",
+                "position_id",
+                "measurement_item_id",
+            )
+            key_unchanged = False
+            if self.pk:
+                saved_key = (
+                    type(self).objects.filter(pk=self.pk)
+                    .values(*unique_fields)
+                    .first()
                 )
+                key_unchanged = bool(
+                    saved_key is not None
+                    and all(
+                        saved_key[field] == getattr(self, field)
+                        for field in unique_fields
+                    )
+                )
+
+            # Una meta nueva o cuyo período/funcionario/cargo/ítem cambie
+            # debe seguir respetando la restricción de no duplicarse.
+            if not key_unchanged:
+                duplicada = Goal.objects.filter(
+                    period_id=self.period_id,
+                    employee_id=self.employee_id,
+                    position_id=self.position_id,
+                    measurement_item_id=self.measurement_item_id,
+                    deleted_at__isnull=True,
+                ).exclude(pk=self.pk).exists()
+
+                if duplicada:
+                    errors.setdefault("__all__", []).append(
+                        "Ya existe una meta con este período, "
+                        "funcionario, cargo e ítem de medición."
+                    )
 
         if errors:
             raise ValidationError(errors)

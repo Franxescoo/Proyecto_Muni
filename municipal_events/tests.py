@@ -43,8 +43,8 @@ class CampaignWorkflowTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.d1 = Delegation.objects.create(code="N1", name="Norte", status="Activa", scope="Norte")
-        cls.d2 = Delegation.objects.create(code="S1", name="Sur", status="Activa", scope="Sur")
+        cls.d1 = Delegation.objects.create(code="N1", name="Norte", status="Active", scope="Norte")
+        cls.d2 = Delegation.objects.create(code="S1", name="Sur", status="Active", scope="Sur")
         cls.group = Group.objects.create(name="Gestión de campañas - prueba")
         role = OrganizationRole.objects.create(group=cls.group, delegation=cls.d1)
         role.application_delegations.add(cls.d1, cls.d2)
@@ -80,6 +80,7 @@ class CampaignWorkflowTests(TestCase):
         self.assertEqual(CampaignAudit.objects.count(),1)
 
     def test_second_delegation_cannot_duplicate_same_child(self):
+        self.campaign.participating_delegations.add(self.d2)
         self.client.force_login(self.user1)
         url = reverse("municipal_events:enrollment_create", args=[self.campaign.pk])
         data = {"attention":self.a1.pk,"name":"Niño Demo","rut":"12.345.678-5","birth_date":"2017-03-01","sex":"M"}

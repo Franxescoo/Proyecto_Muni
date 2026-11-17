@@ -13,6 +13,7 @@ from django.utils import timezone
 from accounts.models import UserProfile
 from organization.models import Delegation, Employee, PositionFunction
 from planning_measurements.models import Goal, MeasurementItem, Period
+from planning_measurements.working_days import calculate_computable_days
 from registration_validation.models import (
 	Activity,
 	AttentionEntry,
@@ -389,6 +390,7 @@ class TraceabilityModelsTest(TestCase):
 			name="Subatención de prueba",
 			attention_type=attention_type,
 		)
+		resolved_activity = None
 		for number, status in ((1, "RESOLVED"), (2, "PENDING")):
 			attention = AttentionEntry.objects.create(
 				requester=f"Solicitante {number}",
@@ -399,7 +401,7 @@ class TraceabilityModelsTest(TestCase):
 				responsible_employee=self.north_employee,
 				status=status,
 			)
-			Activity.objects.create(
+			activity = Activity.objects.create(
 				goal=self.north_goal,
 				author=self.north_employee,
 				attention=attention,
@@ -409,11 +411,33 @@ class TraceabilityModelsTest(TestCase):
 				contact="Contact",
 				phone="555",
 			)
+			if status == "RESOLVED":
+				resolved_activity = activity
 
+		# RN-009: una atención resuelta sin evidencia aprobada no aporta avance.
 		indicator = recalculate_indicator_for_goal(self.north_goal)
+		self.assertEqual(indicator.actual_progress, Decimal("0.00"))
 
+		# Con una validación aprobada, 1 de las 2 atenciones aporta avance.
+		evidence = Evidence.objects.create(
+			code="EVID-PCT-ATTENTION-001",
+			activity=resolved_activity,
+			author=self.north_employee,
+			file_link="evidence/pct-attention-1",
+			date="2026-06-21T10:00:00Z",
+			review_status="Pending",
+		)
+		Validation.objects.create(
+			evidence=evidence,
+			verifier=self.north_employee,
+			decision="Approved",
+			result="Approved",
+			date="2026-06-22T10:00:00Z",
+		)
+		indicator = recalculate_indicator_for_goal(self.north_goal)
 		self.assertEqual(indicator.actual_progress, Decimal("50.00"))
 		self.assertEqual(indicator.compliance, Decimal("50.00"))
+		self.assertEqual(indicator.approved_evidences, 1)
 
 	def test_future_period_has_no_progress_or_approved_activities(self):
 		period = Period.objects.create(
@@ -580,7 +604,80 @@ class TraceabilityModelsTest(TestCase):
 		self.assertEqual(response.status_code, 200)
 		row = response.context["rows"][0]
 		self.assertEqual(row["days_without_login"], 29)
-		self.assertEqual(row["days_without_activity"], 10)
+		self.assertEqual(
+			row["days_without_activity"],
+			calculate_computable_days(date(2026, 6, 21), date(2026, 6, 30)),
+		)
+
+	def test_activity_control_excludes_future_and_out_of_goal_period(self):
+		"""La tabla y la alerta usan solo actividades válidas, incluso sin filtro."""
+		user = get_user_model().objects.create_user(
+			username="activity_filter_admin", password="test-password", is_superuser=True,
+		)
+		self.client.force_login(user)
+		# Solo la actividad del 10/06 pertenece a su período y no es futura.
+		def activity(on_date):
+			return Activity.objects.create(
+				goal=self.north_goal, author=self.north_employee, date=on_date,
+				request_problem="prueba", action="acción", contact="contacto", phone="555",
+			)
+		activity(date(2026, 6, 10))
+		activity(date(2027, 1, 1))  # Fuera del período de la meta.
+		activity(date(2026, 7, 1))  # Fecha futura al momento de evaluar.
+		with patch("monitoring_traceability.views.timezone.localdate", return_value=date(2026, 6, 30)):
+			response = self.client.get("/monitoring/actividad/")
+		self.assertEqual(response.status_code, 200)
+		row = next(row for row in response.context["rows"] if row["employee"].pk == self.north_employee.pk)
+		self.assertEqual(row["records"], 1)
+		self.assertEqual(row["last_activity"], date(2026, 6, 10))
+		self.assertEqual(row["days_without_activity"], calculate_computable_days(
+			date(2026, 6, 11), date(2026, 6, 30),
+		))
+
+	def test_activity_control_and_summary_use_same_period_and_workdays(self):
+		"""El resumen y el control coinciden al seleccionar el mismo período."""
+		user = get_user_model().objects.create_user(
+			username="activity_period_admin", password="test-password", is_superuser=True,
+		)
+		self.client.force_login(user)
+		Activity.objects.create(
+			goal=self.north_goal, author=self.north_employee,
+			date=date(2026, 6, 10), request_problem="p", action="a",
+			contact="c", phone="555",
+		)
+		# Registrada dentro del período pero con fecha posterior a hoy: ignorar.
+		Activity.objects.create(
+			goal=self.north_goal, author=self.north_employee,
+			date=date(2026, 7, 5), request_problem="p", action="a",
+			contact="c", phone="555",
+		)
+		period = self.north_goal.period
+		with patch("monitoring_traceability.views.timezone.localdate", return_value=date(2026, 6, 30)), patch(
+			"monitoring_traceability.services.timezone.localdate", return_value=date(2026, 6, 30),
+		):
+			response = self.client.get(f"/monitoring/actividad/?period={period.pk}")
+			alert = monitoring_alerts(employees=[self.north_employee], period=period)
+		row = next(row for row in response.context["rows"] if row["employee"].pk == self.north_employee.pk)
+		self.assertEqual(row["last_activity"], date(2026, 6, 10))
+		self.assertEqual(row["records"], 1)
+		self.assertEqual(row["days_without_activity"], alert["inactive_details"][0]["missing_days"])
+
+	def test_activity_control_without_valid_records_does_not_report_future_last_activity(self):
+		user = get_user_model().objects.create_user(
+			username="activity_empty_admin", password="test-password", is_superuser=True,
+		)
+		self.client.force_login(user)
+		Activity.objects.create(
+			goal=self.north_goal, author=self.north_employee,
+			date=date(2026, 12, 15), request_problem="p", action="a",
+			contact="c", phone="555",
+		)
+		with patch("monitoring_traceability.views.timezone.localdate", return_value=date(2026, 6, 30)):
+			response = self.client.get(f"/monitoring/actividad/?period={self.north_goal.period_id}")
+		row = next(row for row in response.context["rows"] if row["employee"].pk == self.north_employee.pk)
+		self.assertIsNone(row["last_activity"])
+		self.assertEqual(row["records"], 0)
+		self.assertEqual(row["daily_average"], Decimal("0.00"))
 
 	def test_comment_can_be_created_without_employee_link(self):
 		user = get_user_model().objects.create_user(

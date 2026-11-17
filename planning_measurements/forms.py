@@ -10,8 +10,9 @@ from .models import Goal, Period, MeasurementItem
 
 from .working_days import calculate_computable_days
 from .measurement_rules import (
-    SUPPORTED_PERCENTAGE_FORMULAS,
-    canonical_percentage_formula,
+    FORMULA_VARIABLES,
+    FormulaError,
+    validate_formula,
 )
 from .parameter_history import compliance_cap_value, parameters_version_is_valid
 import re
@@ -641,26 +642,26 @@ class MeasurementItemForm(BootstrapMixin, forms.ModelForm):
         _set_text_limit(self.fields["formula"], 500, "La fórmula")
 
         self.fields["formula"].help_text = (
-            "Para ítems porcentuales, fórmulas admitidas: "
-            + "; ".join(SUPPORTED_PERCENTAGE_FORMULAS)
+            "Expresión configurable (+, -, *, / y paréntesis). "
+            "Ejemplo: (actividades_aprobadas / actividades_registradas) * 100. "
+            "Variables disponibles: " + ", ".join(FORMULA_VARIABLES) + ". "
+            "Solo se permiten variables cuyo origen esté implementado en el SGR."
         )
 
     def clean(self):
         data = super().clean()
-        if data.get("item_type") == MeasurementItem.ItemType.PERCENTAGE:
-            expression = canonical_percentage_formula(data.get("formula"))
-            unchanged_legacy = (
-                self.instance.pk
-                and self.instance.item_type == MeasurementItem.ItemType.PERCENTAGE
-                and data.get("formula") == self.instance.formula
-            )
-            if expression is None and not unchanged_legacy:
-                self.add_error(
-                    "formula",
-                    "La fórmula porcentual no está admitida. "
-                    "Fórmulas válidas: "
-                    + "; ".join(SUPPORTED_PERCENTAGE_FORMULAS),
+        formula = (data.get("formula") or "").strip()
+        if data.get("item_type") == MeasurementItem.ItemType.PERCENTAGE and not formula:
+            self.add_error("formula", "Los ítems porcentuales necesitan una fórmula.")
+        elif formula and data.get("item_type") == MeasurementItem.ItemType.PERCENTAGE:
+            try:
+                validate_formula(formula)
+            except FormulaError as exc:
+                # Valores históricos antiguos pueden consultarse sin reescribirlos;
+                # toda fórmula nueva o modificada debe ser interpretable.
+                legacy_unchanged = (
+                    self.instance.pk and formula == (self.instance.formula or "").strip()
                 )
-            elif expression is not None:
-                data["formula"] = expression
+                if not legacy_unchanged:
+                    self.add_error("formula", str(exc))
         return data

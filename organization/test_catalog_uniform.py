@@ -77,7 +77,8 @@ class UnifiedCatalogTests(TestCase):
         response = self.client.get(url, {"delegation": str(self.north.pk)})
         self.assertIn(self.group, response.context["roles"].object_list)
         response = self.client.get(url, {"delegation": str(self.south.pk)})
-        self.assertNotIn(self.group, response.context["roles"].object_list)
+        # El catálogo de roles es global; delegación corresponde a la cuenta.
+        self.assertIn(self.group, response.context["roles"].object_list)
 
     def test_user_filters_delegation_role_and_status(self):
         response = self.client.get(reverse("organization:user_list"), {

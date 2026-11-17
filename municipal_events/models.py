@@ -74,6 +74,24 @@ class EventEdition(models.Model):
         verbose_name = "Edición de evento municipal"
         verbose_name_plural = "Ediciones de eventos"
 
+    def occupied_capacity(self):
+        """Cupos confirmados de la edición; excluye retirados y bajas lógicas.
+
+        Una inscripción PENDING o REJECTED no consume cupo. Esta consulta se
+        utiliza dentro de un bloqueo select_for_update() de la edición cuando
+        se aprueba/reactiva, para impedir superar el límite entre campañas.
+        """
+        if not self.pk:
+            return 0
+        participants = self.participations.filter(
+            status__in=("ACCEPTED", "REGISTERED"), withdrawn_at__isnull=True
+        ).count()
+        approved_enrollments = Enrollment.objects.filter(
+            campaign__edition_id=self.pk,
+            status="APPROVED", deleted_at__isnull=True,
+        ).count()
+        return participants + approved_enrollments
+
     def clean(self):
         if self.date and self.year and self.date.year != self.year:
             raise ValidationError({"year": "El año debe coincidir con la fecha del evento."})
@@ -85,9 +103,9 @@ class EventEdition(models.Model):
             original = type(self).objects.get(pk=self.pk)
             if self.participation_mode != original.participation_mode:
                 raise ValidationError({"participation_mode": "No puedes cambiar el tipo de participación cuando ya hay registros."})
-            occupied = self.participations.filter(status__in=("ACCEPTED", "REGISTERED"), withdrawn_at__isnull=True).count()
-            if self.participation_capacity is not None and occupied > self.participation_capacity:
-                raise ValidationError({"participation_capacity": "Los cupos no pueden ser inferiores a los participantes confirmados."})
+        if self.pk and self.participation_capacity is not None:
+            if self.occupied_capacity() > self.participation_capacity:
+                raise ValidationError({"participation_capacity": "Los cupos no pueden ser inferiores al total de participantes e inscripciones aprobadas."})
         if self.pk and self.campaigns.exists():
             original = type(self).objects.get(pk=self.pk)
             if self.year != original.year:
@@ -104,6 +122,12 @@ class Campaign(models.Model):
     attention_type = models.ForeignKey("registration_validation.AttentionType", on_delete=models.PROTECT, related_name="municipal_campaigns", verbose_name="Tipo de atención relacionado")
     edition = models.ForeignKey(EventEdition, on_delete=models.PROTECT, blank=True, null=True, related_name="campaigns", verbose_name="Edición de evento (opcional)")
     organizing_delegation = models.ForeignKey("organization.Delegation", on_delete=models.PROTECT, related_name="organized_campaigns", verbose_name="Delegación organizadora")
+    participating_delegations = models.ManyToManyField(
+        "organization.Delegation",
+        related_name="participating_campaigns",
+        blank=True,
+        verbose_name="Delegaciones participantes",
+    )
     description = models.TextField("Descripción", blank=True)
     opens_on = models.DateField("Inicio de inscripciones")
     closes_on = models.DateField("Fin de inscripciones")
@@ -125,6 +149,15 @@ class Campaign(models.Model):
 
     def __str__(self):
         return f"{self.title} ({self.year})"
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+
+        # La delegación organizadora participa siempre.
+        if self.organizing_delegation_id:
+            self.participating_delegations.add(
+                self.organizing_delegation_id
+            )
 
     def clean(self):
         if self.opens_on and self.closes_on and self.closes_on < self.opens_on:
@@ -229,6 +262,17 @@ class Enrollment(models.Model):
         verbose_name_plural = "Inscripciones a campañas"
 
     def clean(self):
+        if (
+            self._state.adding
+            and self.campaign_id
+            and self.delegation_id
+            and not self.campaign.participating_delegations.filter(
+                pk=self.delegation_id
+            ).exists()
+        ):
+            raise ValidationError({
+                "delegation": "Esta delegación no participa en la campaña."
+            })
         if self.attention_id and self.campaign_id and self.attention.attention_type_id != self.campaign.attention_type_id:
             raise ValidationError("El tipo de atención no coincide con el de la campaña.")
         if self.attention_id and self.delegation_id and self.attention.delegation_id != self.delegation_id:

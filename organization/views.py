@@ -132,6 +132,7 @@ def _delegation_id(user):
     ).first()
 
 
+
 def _delegation_ids(
     user,
     permission=None,
@@ -139,18 +140,18 @@ def _delegation_ids(
     active_only=True,
     respect_role_scope=True,
 ):
-    allowed = allowed_delegation_ids(
+    """
+    Utiliza las delegaciones autorizadas del funcionario.
+
+    Se conserva respect_role_scope para compatibilidad con
+    las llamadas existentes, pero ya no limita por el rol.
+    """
+    return allowed_delegation_ids(
         user,
         permission,
         active_only=active_only,
     )
-    if respect_role_scope or user.is_superuser or allowed is None:
-        return allowed
-    created_ids = Delegation.objects.filter(
-        created_by_id=user.pk,
-        deleted_at__isnull=True,
-    ).values_list("pk", flat=True)
-    return set(allowed or set()).union(created_ids)
+
 
 
 def _scoped_queryset(

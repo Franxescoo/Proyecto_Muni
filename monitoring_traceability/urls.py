@@ -6,6 +6,7 @@ app_name = "monitoring"
 
 urlpatterns = [
     path("resumen/", views.executive_dashboard, name="executive_dashboard"),
+    path("resumen/reglas/", views.monitoring_settings_view, name="monitoring_settings"),
     path("resumen/exportar/", views.dashboard_export, name="dashboard_export"),
     path("actividad/", views.activity_control, name="activity_control"),
     path("indicadores/", views.indicator_list, name="indicator_list"),

@@ -80,32 +80,176 @@ class EditionForm(BootstrapModelForm):
 
 class CampaignForm(BootstrapModelForm):
     text_limits = {"description": 2000}
+
     class Meta:
         model = Campaign
-        fields = ("title", "year", "description", "attention_type", "edition",
-                  "organizing_delegation", "opens_on", "closes_on", "max_age",
-                  "status")
-        widgets = {"opens_on": DateInput(), "closes_on": DateInput(), "description": forms.Textarea(attrs={"rows": 3})}
-
-    def __init__(self, *args, user=None, permission="municipal_events.add_campaign", **kwargs):
-        super().__init__(*args, **kwargs)
-        active_attention_types = AttentionType.objects.filter(
-            status=True, deleted_at__isnull=True
+        fields = (
+            "title",
+            "year",
+            "description",
+            "attention_type",
+            "edition",
+            "organizing_delegation",
+            "participating_delegations",
+            "opens_on",
+            "closes_on",
+            "max_age",
+            "status",
         )
-        if self.instance and self.instance.pk and self.instance.attention_type_id:
-            active_attention_types = active_attention_types.filter(
-                Q(pk=self.instance.attention_type_id)
-                | Q(pk__in=active_attention_types.values("pk"))
+        widgets = {
+            "opens_on": DateInput(),
+            "closes_on": DateInput(),
+            "description": forms.Textarea(attrs={"rows": 3}),
+            "participating_delegations": forms.CheckboxSelectMultiple(),
+        }
+
+    def __init__(
+        self,
+        *args,
+        user=None,
+        permission="municipal_events.add_campaign",
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+
+        self.user = user
+        self.permission = permission
+
+        active_types = AttentionType.objects.filter(
+            status=True,
+            deleted_at__isnull=True,
+        )
+
+        if self.instance.pk and self.instance.attention_type_id:
+            self.fields["attention_type"].queryset = (
+                AttentionType.objects.filter(
+                    Q(pk__in=active_types.values("pk"))
+                    | Q(pk=self.instance.attention_type_id)
+                )
             )
-        self.fields["attention_type"].queryset = active_attention_types
+        else:
+            self.fields["attention_type"].queryset = active_types
+
         self.fields["max_age"].help_text = (
             "Edad calculada al 31 de diciembre del año de la campaña."
         )
+
         self.fields["edition"].required = False
-        self.fields["edition"].queryset = EventEdition.objects.filter(deleted_at__isnull=True, event__deleted_at__isnull=True)
-        if user is not None:
-            ids = allowed_delegation_ids(user, permission)
-            self.fields["organizing_delegation"].queryset = Delegation.objects.filter(pk__in=ids) if ids is not None else Delegation.objects.all()
+        self.fields["edition"].queryset = EventEdition.objects.filter(
+            deleted_at__isnull=True,
+            event__deleted_at__isnull=True,
+        )
+
+        # Todas las delegaciones que el usuario puede administrar,
+        # aunque tenga otra delegación activa en el selector global.
+        self.authorized_ids = (
+            allowed_delegation_ids(
+                user,
+                permission,
+                active_only=False,
+            )
+            if user is not None
+            else None
+        )
+
+        organizing_scope = (
+            allowed_delegation_ids(user, permission)
+            if user is not None
+            else None
+        )
+
+        organizer_qs = Delegation.objects.filter(
+            deleted_at__isnull=True
+        )
+
+        if organizing_scope is not None:
+            organizer_qs = organizer_qs.filter(
+                pk__in=organizing_scope
+            )
+
+        self.fields["organizing_delegation"].queryset = organizer_qs
+
+        self.original_participant_ids = (
+            set(
+                self.instance.participating_delegations.values_list(
+                    "pk", flat=True
+                )
+            )
+            if self.instance.pk
+            else set()
+        )
+
+        selectable = Delegation.objects.filter(
+            deleted_at__isnull=True
+        )
+
+        if self.authorized_ids is not None:
+            selectable = Delegation.objects.filter(
+                Q(pk__in=self.authorized_ids)
+                | Q(pk__in=self.original_participant_ids)
+            ).distinct()
+
+        self.fields["participating_delegations"].queryset = (
+            selectable.order_by("name", "pk")
+        )
+
+        self.fields["participating_delegations"].required = False
+        self.fields["participating_delegations"].widget.attrs.pop(
+            "class", None
+        )
+        self.fields["participating_delegations"].help_text = (
+            "Marca las delegaciones habilitadas para inscribir. "
+            "La organizadora se incorpora automáticamente."
+        )
+
+    def clean(self):
+        cleaned = super().clean()
+
+        organizer = cleaned.get("organizing_delegation")
+        selected = cleaned.get("participating_delegations")
+
+        if organizer is None or selected is None:
+            return cleaned
+
+        selected_ids = set(
+            selected.values_list("pk", flat=True)
+        )
+
+        # La organizadora siempre participa.
+        selected_ids.add(organizer.pk)
+
+        new_ids = (
+            selected_ids - self.original_participant_ids
+        )
+
+        if (
+            self.authorized_ids is not None
+            and not new_ids.issubset(self.authorized_ids)
+        ):
+            self.add_error(
+                "participating_delegations",
+                "Solo puedes agregar delegaciones que tengas autorizadas.",
+            )
+
+        if self.instance.pk:
+            # No eliminar vínculos territoriales con historial.
+            enrolled_ids = set(
+                self.instance.enrollments.values_list(
+                    "delegation_id", flat=True
+                )
+            )
+
+            if not enrolled_ids.issubset(selected_ids):
+                self.add_error(
+                    "participating_delegations",
+                    "No puedes retirar una delegación que ya tenga inscripciones.",
+                )
+
+        cleaned["participating_delegations"] = (
+            Delegation.objects.filter(pk__in=selected_ids)
+        )
+
+        return cleaned
 
 
 class EnrollmentForm(forms.Form):

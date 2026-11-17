@@ -5,7 +5,7 @@
             <form method="post" action="{{ modal_action }}" novalidate>
                 {% csrf_token %}
                 <input type="hidden" name="action" value="{% if modal_commitment %}edit_commitment{% else %}create_commitment{% endif %}">
-                {% if modal_commitment %}<input type="hidden" name="commitment_id" value="{{ modal_commitment.pk }}">{% endif %}
+                {% if modal_commitment %}<input type="hidden" name="commitment_id" value="{{ modal_commitment.pk }}"><input type="hidden" name="commitment_version" value="{{ modal_commitment.version_token }}">{% endif %}
                 <div class="modal-header">
                     <div class="sgr-modal-title-block">
                         <div class="sgr-modal-eyebrow"><i class="bi bi-shield-check me-2" aria-hidden="true"></i>MONITOREO Y TRAZABILIDAD</div>
@@ -28,30 +28,28 @@
                             {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
                         </div>
                         {% endwith %}
-                        {% if modal_commitment %}
                         {% with field=commitment_form.responsible %}
                         <div class="col-12 col-md-4">
                             {{ field.label_tag }}<button type="button" class="sgr-help-hint" data-help="Responsable actual del compromiso. En edición se muestra, pero no se modifica desde este formulario." aria-label="Ayuda sobre responsable">?</button>{{ field }}
                             {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
                         </div>
                         {% endwith %}
-                        {% endif %}
                         {% with field=commitment_form.activity %}
                         <div class="col-12 col-md-4">
-                            {{ field.label_tag }}<button type="button" class="sgr-help-hint" data-help="Selecciona una actividad de la delegación elegida. Sus datos completan automáticamente el compromiso." aria-label="Ayuda sobre actividad">?</button>{{ field }}
+                            {{ field.label_tag }}<button type="button" class="sgr-help-hint" data-help="Opcional. Si eliges actividad, se completan sus datos; si no, escribe origen, solicitante y responsable." aria-label="Ayuda sobre actividad">?</button>{{ field }}
                             {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
                             {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
                         </div>
                         {% endwith %}
                         {% with field=commitment_form.origin %}
                         <div class="col-12 col-md-4">
-                            {{ field.label_tag }}<button type="button" class="sgr-help-hint" data-help="Meta asociada a la actividad. Se completa automáticamente y no se edita aquí." aria-label="Ayuda sobre meta">?</button>{{ field }}
+                            {{ field.label_tag }}<button type="button" class="sgr-help-hint" data-help="Origen de la solicitud o meta de la actividad." aria-label="Ayuda sobre meta">?</button>{{ field }}
                             {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
                         </div>
                         {% endwith %}
                         {% with field=commitment_form.requester %}
                         <div class="col-12 col-md-4">
-                            {{ field.label_tag }}<button type="button" class="sgr-help-hint" data-help="Solicitante asociado a la actividad seleccionada. Se completa automáticamente." aria-label="Ayuda sobre solicitante">?</button>{{ field }}
+                            {{ field.label_tag }}<button type="button" class="sgr-help-hint" data-help="Solicitante de la solicitud o actividad." aria-label="Ayuda sobre solicitante">?</button>{{ field }}
                             {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
                         </div>
                         {% endwith %}
@@ -64,13 +62,19 @@
                         {% endwith %}
                         {% with field=commitment_form.commitment_date %}
                         <div class="col-12 col-md-4">
-                            {{ field.label_tag }}<button type="button" class="sgr-help-hint" data-help="Fecha de cumplimiento tomada del período de la actividad." aria-label="Ayuda sobre fecha">?</button>{{ field }}
+                            {{ field.label_tag }}<button type="button" class="sgr-help-hint" data-help="Puedes elegir la fecha acordada. Si la dejas vacía, se utiliza la fecha final del período." aria-label="Ayuda sobre fecha">?</button>{{ field }}
                             {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
                         </div>
                         {% endwith %}
                         {% with field=commitment_form.status %}
                         <div class="col-12 col-md-4">
-                            {{ field.label_tag }}<button type="button" class="sgr-help-hint" data-help="Estado actual de la actividad asociada. Se completa automáticamente." aria-label="Ayuda sobre estado">?</button>{{ field }}
+                            {{ field.label_tag }}<button type="button" class="sgr-help-hint" data-help="Estado propio del compromiso. Para cambiarlo utiliza el control del listado." aria-label="Ayuda sobre estado">?</button>{{ field }}
+                            {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                        </div>
+                        {% endwith %}
+                        {% with field=commitment_form.support %}
+                        <div class="col-12">
+                            {{ field.label_tag }}{{ field }}
                             {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
                         </div>
                         {% endwith %}
@@ -84,7 +88,7 @@
                 </div>
                 <div class="modal-footer">
                     <a href="{% url 'monitoring:commitment_list' %}" class="btn btn-outline-secondary" data-help="Cierra la ventana sin guardar cambios.">Cancelar</a>
-                    <button type="submit" class="btn btn-primary" data-help="Guarda el compromiso con la delegación y actividad seleccionadas."><i class="bi bi-check2-circle me-1" aria-hidden="true"></i>Guardar compromiso</button>
+                    <button type="submit" class="btn btn-primary" data-help="Guarda el compromiso con la delegación y el responsable autorizados."><i class="bi bi-check2-circle me-1" aria-hidden="true"></i>Guardar compromiso</button>
                 </div>
             </form>
         </div>
@@ -101,7 +105,13 @@ document.addEventListener("DOMContentLoaded", function () {
     const commitmentDate = document.getElementById("id_commitment_date");
     const status = document.getElementById("id_status");
     const form = document.querySelector("#commitmentModal form");
-    if (!delegation || !activity) return;
+    if (!delegation || !activity || !form) return;
+    // Edits have read-only relationships and a historical territory/date.
+    // Do not rewrite them with the activity's defaults while opening the modal.
+    if (form.querySelector('input[name="action"]')?.value === "edit_commitment") {
+        return;
+    }
+    let autoDate = "";
 
     const filterOptions = (select, delegationId) => {
         if (!select || !select.options) return;
@@ -123,13 +133,30 @@ document.addEventListener("DOMContentLoaded", function () {
     const updateFromActivity = () => {
         const option = activity.selectedOptions[0];
         const values = option ? option.dataset : {};
-        if (origin) origin.value = values.goal || "";
-        if (requester) requester.value = values.requester || "";
-        if (territory) territory.value = values.territory || "";
-        if (commitmentDate) {
-            commitmentDate.value = values.commitmentDate || "";
+        const linked = Boolean(activity.value);
+        if (origin) {
+            origin.readOnly = linked;
+            if (linked) origin.value = values.goal || "";
+            else if (origin.dataset.autoFilled === "1") origin.value = "";
+            origin.dataset.autoFilled = linked ? "1" : "0";
         }
-        if (status) status.value = values.status || "";
+        if (requester) {
+            requester.readOnly = linked;
+            if (linked) requester.value = values.requester || "";
+            else if (requester.dataset.autoFilled === "1") requester.value = "";
+            requester.dataset.autoFilled = linked ? "1" : "0";
+        }
+        if (responsible && linked) responsible.value = values.responsibleId || "";
+        if (territory && linked && !territory.value) territory.value = values.territory || "";
+        if (commitmentDate) {
+            const previousAutoDate = autoDate;
+            autoDate = values.commitmentDate || "";
+            // Respect a date manually entered by the employee.
+            if (!commitmentDate.value || commitmentDate.value === previousAutoDate) {
+                commitmentDate.value = autoDate;
+            }
+        }
+        if (status) status.value = "Pending";
     };
 
     const refresh = () => {

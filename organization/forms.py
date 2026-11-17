@@ -113,6 +113,18 @@ class OrganizationRoleForm(BootstrapMixin, forms.Form):
         # permisos superiores a su autorización (ver clean()).
         # Conservar los permisos técnicos/ajenos al catálogo al editar un rol:
         # no se presentan ni se eliminan por accidente al guardar.
+        # SGR_MONITOREO_PERMISOS_ADMIN_20261116: evitar que administradores limitados concedan estos permisos
+        # especiales si no los tienen. La validación POST usa el mismo queryset.
+        if self.actor is not None and not self.actor.is_superuser:
+            for codename in ("change_indicator", "change_monitoringsettings"):
+                if not self.actor.has_perm(f"monitoring_traceability.{codename}"):
+                    self.fields["permissions"].queryset = (
+                        self.fields["permissions"].queryset.exclude(
+                            content_type__app_label="monitoring_traceability",
+                            codename=codename,
+                        )
+                    )
+
         self._preserved_permission_ids = set()
         if self.group is not None:
             catalog_ids = self.fields["permissions"].queryset.values_list(

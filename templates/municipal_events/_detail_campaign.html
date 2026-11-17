@@ -4,6 +4,16 @@
  <div class="mec-detail"><dt>Estado</dt><dd>{{ campaign.get_status_display }}</dd></div>
  <div class="mec-detail"><dt>Tipo de atención</dt><dd>{{ campaign.attention_type.name }}</dd></div>
  <div class="mec-detail"><dt>Delegación organizadora</dt><dd>{{ campaign.organizing_delegation.name }}</dd></div>
+ <div class="mec-detail">
+    <dt>Delegaciones participantes</dt>
+    <dd>
+        {% for delegacion in campaign.participating_delegations.all %}
+            {{ delegacion.name }}{% if not forloop.last %}, {% endif %}
+        {% empty %}
+            Sin delegaciones configuradas
+        {% endfor %}
+    </dd>
+</div>
  <div class="mec-detail"><dt>Inicio de inscripción</dt><dd>{{ campaign.opens_on|date:'d/m/Y' }}</dd></div>
  <div class="mec-detail"><dt>Fin de inscripción</dt><dd>{{ campaign.closes_on|date:'d/m/Y' }}</dd></div>
  <div class="mec-detail"><dt>Edad máxima</dt><dd>{{ campaign.max_age }} años al 31/12/{{ campaign.year }}</dd></div>

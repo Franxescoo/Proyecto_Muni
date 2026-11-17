@@ -40,6 +40,7 @@ MODEL_NAMES = {
     "subattention": "Subatenciones",
     "attentionentry": "Atenciones ciudadanas",
     "indicator": "Indicadores",
+    "monitoringsettings": "Reglas operativas de monitoreo",
     "commitment": "Compromisos",
     "audit": "Auditorías",
     "comment": "Comentarios",
@@ -65,6 +66,8 @@ SPECIAL = {
     "delete_closed_period": "Puede eliminar períodos cerrados",
     "reopen_closed_period": "Puede reabrir períodos cerrados",
     "derivar_solicitud": "Puede derivar solicitudes ciudadanas",
+    "change_indicator": "Puede ajustar indicadores",
+    "change_monitoringsettings": "Puede configurar alertas y ajustes de Monitoreo",
     "view_citizenrequestaction": "Puede consultar gestiones operativas",
     "add_citizenrequestaction": "Puede registrar gestiones operativas",
     "change_citizenrequestaction": "Puede editar gestiones operativas",
@@ -106,12 +109,11 @@ CATALOG_MODELS = {
         "validation",
     },
     "monitoring_traceability": {
-        "activity",
         "audit",
         "commitment",
         "commitmentcomment",
-        "evidence",
         "indicator",
+        "monitoringsettings",
     },
 }
 
@@ -132,24 +134,13 @@ CATALOG_ACTIONS = {
         "add_citizenrequestaction",
         "change_citizenrequestaction",
     },
-    ("monitoring_traceability", "activity"): {
-        "add_activity",
-        "change_activity",
-        "delete_activity",
-        "view_activity",
-    },
-    ("monitoring_traceability", "evidence"): {
-        "add_evidence",
-        "change_evidence",
-        "delete_evidence",
-        "view_evidence",
-    },
     ("monitoring_traceability", "commitment"): {
     "view_commitment",
     "add_commitment",
     "change_commitment",
     },
-    ("monitoring_traceability", "indicator"): {"view_indicator"},
+    ("monitoring_traceability", "indicator"): {"view_indicator", "change_indicator"},
+    ("monitoring_traceability", "monitoringsettings"): {"change_monitoringsettings"},
     ("monitoring_traceability", "audit"): {"view_audit"},
     ("monitoring_traceability", "commitmentcomment"): {
         "add_commitmentcomment",

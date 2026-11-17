@@ -1,6 +1,7 @@
 <div class="mec-modal-title"><i class="bi bi-person-vcard me-2"></i> Detalle de inscripción</div>
 <dl class="mec-detail-grid">
  <div class="mec-detail"><dt>Beneficiario</dt><dd>{{ item.beneficiary.name }}</dd></div>
+ <div class="mec-detail"><dt>RUT del niño</dt><dd>{{ item.beneficiary.rut|default:"Sin registrar" }}</dd></div>
  <div class="mec-detail"><dt>Sexo del menor</dt><dd>{{ item.beneficiary.get_sex_display|default:"No registrado" }}</dd></div><div class="mec-detail"><dt>Rango de edad actual</dt><dd>{{ item.beneficiary.age_band }}</dd></div><div class="mec-detail"><dt>Campaña</dt><dd>{{ item.campaign.title }} · {{ item.campaign.year }}</dd></div>
  <div class="mec-detail"><dt>Atención de origen</dt><dd>#{{ item.attention_id }}</dd></div>
  <div class="mec-detail"><dt>Delegación</dt><dd>{{ item.delegation.name }}</dd></div>
