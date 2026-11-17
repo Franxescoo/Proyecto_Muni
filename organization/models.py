@@ -74,7 +74,8 @@ class OrganizationRole(models.Model):
         verbose_name_plural = "Organization roles"
 
     def __str__(self):
-        return f"{self.group.name} - {self.delegation.name}"
+        # SGR_ORG_ETAPA3_20261116
+        return self.group.name if self.group_id else "Rol sin grupo"
 
 
 class PositionFunction(BaseModel):

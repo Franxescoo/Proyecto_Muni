@@ -1,5 +1,6 @@
 
 from django import forms
+from organization.assignment_rules import validate_employee_assignment, validate_delegation_authorizations  # SGR_ORG_ETAPA3_20261116
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import (
     AuthenticationForm,
@@ -351,7 +352,9 @@ class EmployeeForm(BootstrapMixin, forms.ModelForm):
 
 
 def _active_delegations():
-    return Delegation.objects.filter(deleted_at__isnull=True).order_by("name")
+    return Delegation.objects.filter(
+        deleted_at__isnull=True
+    ).filter(Q(status__iexact="Active") | Q(status__iexact="Activo")).order_by("name")
 
 
 def _role_scope_valid(groups, delegations):
@@ -508,6 +511,15 @@ class AccountCreateForm(BootstrapMixin, UserCreationForm):
     def clean(self):
         data = super().clean()
 
+        # Evitar nuevos accesos territoriales a delegaciones inactivas.
+        validate_delegation_authorizations(self, data.get("authorized_delegations"))
+        employee = data.get("employee")
+        if employee and (employee.delegation.deleted_at is not None or
+                         str(employee.delegation.status).casefold() not in ("active", "activo") or
+                         employee.position.deleted_at is not None):
+            self.add_error("employee", "No se puede vincular un empleado con delegación inactiva o cargo archivado.")
+
+
         employee = data.get("employee")
         delegations = data.get("authorized_delegations")
         groups = data.get("groups")
@@ -631,7 +643,7 @@ class AccountEditForm(BootstrapMixin, forms.ModelForm):
 
         self.fields["authorized_delegations"].queryset = (
             Delegation.objects.filter(
-                Q(deleted_at__isnull=True) | Q(pk__in=selected)
+                (Q(deleted_at__isnull=True) & (Q(status__iexact="Active") | Q(status__iexact="Activo"))) | Q(pk__in=selected)
             ).distinct().order_by("name")
         )
 
@@ -714,6 +726,19 @@ class AccountEditForm(BootstrapMixin, forms.ModelForm):
 
     def clean(self):
         data = super().clean()
+
+        previous_ids = (self.profile.authorized_delegations.values_list("pk", flat=True)
+                        if self.profile else ())
+        validate_delegation_authorizations(self, data.get("authorized_delegations"), previous_ids)
+        employee = data.get("employee")
+        old_employee_id = self.profile.employee_id if self.profile else None
+        if employee and employee.pk != old_employee_id and (
+            employee.delegation.deleted_at is not None or
+            str(employee.delegation.status).casefold() not in ("active", "activo") or
+            employee.position.deleted_at is not None
+        ):
+            self.add_error("employee", "No se puede vincular un empleado con delegación inactiva o cargo archivado.")
+
 
         employee = data.get("employee")
         delegations = data.get("authorized_delegations")

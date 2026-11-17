@@ -13,6 +13,7 @@ from accounts.forms import (
 )
 
 from .models import Delegation, OrganizationRole, PositionFunction, Employee
+from .assignment_rules import validate_employee_assignment, validate_delegation_authorizations, delegation_available, position_available
 from accounts.models import UserProfile
 from accounts.permissions import allowed_delegation_ids
 from .permission_labels import (
@@ -460,6 +461,17 @@ class EmployeeForm(AccountsEmployeeForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        # SGR_ORG_ETAPA3_20261116: candidatos nuevos activos, valores previos visibles.
+        old_delegation = self.instance.delegation_id if self.instance.pk else None
+        old_position = self.instance.position_id if self.instance.pk else None
+        active_delegations = (Q(status__iexact="Active") | Q(status__iexact="Activo"))
+        self.fields["delegation"].queryset = Delegation.objects.filter(
+            Q(deleted_at__isnull=True) & active_delegations | Q(pk=old_delegation)
+        ).order_by("name")
+        self.fields["position"].queryset = PositionFunction.objects.filter(
+            Q(deleted_at__isnull=True) | Q(pk=old_position)
+        ).order_by("position_name")
+
         _configure_status_choices(self)
         self.fields["position"].widget = PositionRolesSelect()
         self.fields["position"].widget.choices = self.fields["position"].choices
@@ -474,10 +486,15 @@ class EmployeeForm(AccountsEmployeeForm):
             "data-profile-photo-input": "",
         })
 
-        self.fields["authorized_delegations"].queryset = (
-            Delegation.objects.filter(deleted_at__isnull=True)
-            .order_by("name")
-        )
+        historical_profile = (UserProfile.objects.filter(
+            employee=self.instance, deleted_at__isnull=True
+        ).first() if self.instance.pk else None)
+        old_authorizations = (historical_profile.authorized_delegations.values_list("pk", flat=True)
+                              if historical_profile else ())
+        self.fields["authorized_delegations"].queryset = Delegation.objects.filter(
+            Q(deleted_at__isnull=True) & (Q(status__iexact="Active") | Q(status__iexact="Activo"))
+            | Q(pk__in=old_authorizations)
+        ).order_by("name")
         self.fields["groups"].queryset = (
             Group.objects.filter(organization_role__isnull=False)
             .prefetch_related("organization_role__application_delegations")
@@ -742,6 +759,21 @@ class EmployeeForm(AccountsEmployeeForm):
                         break
 
 
+        # Validaciones finales de integridad; los vínculos previos se conservan.
+        previous = None
+        if self.instance.pk:
+            previous = Employee.objects.filter(pk=self.instance.pk).first()
+        validate_employee_assignment(
+            self, cleaned_data.get("delegation"), cleaned_data.get("position"), previous
+        )
+        existing_profile = (UserProfile.objects.filter(
+            employee=self.instance, deleted_at__isnull=True
+        ).first() if self.instance.pk else None)
+        previous_ids = (existing_profile.authorized_delegations.values_list("pk", flat=True)
+                        if existing_profile else ())
+        validate_delegation_authorizations(
+            self, cleaned_data.get("authorized_delegations"), previous_ids
+        )
         return cleaned_data
 
 
