@@ -639,7 +639,6 @@ def get_period_list_context(request):
             status=Period.Status.CLOSED
         ).count(),
 
-        "can_archive_closed_period": False,
     }
 
 
@@ -688,7 +687,6 @@ def period_list(request):
             Q(status="Closed") | Q(status="Cerrado")
         ).count(),
 
-        "can_archive_closed_period": False,
     }
 
     return render(request, "planning/period_list.html", context)
