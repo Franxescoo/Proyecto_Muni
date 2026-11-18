@@ -3,6 +3,8 @@ from django.core.exceptions import PermissionDenied
 from django.contrib import messages
 from decimal import Decimal, InvalidOperation
 
+from websocket.live import suppress_indicator_reload
+
 from django.db import transaction
 from django.db.models import Prefetch, Q, Count, F
 from django.shortcuts import render
@@ -130,7 +132,8 @@ def indicator_list(request):
     if period is not None:
         goals = goals.filter(period=period)
 
-    synchronize_indicators_for_goals(goals)
+    with suppress_indicator_reload():
+        synchronize_indicators_for_goals(goals)
 
     indicators = _scoped_queryset(
         Indicator.objects.select_related("goal", "employee", "goal__period"),
@@ -338,7 +341,8 @@ def executive_dashboard(request):
     if position_id.isdigit():
         goals = goals.filter(position_id=position_id)
         employees = employees.filter(pk__in=goals.values("employee_id"))
-    synchronize_indicators_for_goals(goals)
+    with suppress_indicator_reload():
+        synchronize_indicators_for_goals(goals)
 
     indicators = Indicator.objects.filter(
         deleted_at__isnull=True,

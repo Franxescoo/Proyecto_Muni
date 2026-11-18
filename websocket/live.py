@@ -1,11 +1,28 @@
 import logging
 from functools import partial
 
+from contextlib import contextmanager
+from contextvars import ContextVar
+
 from asgiref.sync import async_to_sync
 from django.db import transaction
 from django.db.models.signals import m2m_changed, post_delete, post_save
 
 logger = logging.getLogger(__name__)
+
+_SUPPRESS_INDICATOR_RELOAD = ContextVar(
+    "sgr_suppress_indicator_reload",
+    default=False,
+)
+
+
+@contextmanager
+def suppress_indicator_reload():
+    token = _SUPPRESS_INDICATOR_RELOAD.set(True)
+    try:
+        yield
+    finally:
+        _SUPPRESS_INDICATOR_RELOAD.reset(token)
 
 
 def connect_live_signals():
@@ -103,8 +120,13 @@ def connect_live_signals():
 
 
 def _publish_data_changed(sender, **kwargs):
-    _schedule_publish(sender)
+    if (
+        sender._meta.label_lower == "monitoring_traceability.indicator"
+        and _SUPPRESS_INDICATOR_RELOAD.get()
+    ):
+        return
 
+    _schedule_publish(sender)
 
 def _publish_m2m_changed(sender, model, action, **kwargs):
     if action in {"post_add", "post_remove", "post_clear"}:
