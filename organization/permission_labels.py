@@ -40,6 +40,7 @@ MODEL_NAMES = {
     "subattention": "Subatenciones",
     "attentionentry": "Atenciones ciudadanas",
     "indicator": "Indicadores",
+    "monitoringsettings": "Reglas operativas de monitoreo",
     "commitment": "Compromisos",
     "audit": "Auditorías",
     "comment": "Comentarios",
@@ -63,7 +64,14 @@ SPECIAL = {
     "withdraw_eventparticipation": "Puede retirar participantes de eventos",
     "reactivate_eventparticipation": "Puede reactivar participantes de eventos",
     "delete_closed_period": "Puede eliminar períodos cerrados",
+    "reopen_closed_period": "Puede reabrir períodos cerrados",
     "derivar_solicitud": "Puede derivar solicitudes ciudadanas",
+    "change_indicator": "Puede ajustar indicadores",
+    "change_commitment": "Puede actualizar estados, reasignar responsables y gestionar alertas de compromisos",
+    "change_monitoringsettings": "Puede configurar alertas y ajustes de Monitoreo",
+    "view_citizenrequestaction": "Puede consultar gestiones operativas",
+    "add_citizenrequestaction": "Puede registrar gestiones operativas",
+    "change_citizenrequestaction": "Puede editar gestiones operativas",
 }
 
 CATALOG_MODELS = {
@@ -77,6 +85,7 @@ CATALOG_MODELS = {
     },
     "citizen_requests": {
         "citizenrequest",
+        "citizenrequestaction",
     },
     "organization": {
         "delegation",
@@ -101,12 +110,11 @@ CATALOG_MODELS = {
         "validation",
     },
     "monitoring_traceability": {
-        "activity",
         "audit",
         "commitment",
         "commitmentcomment",
-        "evidence",
         "indicator",
+        "monitoringsettings",
     },
 }
 
@@ -122,20 +130,18 @@ CATALOG_ACTIONS = {
     },
     ("municipal_events", "giftdelivery"): {"add_giftdelivery", "view_giftdelivery"},
     ("citizen_requests", "citizenrequest"): {"derivar_solicitud"},
-    ("monitoring_traceability", "activity"): {
-        "add_activity",
-        "change_activity",
-        "delete_activity",
-        "view_activity",
+    ("citizen_requests", "citizenrequestaction"): {
+        "view_citizenrequestaction",
+        "add_citizenrequestaction",
+        "change_citizenrequestaction",
     },
-    ("monitoring_traceability", "evidence"): {
-        "add_evidence",
-        "change_evidence",
-        "delete_evidence",
-        "view_evidence",
+    ("monitoring_traceability", "commitment"): {
+    "view_commitment",
+    "add_commitment",
+    "change_commitment",
     },
-    ("monitoring_traceability", "commitment"): {"view_commitment"},
-    ("monitoring_traceability", "indicator"): {"view_indicator"},
+    ("monitoring_traceability", "indicator"): {"view_indicator", "change_indicator"},
+    ("monitoring_traceability", "monitoringsettings"): {"change_monitoringsettings"},
     ("monitoring_traceability", "audit"): {"view_audit"},
     ("monitoring_traceability", "commitmentcomment"): {
         "add_commitmentcomment",
@@ -144,27 +150,40 @@ CATALOG_ACTIONS = {
 }
 
 
+
 def catalog_permission_queryset(queryset):
-    """Return only permissions backed by real application operations."""
+    """Devuelve los permisos disponibles para Roles y Permisos."""
     from django.db.models import Q
 
     permission_filter = Q()
+
     for app_label, models in CATALOG_MODELS.items():
         for model in models:
             actions = CATALOG_ACTIONS.get((app_label, model))
+
             model_filter = Q(
                 content_type__app_label=app_label,
                 content_type__model=model,
             )
+
             if actions is not None:
                 model_filter &= Q(codename__in=actions)
+
             permission_filter |= model_filter
 
-    return queryset.filter(permission_filter).order_by(
-        "content_type__app_label",
-        "content_type__model",
-        "codename",
+    return (
+        queryset.filter(permission_filter)
+        .exclude(
+            content_type__app_label="planning_measurements",
+            codename="delete_closed_period",
+        )
+        .order_by(
+            "content_type__app_label",
+            "content_type__model",
+            "codename",
+        )
     )
+
 
 
 def permission_label(permission):

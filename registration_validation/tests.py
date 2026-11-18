@@ -52,12 +52,12 @@ class RegistrationPageSizeTests(TestCase):
 
     def test_registration_lists_render_sidebar_and_page_size_selector(self):
         list_routes = (
-            ("registration:activity_list", "activity-page-size"),
-            ("registration:evidence_list", "evidence-page-size"),
-            ("registration:validation_list", "validation-page-size"),
+            ("registration:activity_list", "activity-page-size", "Actividades"),
+            ("registration:evidence_list", "evidence-page-size", "Evidencias"),
+            ("registration:validation_list", "validation-page-size", "Validaciones"),
         )
 
-        for route_name, selector_id in list_routes:
+        for route_name, selector_id, guide_section in list_routes:
             with self.subTest(route=route_name):
                 response = self.client.get(reverse(route_name))
 
@@ -65,8 +65,45 @@ class RegistrationPageSizeTests(TestCase):
                 self.assertContains(response, "Registro y validación")
                 self.assertContains(response, "Inicio")
                 self.assertContains(response, "Gestión de accesos")
+                self.assertContains(response, "registration_validation_help.js")
+                self.assertContains(response, "registration_validation_help.css")
                 self.assertContains(response, selector_id)
                 self.assertContains(response, "Guardar preferencia")
+                self.assertContains(response, 'data-sgr-help-module="registration_validation"')
+                self.assertContains(response, "Iniciar tutorial")
+                self.assertContains(response, "Mostrar guía lateral")
+                self.assertContains(response, 'data-sgr-guide-rail')
+                self.assertContains(response, 'id="registrationHelpOffcanvas"')
+                self.assertContains(response, guide_section)
+
+        response = self.client.get(reverse("registration:attention_entry_list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Ingreso de atención")
+        self.assertContains(response, "historial de movimientos en orden cronológico")
+
+    def test_create_forms_render_their_contextual_tutorial_trigger(self):
+        form_routes = (
+            ("registration:attention_entry_create", "attentionEntryModal"),
+            ("registration:activity_create", "activityModal"),
+            ("registration:evidence_create", "evidenceModal"),
+            ("registration:validation_create", "validationModal"),
+            ("registration:service_create", "serviceModal"),
+            ("registration:activity_type_create", "activityTypeModal"),
+            ("registration:attention_type_create", "attentionTypeModal"),
+            ("registration:sub_attention_create", "subAttentionModal"),
+        )
+
+        for route_name, modal_id in form_routes:
+            with self.subTest(route=route_name):
+                response = self.client.get(reverse(route_name))
+
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(
+                    response,
+                    f'data-sgr-autohelp="registration:{route_name.split(":")[1]}"',
+                )
+                self.assertContains(response, f'id="{modal_id}"')
+                self.assertContains(response, "Iniciar tutorial")
 
     def test_unsupported_page_size_is_not_saved(self):
         response = self.client.post(

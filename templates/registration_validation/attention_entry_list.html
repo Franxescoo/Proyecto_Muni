@@ -295,6 +295,17 @@
                                 </button>
                                 {% endif %}
 
+                                {% if entry.can_view_request_actions %}
+                                <a
+                                    href="{% url 'citizen_requests:request_action_list' entry.citizen_request.pk %}"
+                                    class="btn btn-sm btn-outline-info"
+                                    title="Consultar y registrar gestiones de la solicitud vinculada"
+                                >
+                                    <i class="bi bi-list-check" aria-hidden="true"></i>
+                                    <span class="ms-1">Gestiones</span>
+                                </a>
+                                {% endif %}
+
                                 {% if entry.status != 'CLOSED' %}
                                 {% campaign_link entry as campaign_url %}
                                 {% if campaign_url %}

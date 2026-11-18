@@ -1,11 +1,15 @@
 from datetime import date
+from importlib import import_module
+from types import SimpleNamespace
 from unittest.mock import patch
 
+from django.apps import apps
 from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import connection
 from django.test import RequestFactory, TestCase
 from django.utils import timezone
 from django.utils.datastructures import MultiValueDict
@@ -141,14 +145,16 @@ class RegistrationRelationshipIntegrityTests(TestCase):
         values.update(kwargs)
         return Activity.objects.create(**values)
 
-    def make_evidence(self, activity=None, author=None, code="REL-EVID"):
-        return Evidence.objects.create(
-            code=code,
-            activity=activity or self.make_activity(),
-            author=author or self.north_employee,
-            file_link="evidence/test",
-            date=timezone.now(),
-        )
+    def make_evidence(self, activity=None, author=None, code=None):
+        values = {
+            "activity": activity or self.make_activity(),
+            "author": author or self.north_employee,
+            "file_link": "evidence/test",
+            "date": timezone.now(),
+        }
+        if code is not None:
+            values["code"] = code
+        return Evidence.objects.create(**values)
 
     def make_validation(
         self,
@@ -511,8 +517,184 @@ class RegistrationRelationshipIntegrityTests(TestCase):
         self.assertFalse(invalid_update.is_valid())
         self.assertIn("author", invalid_update.errors)
 
+    def test_evidence_review_status_selector_accepts_predefined_and_historical_values(self):
+        activity = self.make_activity()
+        create_data = self.evidence_form_data(
+            activity,
+            self.north_employee,
+        )
+        create_data["review_status"] = "Observed"
+        create_form = EvidenceForm(
+            data=create_data,
+            files=self.evidence_files(),
+        )
+        self.assertIn("<select", str(create_form["review_status"]))
+        self.assertEqual(
+            dict(create_form.fields["review_status"].widget.choices)[
+                "Observed"
+            ],
+            "Con observaciones",
+        )
+        self.assertTrue(create_form.is_valid(), create_form.errors)
+
+        invalid_form = EvidenceForm(
+            data=dict(create_data, review_status="Unrecognized"),
+            files=self.evidence_files(),
+        )
+        self.assertFalse(invalid_form.is_valid())
+        self.assertIn("review_status", invalid_form.errors)
+
+        existing = self.make_evidence(
+            activity,
+            self.north_employee,
+            code="REL-EVID-LEGACY-STATUS",
+        )
+        existing.review_status = "Legacy review state"
+        existing.save(update_fields=("review_status",))
+        update_data = self.evidence_form_data(
+            activity,
+            self.north_employee,
+            code=existing.code,
+        )
+        update_data["review_status"] = existing.review_status
+        update_form = EvidenceForm(
+            data=update_data,
+            files=self.evidence_files(),
+            instance=existing,
+        )
+        self.assertIn(
+            "Legacy review state",
+            dict(update_form.fields["review_status"].widget.choices),
+        )
+        self.assertTrue(update_form.is_valid(), update_form.errors)
+
+    def test_evidence_code_is_generated_and_unique_when_omitted(self):
+        first = self.make_evidence()
+        second = self.make_evidence()
+
+        self.assertRegex(first.code, r"^EVID-[0-9A-F]{32}$")
+        self.assertRegex(second.code, r"^EVID-[0-9A-F]{32}$")
+        self.assertNotEqual(first.code, second.code)
+        self.assertEqual(Evidence.objects.filter(code=first.code).count(), 1)
+
+    def test_evidence_code_is_immutable_and_respects_update_fields(self):
+        evidence = self.make_evidence()
+        original_code = evidence.code
+
+        evidence.file_link = "evidence/updated"
+        evidence.save()
+        evidence.refresh_from_db()
+        self.assertEqual(evidence.code, original_code)
+
+        evidence.code = "MANUALLY-CHANGED"
+        with self.assertRaises(ValidationError):
+            evidence.save()
+        evidence.refresh_from_db()
+        self.assertEqual(evidence.code, original_code)
+
+        evidence.code = "EXCLUDED-FIELD-CHANGE"
+        evidence.file_link = "evidence/update-fields"
+        evidence.save(update_fields=("file_link",))
+        self.assertEqual(evidence.code, original_code)
+        evidence.refresh_from_db()
+        self.assertEqual(evidence.code, original_code)
+        self.assertEqual(evidence.file_link, "evidence/update-fields")
+
+        evidence.code = "INCLUDED-FIELD-CHANGE"
+        with self.assertRaises(ValidationError):
+            evidence.save(update_fields=("code",))
+        evidence.refresh_from_db()
+        self.assertEqual(evidence.code, original_code)
+
+    def test_evidence_form_generates_code_without_accepting_manual_input(self):
+        activity = self.make_activity()
+        form_data = self.evidence_form_data(
+            activity,
+            self.north_employee,
+            code="FORGED-MANUAL-CODE",
+        )
+        form = EvidenceForm(
+            data=form_data,
+            files=self.evidence_files(),
+        )
+
+        self.assertTrue(form.fields["code"].disabled)
+        self.assertTrue(form.is_valid(), form.errors)
+        evidence = form.save()
+
+        self.assertRegex(evidence.code, r"^EVID-[0-9A-F]{32}$")
+        self.assertNotEqual(evidence.code, "FORGED-MANUAL-CODE")
+
+    def test_evidence_admin_displays_but_does_not_edit_generated_code(self):
+        user = get_user_model().objects.create_superuser(
+            username="evidence-code-admin",
+            password="test-password",
+        )
+        request = RequestFactory().post("/admin/")
+        request.user = user
+        evidence_admin = admin.site._registry[Evidence]
+
+        self.assertIn("code", evidence_admin.get_readonly_fields(request))
+        add_form = evidence_admin.get_form(request, obj=None)
+        self.assertNotIn("code", add_form.base_fields)
+
+        evidence = Evidence(
+            activity=self.make_activity(),
+            author=self.north_employee,
+            file_link="evidence/admin",
+            date=timezone.now(),
+        )
+        evidence_admin.save_model(
+            request,
+            evidence,
+            form=None,
+            change=False,
+        )
+        self.assertRegex(evidence.code, r"^EVID-[0-9A-F]{32}$")
+
+    def test_evidence_code_generation_retries_on_collision(self):
+        existing = self.make_evidence(code="EVID-COLLISION")
+        with patch(
+            "registration_validation.models._new_evidence_code",
+            side_effect=(existing.code, "EVID-UNIQUE-SECOND-TRY"),
+        ):
+            created = self.make_evidence()
+
+        self.assertEqual(created.code, "EVID-UNIQUE-SECOND-TRY")
+        self.assertEqual(Evidence.objects.filter(code=existing.code).count(), 1)
+
+    def test_existing_evidence_code_is_preserved(self):
+        evidence = self.make_evidence(code="LEGACY-EVIDENCE-CODE")
+
+        evidence.file_link = "evidence/legacy-updated"
+        evidence.save()
+        evidence.refresh_from_db()
+
+        self.assertEqual(evidence.code, "LEGACY-EVIDENCE-CODE")
+        self.assertEqual(evidence.file_link, "evidence/legacy-updated")
+
+    def test_evidence_code_migration_fills_only_missing_codes(self):
+        existing = self.make_evidence(code="HISTORIC-VALID-CODE")
+        missing = self.make_evidence()
+        Evidence.objects.filter(pk=missing.pk).update(code="")
+        migration = import_module(
+            "registration_validation.migrations.0014_alter_evidence_code"
+        )
+
+        migration.populate_missing_evidence_codes(
+            apps,
+            SimpleNamespace(connection=connection),
+        )
+
+        existing.refresh_from_db()
+        missing.refresh_from_db()
+        self.assertEqual(existing.code, "HISTORIC-VALID-CODE")
+        self.assertRegex(missing.code, r"^EVID-[0-9A-F]{32}$")
+        self.assertEqual(Evidence.objects.values("code").distinct().count(), 2)
+
     def test_evidence_create_and_update_remain_atomic_with_file_saving(self):
         activity = self.make_activity()
+        evidence_count = Evidence.objects.count()
         create_form = EvidenceForm(
             data=self.evidence_form_data(
                 activity,
@@ -533,11 +715,7 @@ class RegistrationRelationshipIntegrityTests(TestCase):
             with self.assertRaises(OSError):
                 create_view.form_valid(create_form)
 
-        self.assertFalse(
-            Evidence.objects.filter(
-                code="REL-EVID-ATOMIC-CREATE",
-            ).exists()
-        )
+        self.assertEqual(Evidence.objects.count(), evidence_count)
 
         existing = self.make_evidence(
             activity,
@@ -656,6 +834,59 @@ class RegistrationRelationshipIntegrityTests(TestCase):
         )
         self.assertFalse(invalid_update.is_valid())
         self.assertIn("verifier", invalid_update.errors)
+
+    def test_validation_decision_selector_preserves_historical_values(self):
+        evidence = self.make_evidence()
+        create_data = self.validation_form_data(
+            evidence,
+            self.north_employee,
+        )
+        create_data["decision"] = "Observed"
+        create_form = ValidationForm(data=create_data)
+        self.assertIn("<select", str(create_form["decision"]))
+        self.assertEqual(
+            dict(create_form.fields["decision"].widget.choices)["Approved"],
+            "Aprobada",
+        )
+        self.assertEqual(
+            create_form.fields["result"].widget.input_type,
+            "text",
+        )
+        self.assertTrue(create_form.is_valid(), create_form.errors)
+
+        legacy_label_data = self.validation_form_data(
+            evidence,
+            self.north_employee,
+        )
+        legacy_label_data["decision"] = "Aprobada"
+        legacy_label_form = ValidationForm(data=legacy_label_data)
+        self.assertTrue(legacy_label_form.is_valid(), legacy_label_form.errors)
+        self.assertEqual(
+            legacy_label_form.cleaned_data["decision"],
+            "Approved",
+        )
+
+        invalid_form = ValidationForm(
+            data=dict(create_data, decision="Unrecognized"),
+        )
+        self.assertFalse(invalid_form.is_valid())
+        self.assertIn("decision", invalid_form.errors)
+
+        existing = self.make_validation(evidence=evidence)
+        existing.decision = "Historical decision"
+        existing.save(update_fields=("decision",))
+        update_data = self.validation_form_data(
+            evidence,
+            self.north_employee,
+            version=existing.version,
+        )
+        update_data["decision"] = existing.decision
+        update_form = ValidationForm(data=update_data, instance=existing)
+        self.assertIn(
+            "Historical decision",
+            dict(update_form.fields["decision"].widget.choices),
+        )
+        self.assertTrue(update_form.is_valid(), update_form.errors)
 
     def test_validation_update_cannot_move_across_goals(self):
         north_evidence = self.make_evidence(code="REL-EVID-NORTH-VAL")

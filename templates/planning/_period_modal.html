@@ -91,7 +91,8 @@
 
                     <div class="table-responsive border rounded mb-3">
 
-                        <table class="table table-hover table-striped align-middle mb-0">
+                        <table class="table table-hover table-striped align-middle mb-0"
+                            style="min-width: 1250px;">
 
                             <thead class="table-dark-brand">
                                 <tr>
@@ -99,6 +100,7 @@
                                     <th>Cargo</th>
                                     <th>Ítem</th>
                                     <th>Valor objetivo</th>
+                                    <th>Evidencias requeridas</th>
                                     <th>Unidad</th>
                                     <th>Ponderador</th>
                                 </tr>
@@ -129,7 +131,7 @@
 
                                 {% if f.non_field_errors %}
                                 <tr>
-                                    <td colspan="6" class="text-danger bg-light">
+                                    <td colspan="7" class="text-danger bg-light">
                                         {{ f.non_field_errors }}
                                     </td>
                                 </tr>

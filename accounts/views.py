@@ -12,6 +12,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from organization.models import Employee, PositionFunction
+from organization.employee_history import employee_snapshot, record_employee_change
 
 from .forms import (
     AccountCreateForm,
@@ -183,7 +184,20 @@ def profile_photo_update(request):
         instance=profile,
     )
     if request.method == "POST" and form.is_valid():
-        form.save()
+        employee = profile.employee if profile.employee_id else None
+        previous_employee = employee_snapshot(employee)
+        with transaction.atomic():
+            updated_profile = form.save()
+            # Mi perfil y Empleados son dos vistas de la misma persona.
+            # Compartir la ruta del archivo sin duplicar el archivo físico.
+            if updated_profile.employee_id:
+                Employee.objects.filter(
+                    pk=updated_profile.employee_id,
+                    deleted_at__isnull=True,
+                ).update(profile_photo=updated_profile.profile_photo.name)
+                record_employee_change(
+                    employee, request.user, "Cambio de fotografía", previous_employee
+                )
         messages.success(request, "Tu foto de perfil se actualizó correctamente.")
         return redirect("accounts:profile")
 

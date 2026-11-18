@@ -13,6 +13,7 @@ from accounts.forms import (
 )
 
 from .models import Delegation, OrganizationRole, PositionFunction, Employee
+from .assignment_rules import validate_employee_assignment, validate_delegation_authorizations, delegation_available, position_available
 from accounts.models import UserProfile
 from accounts.permissions import allowed_delegation_ids
 from .permission_labels import (
@@ -29,9 +30,12 @@ STATUS_CHOICES = (
     ("Inactive", "Inactivo"),
 )
 
+# Estado adicional EXCLUSIVO de empleados; no se aplica a delegaciones.
+EMPLOYEE_STATUS_CHOICES = STATUS_CHOICES + (("On leave", "Con licencia"),)
 
-def _configure_status_choices(form):
-    choices = list(STATUS_CHOICES)
+
+def _configure_status_choices(form, selected_choices=None):
+    choices = list(STATUS_CHOICES if selected_choices is None else selected_choices)
     current_status = getattr(form.instance, "status", "")
     if current_status and current_status not in dict(choices):
         choices.append((current_status, current_status))
@@ -87,10 +91,44 @@ class OrganizationRoleForm(BootstrapMixin, forms.Form):
         kwargs["initial"] = initial
         super().__init__(*args, **kwargs)
 
-        # CATALOGO_COMPLETO_ROLES_SGR_V1: el catálogo NO depende de los permisos del administrador.
-        # Las vistas ya exigen organization.add/change_organizationrole.
+        # Mínimo privilegio (RNF-005): solo se pueden CONCEDER permisos que
+        # el administrador ya tiene. No dependemos del nombre del rol ni de
+        # is_superuser: un Administrador General tendrá todo el catálogo si
+        # su rol institucional tiene esos permisos.
+        self._actor_permission_names = None
+        if self.actor is not None:
+            self._actor_permission_names = set(self.actor.get_all_permissions())
+            permitted_ids = [
+                permission.pk
+                for permission in self.fields["permissions"].queryset
+                if f"{permission.content_type.app_label}.{permission.codename}"
+                in self._actor_permission_names
+            ]
+            self.fields["permissions"].queryset = (
+                self.fields["permissions"].queryset.filter(pk__in=permitted_ids)
+            )
+            self.fields["permissions"].help_text = (
+                "Solo puedes conceder permisos que tienes autorizados. "
+                "Los demás no pueden asignarse desde esta cuenta."
+            )
+
+        # Conservar permisos técnicos ajenos al catálogo al editar un rol;
+        # sin embargo, no permitir que alguien EDITE un rol que ya posea
+        # permisos superiores a su autorización (ver clean()).
         # Conservar los permisos técnicos/ajenos al catálogo al editar un rol:
         # no se presentan ni se eliminan por accidente al guardar.
+        # SGR_MONITOREO_PERMISOS_ADMIN_20261116: evitar que administradores limitados concedan estos permisos
+        # especiales si no los tienen. La validación POST usa el mismo queryset.
+        if self.actor is not None and not self.actor.is_superuser:
+            for codename in ("change_indicator", "change_monitoringsettings"):
+                if not self.actor.has_perm(f"monitoring_traceability.{codename}"):
+                    self.fields["permissions"].queryset = (
+                        self.fields["permissions"].queryset.exclude(
+                            content_type__app_label="monitoring_traceability",
+                            codename=codename,
+                        )
+                    )
+
         self._preserved_permission_ids = set()
         if self.group is not None:
             catalog_ids = self.fields["permissions"].queryset.values_list(
@@ -102,10 +140,9 @@ class OrganizationRoleForm(BootstrapMixin, forms.Form):
                 )
             )
 
-            if self._preserved_permission_ids:
+            if self._preserved_permission_ids and self.actor is None:
                 self.fields["permissions"].help_text = (
-                    "Puedes modificar los permisos que posees. "
-                    "Los demás se conservarán sin cambios."
+                    "Algunos permisos técnicos se conservarán sin cambios."
                 )
 
         self.apply_bootstrap()
@@ -159,6 +196,20 @@ class OrganizationRoleForm(BootstrapMixin, forms.Form):
 
     def clean(self):
         cleaned_data = super().clean()
+
+        if self.actor is not None and self.group is not None:
+            # También en POST: un usuario limitado no puede editar roles
+            # que ya contienen permisos que superan su propia autorización.
+            current = {
+                f"{permission.content_type.app_label}.{permission.codename}"
+                for permission in self.group.permissions.select_related("content_type")
+            }
+            if not current.issubset(self._actor_permission_names):
+                raise ValidationError(
+                    "No puedes modificar este rol porque contiene permisos "
+                    "fuera de tu autorización. Solicita ayuda a un "
+                    "administrador con los permisos correspondientes."
+                )
 
         # Evitar que un usuario se quite los accesos
         # de un rol que tiene asignado.
@@ -282,6 +333,17 @@ class DelegationForm(BootstrapMixin, forms.ModelForm):
             )
         return scope
 
+class PositionRolesSelect(forms.Select):
+    """Informa los roles del cargo al navegador; el dato es solo presentación."""
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        option = super().create_option(name, value, label, selected, index, subindex, attrs)
+        if value and hasattr(value, "instance"):
+            option["attrs"]["data-roles"] = ", ".join(
+                value.instance.role_groups.values_list("name", flat=True)
+            )
+        return option
+
+
 class AccountRolePreviewSelect(forms.Select):
     def create_option(
         self, name, value, label, selected,
@@ -402,7 +464,21 @@ class EmployeeForm(AccountsEmployeeForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        _configure_status_choices(self)
+        # SGR_ORG_ETAPA3_20261116: candidatos nuevos activos, valores previos visibles.
+        old_delegation = self.instance.delegation_id if self.instance.pk else None
+        old_position = self.instance.position_id if self.instance.pk else None
+        active_delegations = (Q(status__iexact="Active") | Q(status__iexact="Activo"))
+        self.fields["delegation"].queryset = Delegation.objects.filter(
+            Q(deleted_at__isnull=True) & active_delegations | Q(pk=old_delegation)
+        ).order_by("name")
+        self.fields["position"].queryset = PositionFunction.objects.filter(
+            Q(deleted_at__isnull=True) | Q(pk=old_position)
+        ).order_by("position_name")
+
+        _configure_status_choices(self, EMPLOYEE_STATUS_CHOICES)
+        self.fields["position"].widget = PositionRolesSelect()
+        self.fields["position"].widget.choices = self.fields["position"].choices
+
 
         self.fields["profile_photo"].help_text = (
             "Opcional. PNG, JPG o WebP."
@@ -413,10 +489,15 @@ class EmployeeForm(AccountsEmployeeForm):
             "data-profile-photo-input": "",
         })
 
-        self.fields["authorized_delegations"].queryset = (
-            Delegation.objects.filter(deleted_at__isnull=True)
-            .order_by("name")
-        )
+        historical_profile = (UserProfile.objects.filter(
+            employee=self.instance, deleted_at__isnull=True
+        ).first() if self.instance.pk else None)
+        old_authorizations = (historical_profile.authorized_delegations.values_list("pk", flat=True)
+                              if historical_profile else ())
+        self.fields["authorized_delegations"].queryset = Delegation.objects.filter(
+            Q(deleted_at__isnull=True) & (Q(status__iexact="Active") | Q(status__iexact="Activo"))
+            | Q(pk__in=old_authorizations)
+        ).order_by("name")
         self.fields["groups"].queryset = (
             Group.objects.filter(organization_role__isnull=False)
             .prefetch_related("organization_role__application_delegations")
@@ -476,7 +557,7 @@ class EmployeeForm(AccountsEmployeeForm):
             self.fields["authorized_delegations"].initial = (
                 authorized or [current_profile.delegation_id]
             )
-            self.fields["groups"].initial = current_profile.user.groups.all()
+            self.fields["groups"].initial = self.instance.position.role_groups.all()
 
         selected_id = (
             self.data.get(self.add_prefix("user_account"))
@@ -497,13 +578,18 @@ class EmployeeForm(AccountsEmployeeForm):
                 .first()
             )
 
-        if selected_profile:
-            self.fields["assigned_roles_display"].initial = (
-                ", ".join(
-                    group.name
-                    for group in selected_profile.user.groups.all()
-                )
+        # Mostrar siempre los roles del cargo, no los que pueda tener la cuenta.
+        selected_position = self.instance.position if self.instance.pk else None
+        if self.is_bound:
+            position_id = self.data.get(self.add_prefix("position"))
+            if position_id and str(position_id).isdigit():
+                selected_position = PositionFunction.objects.filter(pk=position_id).first()
+        if selected_position:
+            self.fields["assigned_roles_display"].initial = ", ".join(
+                selected_position.role_groups.values_list("name", flat=True)
             )
+        self.fields["assigned_roles_display"].label = "Roles heredados del cargo"
+        self.ui_hidden_fields = set(self.ui_hidden_fields) - {"assigned_roles_display"}
 
         self.apply_bootstrap()
 
@@ -662,23 +748,35 @@ class EmployeeForm(AccountsEmployeeForm):
                     "authorized_delegations",
                     "Incluye la delegación principal del empleado.",
                 )
-            groups = cleaned_data.get("groups")
-            if groups and delegations:
-                permitted = set(delegations.values_list("pk", flat=True))
-                for group in groups:
-                    role = getattr(group, "organization_role", None)
-                    scope = set(
-                        role.application_delegations.values_list("pk", flat=True)
-                    ) if role else set()
-                    if not scope and role:
-                        scope = {role.delegation_id}
-                    if not role or not permitted.intersection(scope):
+            # Los grupos ocultos nunca otorgan permisos.
+            # La delegación autorizada se gestiona exclusivamente en la cuenta;
+            # cada rol del cargo debe pertenecer al catálogo de Roles y Permisos.
+            position = cleaned_data.get("position")
+            if position:
+                for group in position.role_groups.all():
+                    if not hasattr(group, "organization_role"):
                         self.add_error(
-                            "groups",
-                            "Cada rol debe coincidir con una delegación autorizada.",
+                            "position",
+                            f"El rol '{group.name}' no está creado en Roles y Permisos.",
                         )
                         break
 
+
+        # Validaciones finales de integridad; los vínculos previos se conservan.
+        previous = None
+        if self.instance.pk:
+            previous = Employee.objects.filter(pk=self.instance.pk).first()
+        validate_employee_assignment(
+            self, cleaned_data.get("delegation"), cleaned_data.get("position"), previous
+        )
+        existing_profile = (UserProfile.objects.filter(
+            employee=self.instance, deleted_at__isnull=True
+        ).first() if self.instance.pk else None)
+        previous_ids = (existing_profile.authorized_delegations.values_list("pk", flat=True)
+                        if existing_profile else ())
+        validate_delegation_authorizations(
+            self, cleaned_data.get("authorized_delegations"), previous_ids
+        )
         return cleaned_data
 
 
@@ -686,6 +784,21 @@ class EmployeeForm(AccountsEmployeeForm):
 class PositionForm(AccountsPositionForm):
     class Meta(AccountsPositionForm.Meta):
         pass
+
+    def clean(self):
+        data = super().clean()
+        groups = data.get("role_groups")
+        if groups is not None:
+            for group in groups:
+                if not hasattr(group, "organization_role"):
+                    self.add_error(
+                        "role_groups",
+                        f"El rol '{group.name}' no fue creado en Roles y Permisos.",
+                    )
+                    break
+        # La asignación territorial NO es parte del rol. Se valida al guardar
+        # la cuenta del empleado y al consultar registros por delegación.
+        return data
 
     def clean_position_name(self):
         name = self.cleaned_data["position_name"].strip()

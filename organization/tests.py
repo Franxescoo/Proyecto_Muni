@@ -113,16 +113,91 @@ class OrganizationListTests(TestCase):
             "registration_validation.add_service",
             "planning_measurements.add_period",
             "citizen_requests.derivar_solicitud",
-            "monitoring_traceability.add_activity",
-            "monitoring_traceability.change_activity",
-            "monitoring_traceability.delete_activity",
-            "monitoring_traceability.view_activity",
-            "monitoring_traceability.add_evidence",
-            "monitoring_traceability.change_evidence",
-            "monitoring_traceability.delete_evidence",
-            "monitoring_traceability.view_evidence",
+            "registration_validation.add_activity",
+            "registration_validation.change_activity",
+            "registration_validation.delete_activity",
+            "registration_validation.view_activity",
+            "registration_validation.add_evidence",
+            "registration_validation.change_evidence",
+            "registration_validation.delete_evidence",
+            "registration_validation.view_evidence",
         }
         self.assertTrue(expected.issubset(permissions))
+        self.assertFalse(any(
+            name.startswith("monitoring_traceability.") and name.split(".", 1)[1]
+            in {f"{action}_{model}" for model in ("activity", "evidence")
+                for action in ("add", "change", "delete", "view")}
+            for name in permissions
+        ))
+
+    def test_request_action_permissions_are_catalogued_without_being_assigned(self):
+        content_type, _ = ContentType.objects.get_or_create(
+            app_label="citizen_requests",
+            model="citizenrequestaction",
+            defaults={"name": "gestiones operativas de solicitudes"},
+        )
+        action_permissions = {
+            codename: Permission.objects.get_or_create(
+                content_type=content_type,
+                codename=codename,
+                defaults={"name": codename},
+            )[0]
+            for codename in (
+                "view_citizenrequestaction",
+                "add_citizenrequestaction",
+                "change_citizenrequestaction",
+            )
+        }
+
+        catalog = GroupForm().fields["permissions"].queryset
+        catalog_ids = set(catalog.values_list("pk", flat=True))
+        self.assertTrue(
+            {permission.pk for permission in action_permissions.values()}
+            .issubset(catalog_ids)
+        )
+        self.assertFalse(
+            catalog.filter(
+                content_type=content_type,
+                codename="delete_citizenrequestaction",
+            ).exists()
+        )
+
+        expected_labels = {
+            "view_citizenrequestaction": "Puede consultar gestiones operativas",
+            "add_citizenrequestaction": "Puede registrar gestiones operativas",
+            "change_citizenrequestaction": "Puede editar gestiones operativas",
+        }
+        for codename, permission in action_permissions.items():
+            with self.subTest(codename=codename):
+                self.assertEqual(
+                    permission.content_type.app_label,
+                    "citizen_requests",
+                )
+                self.assertEqual(
+                    permission_label(permission),
+                    expected_labels[codename],
+                )
+                self.assertEqual(
+                    GroupForm().fields["permissions"].label_from_instance(
+                        permission
+                    ),
+                    expected_labels[codename],
+                )
+                self.assertFalse(
+                    Group.objects.filter(permissions=permission).exists()
+                )
+                self.assertFalse(
+                    get_user_model()
+                    .objects.filter(user_permissions=permission)
+                    .exists()
+                )
+
+        self.assertTrue(
+            catalog.filter(
+                content_type__app_label="citizen_requests",
+                codename="derivar_solicitud",
+            ).exists()
+        )
 
     def test_role_catalog_limits_read_only_monitoring_models(self):
         catalog = GroupForm().fields["permissions"].queryset
@@ -135,8 +210,11 @@ class OrganizationListTests(TestCase):
             for model in ("indicator", "commitment", "audit", "commitmentcomment")
         }
 
-        self.assertEqual(permissions["indicator"], {"view_indicator"})
-        self.assertEqual(permissions["commitment"], {"view_commitment"})
+        self.assertEqual(permissions["indicator"], {"view_indicator", "change_indicator"})
+        self.assertEqual(
+            permissions["commitment"],
+            {"view_commitment", "add_commitment", "change_commitment"},
+        )
         self.assertEqual(permissions["audit"], {"view_audit"})
         self.assertEqual(
             permissions["commitmentcomment"],
@@ -176,7 +254,7 @@ class OrganizationListTests(TestCase):
         permissions = Permission.objects.filter(
             content_type__app_label__in=[
                 "organization",
-                "monitoring_traceability",
+                "registration_validation",
                 "citizen_requests",
             ],
             codename__in=[
@@ -208,8 +286,8 @@ class OrganizationListTests(TestCase):
             for permission in form.fields["permissions"].queryset
         }
         self.assertIn("citizen_requests.derivar_solicitud", visible)
-        self.assertIn("monitoring_traceability.add_activity", visible)
-        self.assertIn("monitoring_traceability.view_evidence", visible)
+        self.assertIn("registration_validation.add_activity", visible)
+        self.assertIn("registration_validation.view_evidence", visible)
 
         self.client.force_login(manager)
         response = self.client.get(
@@ -223,13 +301,13 @@ class OrganizationListTests(TestCase):
             for permission in real_form.fields["permissions"].queryset
         }
         self.assertIn("citizen_requests.derivar_solicitud", real_visible)
-        self.assertIn("monitoring_traceability.add_activity", real_visible)
-        self.assertIn("monitoring_traceability.view_evidence", real_visible)
+        self.assertIn("registration_validation.add_activity", real_visible)
+        self.assertIn("registration_validation.view_evidence", real_visible)
 
         selected_permissions = Permission.objects.filter(
             content_type__app_label__in=[
                 "citizen_requests",
-                "monitoring_traceability",
+                "registration_validation",
             ],
             codename__in=[
                 "derivar_solicitud",
@@ -262,12 +340,21 @@ class OrganizationListTests(TestCase):
             )
         )
         edit_form = OrganizationRoleForm(group=role, actor=manager)
-        self.assertIn(
+        self.assertNotIn(
             "monitoring_traceability.delete_evidence",
             {
                 f"{permission.content_type.app_label}.{permission.codename}"
                 for permission in edit_form.fields["permissions"].queryset
             },
+        )
+
+        # El permiso fuera del catálogo no desaparece de un rol existente.
+        self.assertIn(
+            Permission.objects.get(
+                content_type__app_label="monitoring_traceability",
+                codename="delete_evidence",
+            ).pk,
+            edit_form._preserved_permission_ids,
         )
 
     def test_role_catalog_respects_personal_permissions(self):
@@ -287,7 +374,7 @@ class OrganizationListTests(TestCase):
         )
         self.assertFalse(manager.has_perm("municipal_events.view_municipalevent"))
         form = OrganizationRoleForm(actor=manager)
-        self.assertIn(other, form.fields["permissions"].queryset)
+        self.assertNotIn(other, form.fields["permissions"].queryset)
 
 
     def test_editing_other_role_preserves_permissions_outside_actor_scope(self):
@@ -351,9 +438,9 @@ class OrganizationListTests(TestCase):
             "delegations": [self.delegation.pk],
             "permissions": [to_grant.pk],
         })
-        self.assertEqual(response.status_code, 302)
-        group = Group.objects.get(name="Rol con permiso de otro módulo")
-        self.assertIn(to_grant, group.permissions.all())
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("permissions", response.context["form"].errors)
+        self.assertFalse(Group.objects.filter(name="Rol con permiso de otro módulo").exists())
         self.assertFalse(manager.has_perm("municipal_events.view_municipalevent"))
 
     def test_assigned_role_cannot_be_modified_by_owner(self):
@@ -384,6 +471,7 @@ class OrganizationListTests(TestCase):
 
     def test_view_modal_for_roles_and_users_without_mutation(self):
         group = Group.objects.create(name="Lector")
+        OrganizationRole.objects.create(group=group, delegation=self.delegation)
         role_response = self.client.get(reverse("organization:role_list"), {"modal": "view", "id": group.pk})
         self.assertEqual(role_response.status_code, 200)
         self.assertTrue(all(field.disabled for field in role_response.context["form"].fields.values()))
@@ -542,7 +630,7 @@ class OrganizationListTests(TestCase):
         # Los roles ahora se eligen en Usuarios, no se heredan desde Empleados.
         role = Group.objects.create(name="Cuenta territorial")
         OrganizationRole.objects.create(group=role, delegation=self.delegation)
-        self.employee.assigned_groups.add(role)
+        self.position.role_groups.add(role)
         response = self.client.post(reverse("accounts:account_create"), {
             "username": "new_role_account", "email": "new-role@example.com",
             "employee": self.employee.pk, "employee_code": "ORG-NEW-ACCOUNT-001",
@@ -576,6 +664,7 @@ class OrganizationListTests(TestCase):
         role = Group.objects.create(name="Analista con acceso")
         other_role = Group.objects.create(name="Revisor")
         OrganizationRole.objects.create(group=role, delegation=self.delegation)
+        self.position.role_groups.add(role)
         OrganizationRole.objects.create(group=other_role, delegation=self.delegation)
         user = get_user_model().objects.create_user(username="linked_employee", password="test-password-123")
         profile = UserProfile.objects.create(
@@ -592,7 +681,7 @@ class OrganizationListTests(TestCase):
             "assigned_groups": [role.pk],
         })
         self.assertRedirects(response, employee_url)
-        self.assertFalse(user.groups.exists())
+        self.assertQuerySetEqual(user.groups.all(), [role], transform=lambda x: x)
         response = self.client.post(reverse("accounts:account_edit", args=[user.pk]), {
             "username": user.username, "email": "linked@example.com", "is_active": "on",
             "employee": self.employee.pk, "employee_code": profile.employee_code,
@@ -601,8 +690,8 @@ class OrganizationListTests(TestCase):
         self.assertRedirects(response, reverse("accounts:access_home"))
         user.refresh_from_db()
         self.assertEqual(user.email, "linked@example.com")
-        self.assertQuerySetEqual(user.groups.all(), [other_role], transform=lambda x: x)
-        self.assertQuerySetEqual(self.employee.assigned_groups.all(), [other_role], transform=lambda x: x)
+        self.assertQuerySetEqual(user.groups.all(), [role], transform=lambda x: x)
+        self.assertQuerySetEqual(self.employee.assigned_groups.all(), [role], transform=lambda x: x)
 
     def test_employee_cannot_receive_role_from_another_delegation(self):
         role = Group.objects.create(name="Rol del Sur")
@@ -617,20 +706,58 @@ class OrganizationListTests(TestCase):
         created = Employee.objects.get(name="Funcionario con ámbito cruzado")
         self.assertFalse(created.assigned_groups.exists())
 
-    def test_account_ignores_injected_role_outside_employee_delegation(self):
+    def test_account_role_respects_employee_delegations(self):
         correct_role = Group.objects.create(name="Cuenta Centro")
         wrong_role = Group.objects.create(name="Cuenta del Sur")
-        OrganizationRole.objects.create(group=correct_role, delegation=self.delegation)
-        OrganizationRole.objects.create(group=wrong_role, delegation=self.other_delegation)
-        response = self.client.post(reverse("accounts:account_create"), {
-            "username": "wrong_delegation_account", "email": "wrong-role@example.com",
-            "employee": self.employee.pk, "employee_code": "ORG-WRONG-ROLE-001",
-            "authorized_delegations": [self.delegation.pk], "groups": [wrong_role.pk],
-            "password1": "Org-Role-Test-9271!", "password2": "Org-Role-Test-9271!",
-        })
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("groups", response.context["form"].errors)
-        self.assertFalse(get_user_model().objects.filter(username="wrong_delegation_account").exists())
+
+        OrganizationRole.objects.create(
+            group=correct_role,
+            delegation=self.delegation,
+        )
+        OrganizationRole.objects.create(
+            group=wrong_role,
+            delegation=self.other_delegation,
+        )
+
+        response = self.client.post(
+            reverse("accounts:account_create"),
+            {
+                "username": "wrong_delegation_account",
+                "email": "wrong-role@example.com",
+                "employee": self.employee.pk,
+                "employee_code": "ORG-WRONG-ROLE-001",
+                "authorized_delegations": [self.delegation.pk],
+                "groups": [wrong_role.pk],
+                "password1": "Org-Role-Test-9271!",
+                "password2": "Org-Role-Test-9271!",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("accounts:access_home"),
+        )
+
+        user = get_user_model().objects.get(
+            username="wrong_delegation_account"
+        )
+
+        self.assertFalse(
+            user.groups.filter(pk=wrong_role.pk).exists()
+        )
+
+        self.assertTrue(
+            user.profile.authorized_delegations.filter(
+                pk=self.delegation.pk
+            ).exists()
+        )
+
+        self.assertFalse(
+            user.profile.authorized_delegations.filter(
+                pk=self.other_delegation.pk
+            ).exists()
+        )
+
 
     def test_employee_actions_follow_status_column_and_edit_has_confirmation(self):
         response = self.client.get(
@@ -845,7 +972,10 @@ class OrganizationListTests(TestCase):
         from planning_measurements.models import MeasurementItem
         item = MeasurementItem.objects.create(code="INT-TEST-1", name="Informe", unit="unidades")
         position_url = reverse("organization:position_list")
+        role = Group.objects.create(name="Rol de Cargo Nuevo")
+        OrganizationRole.objects.create(group=role)
         position_data = {
+            "role_groups": [role.pk],
             "catalog_items": [item.pk],
             "position_name": "Cargo Nuevo",
             "measurable_items": "Informes",
@@ -1070,7 +1200,7 @@ class OrganizationUserMaintenanceTests(TestCase):
             group=self.role,
             delegation=self.delegation,
         )
-        self.employee.assigned_groups.add(self.role)
+        self.position.role_groups.add(self.role)
 
         self.admin = get_user_model().objects.create_superuser(
             username="user_maintenance_admin",
@@ -1175,13 +1305,42 @@ class OrganizationUserMaintenanceTests(TestCase):
             transform=lambda group: group,
         )
 
-    def test_creation_cannot_override_employee_roles_with_post_data(self):
+
+    def test_creation_assigns_role_without_expanding_delegations(self):
         foreign_role = Group.objects.create(name="Otro ámbito")
-        OrganizationRole.objects.create(group=foreign_role, delegation=self.other_delegation)
-        response = self.client.post(self.url, self.account_payload(groups=[foreign_role.pk]))
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("groups", response.context["form"].errors)
-        self.assertFalse(get_user_model().objects.filter(username="cuenta_prueba").exists())
+
+        OrganizationRole.objects.create(
+            group=foreign_role,
+            delegation=self.other_delegation,
+        )
+
+        response = self.client.post(
+            self.url,
+            self.account_payload(groups=[foreign_role.pk]),
+        )
+
+        self.assertRedirects(response, self.url)
+
+        user = get_user_model().objects.get(
+            username="cuenta_prueba"
+        )
+
+        self.assertFalse(
+            user.groups.filter(pk=foreign_role.pk).exists()
+        )
+
+        self.assertTrue(
+            user.profile.authorized_delegations.filter(
+                pk=self.delegation.pk
+            ).exists()
+        )
+
+        self.assertFalse(
+            user.profile.authorized_delegations.filter(
+                pk=self.other_delegation.pk
+            ).exists()
+        )
+
 
     def test_user_creation_succeeds_even_without_employee_roles(self):
         self.employee.assigned_groups.clear()
@@ -1355,3 +1514,97 @@ class OrganizationUserMaintenanceTests(TestCase):
         user.refresh_from_db()
         self.assertTrue(user.is_active)
         self.assertIsNone(user.profile.deleted_at)
+
+
+class DelegationReactivationScopeTests(TestCase):
+    """Administración histórica sin ampliar el acceso operativo por delegación."""
+
+    def setUp(self):
+        self.url = reverse("organization:delegation_list")
+        self.owned = Delegation.objects.create(
+            code="TEST-OWNED", name="Prueba autorizada", address="Calle Uno 1",
+            commune="La Serena", scope="Urbano", status="Inactive",
+        )
+        self.foreign = Delegation.objects.create(
+            code="TEST-OTHER", name="Prueba sin autorización", address="Calle Dos 2",
+            commune="Coquimbo", scope="Rural", status="Inactive",
+        )
+        self.user = get_user_model().objects.create_user(
+            username="admin_delegaciones_normal", password="clave-test-interna",
+        )
+        profile = UserProfile.objects.create(
+            user=self.user, employee_code="TEST-ADMIN-DEL", delegation=self.owned,
+        )
+        profile.authorized_delegations.add(self.owned)
+        self.group = Group.objects.create(name="Pruebas administrador delegaciones")
+        OrganizationRole.objects.create(group=self.group)
+        self.view_perm = Permission.objects.get(
+            content_type__app_label="organization", codename="view_delegation",
+        )
+        self.change_perm = Permission.objects.get(
+            content_type__app_label="organization", codename="change_delegation",
+        )
+        self.group.permissions.add(self.view_perm, self.change_perm)
+        self.user.groups.add(self.group)
+        self.client.force_login(self.user)
+
+    def _edit(self, delegation, status):
+        return self.client.post(self.url, {
+            "action": "edit", "object_id": delegation.pk,
+            "code": delegation.code, "name": delegation.name,
+            "address": delegation.address, "commune": delegation.commune,
+            "scope": delegation.scope, "responsible": "", "status": status,
+        })
+
+    def test_inactive_can_be_listed_filtered_and_reactivated(self):
+        listing = self.client.get(self.url)
+        self.assertEqual(listing.status_code, 200)
+        self.assertContains(listing, "Prueba autorizada")
+        self.assertContains(listing, 'value="Inactive"')
+        filtered = self.client.get(self.url, {"status": "Inactive"})
+        self.assertContains(filtered, "Prueba autorizada")
+        modal = self.client.get(self.url, {"modal": "edit", "id": self.owned.pk})
+        self.assertEqual(modal.status_code, 200)
+        self.assertEqual(self._edit(self.owned, "Active").status_code, 302)
+        self.owned.refresh_from_db()
+        self.assertEqual(self.owned.status, "Active")
+
+    def test_no_foreign_inactive_delegation_is_exposed_or_editable(self):
+        listing = self.client.get(self.url)
+        self.assertNotContains(listing, "Prueba sin autorización")
+        self.assertEqual(self.client.get(
+            self.url, {"modal": "edit", "id": self.foreign.pk}
+        ).status_code, 404)
+        self.assertEqual(self._edit(self.foreign, "Active").status_code, 404)
+        self.foreign.refresh_from_db()
+        self.assertEqual(self.foreign.status, "Inactive")
+
+    def test_without_change_permission_user_cannot_reactivate(self):
+        self.group.permissions.remove(self.change_perm)
+        # Invalidar el usuario autenticado en memoria: permisos recién modificados.
+        self.client.logout()
+        self.user = get_user_model().objects.get(pk=self.user.pk)
+        self.client.force_login(self.user)
+        self.assertContains(self.client.get(self.url), "Prueba autorizada")
+        self.assertEqual(self.client.get(
+            self.url, {"modal": "edit", "id": self.owned.pk}
+        ).status_code, 403)
+        self.assertEqual(self._edit(self.owned, "Active").status_code, 403)
+        self.owned.refresh_from_db()
+        self.assertEqual(self.owned.status, "Inactive")
+
+    def test_inactive_still_not_usable_in_global_selector(self):
+        from accounts.delegation_context import authorized_delegations
+        from accounts.permissions import allowed_delegation_ids
+        self.assertEqual(authorized_delegations(self.user), [])
+        self.assertEqual(allowed_delegation_ids(self.user, active_only=False), set())
+
+    def test_archived_delegation_does_not_reappear(self):
+        from django.utils import timezone
+        self.owned.deleted_at = timezone.now()
+        self.owned.save(update_fields=["deleted_at"])
+        self.assertNotContains(self.client.get(self.url), "Prueba autorizada")
+        self.assertEqual(self.client.get(
+            self.url, {"modal": "edit", "id": self.owned.pk}
+        ).status_code, 404)
+

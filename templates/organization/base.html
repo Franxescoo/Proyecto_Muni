@@ -83,6 +83,86 @@
     .organization-error-code { color: #a60a17; font-size: clamp(4rem, 12vw, 7rem); font-weight: 800; letter-spacing: -.08em; line-height: .9; }
     .organization-error-icon { color: #a60a17; font-size: 2rem; margin: 1rem 0; }
     @media (max-width: 767.98px) { .organization-hero { padding: 1.25rem; } .organization-hero h1 { font-size: 1.5rem; } }
+
+    /* SGR_ORG_GUIA_INTEGRADA_V1 — Solo distribucion visual. */
+    .organization-shell:has(> .org-help) {
+        width: 100%;
+        max-width: none;
+        min-width: 0;
+        margin-left: 0;
+        margin-right: 0;
+    }
+    .organization-shell > .organization-main-content {
+        min-width: 0;
+        max-width: 100%;
+    }
+    .organization-shell .organization-main-content .table-responsive {
+        width: 100%;
+        max-width: 100%;
+        overflow-x: auto;
+        overscroll-behavior-x: contain;
+        -webkit-overflow-scrolling: touch;
+    }
+    /* En escritorio: guia dentro de una columna, no flotando sobre botones. */
+    @media (min-width: 1200px) {
+        .organization-shell:has(> .org-help) {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(230px, 260px);
+            grid-template-rows: auto auto auto;
+            column-gap: clamp(12px, 1.3vw, 22px);
+            row-gap: 1rem;
+            align-items: start;
+        }
+        .organization-shell > .organization-hero {
+            grid-column: 1 / -1;
+            grid-row: 1;
+            margin-bottom: 0 !important;
+        }
+        .organization-shell > .org-help { display: contents !important; }
+        .organization-shell > .org-help > .org-help-toolbar {
+            grid-column: 1 / -1;
+            grid-row: 2;
+            margin-bottom: 0 !important;
+        }
+        .organization-shell > .org-help > .org-help-guide {
+            grid-column: 2;
+            grid-row: 3;
+            align-self: start;
+            position: sticky !important;
+            right: auto !important;
+            top: 90px !important;
+            width: 100% !important;
+            max-height: calc(100vh - 108px) !important;
+            overflow-y: auto !important;
+            margin: 0 !important;
+            z-index: 1 !important;
+            box-shadow: 0 3px 12px rgba(24,33,44,.06) !important;
+        }
+        .organization-shell > .organization-main-content {
+            grid-column: 1;
+            grid-row: 3;
+            width: 100%;
+        }
+        /* Ocultar la guia devuelve todo el ancho a las tablas y tarjetas. */
+        .organization-shell:has(> .org-help > .org-help-guide[hidden]) {
+            grid-template-columns: minmax(0, 1fr);
+        }
+    }
+    /* En dispositivos medianos/pequenos, guia en flujo normal. */
+    @media (max-width: 1199.98px) {
+        .organization-shell > .org-help { display: block !important; }
+        .organization-shell > .org-help > .org-help-guide {
+            position: static !important;
+            right: auto !important;
+            top: auto !important;
+            width: 100% !important;
+            max-height: none !important;
+            margin: .75rem 0 1rem !important;
+            z-index: auto !important;
+            box-shadow: 0 3px 12px rgba(24,33,44,.06) !important;
+        }
+        .organization-shell > .organization-main-content { width: 100%; }
+    }
 </style>
 {% endblock %}
 
@@ -102,7 +182,18 @@
         </div>
         <i class="bi {{ page_icon }} display-5 opacity-75" aria-hidden="true"></i>
     </section>
-    {% block organization_content %}{% endblock %}
+
+    {% include "organization/_tutorial.html" with tutorial_mode="toolbar" %}
+
+    <div class="sgr-guide-layout" id="organization-guide-layout">
+        <div class="sgr-guide-main">
+            {% block organization_content %}{% endblock %}
+        </div>
+
+        <aside class="sgr-guide-rail" id="organization-guide-rail">
+            {% include "organization/_tutorial.html" with tutorial_mode="rail" %}
+        </aside>
+    </div>
 </div>
 {% endblock %}
 
@@ -122,32 +213,19 @@ document.addEventListener("DOMContentLoaded", function () {
     const modalState = document.getElementById("organization-modal-open");
     const modal = document.getElementById("organization-record-modal");
     
-    // Mostrar automáticamente los roles de la cuenta seleccionada.
-    const userAccountSelect = document.querySelector(
-        '#organization-record-modal select[name="user_account"]'
+    // Roles heredados del cargo seleccionado, nunca de una cuenta previa.
+    const positionSelect = document.querySelector(
+        '#organization-record-modal select[name="position"]'
     );
-
     const assignedRolesInput = document.querySelector(
         '#organization-record-modal input[name="assigned_roles_display"]'
     );
-
-    if (userAccountSelect && assignedRolesInput) {
-
+    if (positionSelect && assignedRolesInput) {
         function updateAssignedRoles() {
-            const selectedOption =
-                userAccountSelect.options[userAccountSelect.selectedIndex];
-
-            assignedRolesInput.value =
-                selectedOption?.dataset.roles || "";
+            const selectedOption = positionSelect.options[positionSelect.selectedIndex];
+            assignedRolesInput.value = selectedOption?.dataset.roles || "";
         }
-
-        // Actualizar al seleccionar otro usuario.
-        userAccountSelect.addEventListener(
-            "change",
-            updateAssignedRoles
-        );
-
-        // Mostrar los roles al abrir el formulario.
+        positionSelect.addEventListener("change", updateAssignedRoles);
         updateAssignedRoles();
     }
 

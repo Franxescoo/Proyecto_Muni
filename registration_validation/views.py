@@ -1377,6 +1377,8 @@ class ValidationCreateView(
         self,
         form,
     ):
+        # Se registra la hora real en el servidor, sin confiar en el POST.
+        form.instance.date = timezone.now()
         response = super().form_valid(
             form,
         )
@@ -2881,6 +2883,21 @@ class AttentionEntryFormMixin:
         return kwargs
 
 
+def _mark_accessible_request_actions(entries, user):
+    """Muestra Gestiones solo si la vista de Solicitudes admitiría el acceso."""
+    permission = "citizen_requests.view_citizenrequestaction"
+    if not user.has_perm(permission):
+        return
+    allowed_ids = allowed_delegation_ids(user, permission)
+    active_id = getattr(user, "sgr_active_delegation_id", None)
+    for entry in entries:
+        entry.can_view_request_actions = bool(
+            getattr(entry, "citizen_request", None)
+            and (user.is_superuser or entry.delegation_id == active_id)
+            and (allowed_ids is None or entry.delegation_id in allowed_ids)
+        )
+
+
 class AttentionEntryPageContextMixin:
     """Reutiliza el listado cuando se abre el formulario modal."""
 
@@ -2888,6 +2905,9 @@ class AttentionEntryPageContextMixin:
         context = super().get_context_data(**kwargs)
         context["attention_entries"] = filtered_attention_entries(
             self.request
+        )
+        _mark_accessible_request_actions(
+            context["attention_entries"], self.request.user
         )
         context.update(attention_entry_filter_context(self.request))
         context.update(attention_entry_metrics(self.request.user))
@@ -2911,6 +2931,9 @@ class AttentionEntryListView(
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        _mark_accessible_request_actions(
+            context["attention_entries"], self.request.user
+        )
         context.update(attention_entry_filter_context(self.request))
         context.update(attention_entry_metrics(self.request.user))
         return context

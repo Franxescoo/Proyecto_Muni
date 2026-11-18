@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block titulo %}{{ title }} · Monitoreo y trazabilidad{% endblock %}
+{% block sidebar %}{% include "shared/global_sidebar.html" %}{% endblock %}
+
+{% block estilos %}
+<style>
+    .commitment-page { max-width: 1080px; margin: 0 auto; }
+    .commitment-header {
+        background: linear-gradient(115deg, #af0d1c 0%, #8c0a16 64%, #66060f 100%);
+        border-radius: 1rem 1rem 0 0;
+        color: #fff;
+        padding: 1.45rem 1.75rem;
+    }
+    .commitment-eyebrow {
+        color: #ffe1e4;
+        font-size: .73rem;
+        font-weight: 750;
+        letter-spacing: .1em;
+        text-transform: uppercase;
+    }
+    .commitment-header h1 { font-size: 1.35rem; letter-spacing: -.025em; }
+    .commitment-header p { color: rgba(255,255,255,.81); font-size: .88rem; }
+    .commitment-body { background: #f7f8fb; padding: 1.75rem; }
+    .commitment-section-title {
+        align-items: center;
+        color: #81202a;
+        display: flex;
+        font-size: .98rem;
+        font-weight: 750;
+        gap: .65rem;
+        margin-bottom: 1rem;
+    }
+    .commitment-section-icon {
+        align-items: center;
+        background: #fae5e8;
+        border-radius: .55rem;
+        color: #98101c;
+        display: inline-flex;
+        height: 2.2rem;
+        justify-content: center;
+        width: 2.2rem;
+    }
+    .commitment-fields {
+        background: #fff;
+        border: 1px solid #e3e7ed;
+        border-radius: .9rem;
+        box-shadow: 0 2px 9px rgba(21,30,44,.025);
+        padding: 1rem .85rem 1.15rem;
+    }
+    .commitment-fields .form-label { color: #384654; font-size: .85rem; font-weight: 650; }
+    .commitment-fields :is(.form-control, .form-select) {
+        border: 1px solid #ccd4de;
+        border-radius: .62rem;
+        min-height: 2.65rem;
+    }
+    .commitment-fields textarea.form-control { min-height: 6rem; }
+    .commitment-fields :is(.form-control, .form-select):focus {
+        border-color: #a60a17;
+        box-shadow: 0 0 0 .22rem rgba(166,10,23,.13);
+    }
+    .commitment-footer {
+        background: #fff;
+        border-top: 1px solid #e5e9ee;
+        border-radius: 0 0 1rem 1rem;
+        padding: 1.1rem 1.75rem;
+    }
+    .commitment-footer .btn { border-radius: .55rem; font-weight: 650; }
+    .commitment-footer .btn-primary {
+        background: #198754;
+        border-color: #198754;
+    }
+</style>
+{% endblock %}
+
+{% block contenido %}
+<div class="commitment-page py-4">
+    <section class="commitment-header">
+        <div class="commitment-eyebrow">
+            <i class="bi bi-shield-check me-2" aria-hidden="true"></i>
+            Monitoreo y trazabilidad
+        </div>
+        <h1 class="mb-2 mt-2 fw-bold">{{ title }}</h1>
+        <p class="mb-0">Completa la información del compromiso para darle seguimiento.</p>
+    </section>
+
+    <form method="post" novalidate>
+        {% csrf_token %}
+        <section class="commitment-body">
+            <div class="commitment-section-title">
+                <span class="commitment-section-icon"><i class="bi bi-card-list" aria-hidden="true"></i></span>
+                <span>Información del compromiso</span>
+            </div>
+
+            {% if form.non_field_errors %}
+            <div class="alert alert-danger" role="alert">
+                {% for error in form.non_field_errors %}<div>{{ error }}</div>{% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="commitment-fields row g-3">
+                {% for field in form %}
+                <div class="{% if field.name == 'support' or field.name == 'observation' %}col-12 col-md-6{% else %}col-12 col-md-4{% endif %}">
+                    <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field }}
+                    {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+                    {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+
+        <footer class="commitment-footer d-flex flex-wrap justify-content-end gap-2">
+            <a class="btn btn-outline-secondary" href="{% url 'monitoring:commitment_list' %}">Cancelar</a>
+            <button class="btn btn-primary" type="submit">
+                <i class="bi bi-check2-circle me-1" aria-hidden="true"></i>
+                Guardar compromiso
+            </button>
+        </footer>
+    </form>
+</div>
+{% endblock %}

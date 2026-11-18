@@ -6,24 +6,63 @@
     if (!toolbar) return;
     const page = toolbar.getAttribute('data-sgr-autohelp');
     const moduleName = toolbar.getAttribute('data-sgr-help-module');
-    if (!['planning', 'events'].includes(moduleName)) return;
-    const layout = toolbar.nextElementSibling;
-    if (!layout || !layout.classList.contains('sgr-guide-layout')) return;
+    if (!['planning', 'events', 'monitoring'].includes(moduleName)) return;
+    const layout = toolbar.nextElementSibling && toolbar.nextElementSibling.classList.contains('sgr-guide-layout')
+      ? toolbar.nextElementSibling : document;
     const toggle = toolbar.querySelector('[data-sgr-guide-toggle]');
     const toggleLabel = toolbar.querySelector('[data-sgr-guide-label]');
     const storeKey = 'sgr-ayuda-visible-' + moduleName;
     let collapsed = false;
     try { collapsed = window.localStorage.getItem(storeKey) === '0'; } catch (_) {}
     function applyGuide() {
-      layout.classList.toggle('sgr-guide-collapsed', collapsed);
-      toggle.setAttribute('aria-pressed', collapsed ? 'true' : 'false');
-      toggleLabel.textContent = collapsed ? 'Mostrar guía lateral' : 'Ocultar guía lateral';
+      if (layout !== document) {
+        layout.classList.toggle('sgr-guide-collapsed', collapsed);
+      }
+      if (toggle && toggleLabel) {
+        toggle.setAttribute('aria-pressed', collapsed ? 'true' : 'false');
+        toggleLabel.textContent = collapsed ? 'Mostrar guía lateral' : 'Ocultar guía lateral';
+      }
     }
     applyGuide();
-    toggle.addEventListener('click', () => {
-      collapsed = !collapsed;
-      applyGuide();
-      try { window.localStorage.setItem(storeKey, collapsed ? '0' : '1'); } catch (_) {}
+    if (toggle) {
+      toggle.addEventListener('click', () => {
+        collapsed = !collapsed;
+        applyGuide();
+        try { window.localStorage.setItem(storeKey, collapsed ? '0' : '1'); } catch (_) {}
+      });
+    }
+
+    document.querySelectorAll('.sgr-help-hint[title]').forEach((element) => {
+      element.setAttribute('data-help', element.getAttribute('title'));
+      element.removeAttribute('title');
+    });
+    document.querySelectorAll('[data-help]').forEach((element) => {
+      let tip;
+      const hideTip = () => {
+        if (tip) tip.remove();
+        tip = null;
+      };
+      const showTip = () => {
+        hideTip();
+        tip = document.createElement('span');
+        tip.className = 'sgr-help-tooltip';
+        tip.textContent = element.getAttribute('data-help');
+        document.body.appendChild(tip);
+        const anchor = element.getBoundingClientRect();
+        const tipRect = tip.getBoundingClientRect();
+        const gap = 8;
+        let left = anchor.left + (anchor.width / 2) - (tipRect.width / 2);
+        let top = anchor.top - tipRect.height - gap;
+        if (top < 8) top = anchor.bottom + gap;
+        left = Math.max(8, Math.min(left, window.innerWidth - tipRect.width - 8));
+        top = Math.max(8, Math.min(top, window.innerHeight - tipRect.height - 8));
+        tip.style.left = `${left}px`;
+        tip.style.top = `${top}px`;
+      };
+      element.addEventListener('mouseenter', showTip);
+      element.addEventListener('mouseleave', hideTip);
+      element.addEventListener('focus', showTip);
+      element.addEventListener('blur', hideTip);
     });
 
     // Pasos de orientación. Los objetivos inexistentes (por falta de permiso,
@@ -77,11 +116,46 @@
         ['.mec-hero', 'Historial de campañas', 'El historial se genera con las inscripciones, evaluaciones y entregas. No se captura manualmente.'],
         ['#mec-history-q', 'Buscar movimientos', 'Filtra por campaña o beneficiario para encontrar cambios registrados.'],
         ['.mec-timeline', 'Revisar trazabilidad', 'Consulta fecha, responsable y motivo de cada movimiento permitido para tu rol.']
+      ],
+      'monitoring:indicators': [
+        ['.monitor-hero', 'Indicadores de desempeño', 'Esta página concentra el avance de las metas, el cumplimiento y el semáforo de cada responsable.'],
+        ['#indicator-search', 'Buscar y filtrar', 'Busca por meta o funcionario y utiliza el filtro de semáforo para localizar indicadores que requieren atención.'],
+        ['.section-card.metric', 'Resumen general', 'Estas tarjetas muestran cuántos indicadores están registrados, en cumplimiento o requieren atención.'],
+        ['.table', 'Interpretar los resultados', 'El avance usa evidencias aprobadas. La diferencia compara el avance con el valor objetivo y el cumplimiento se limita según el período.'],
+        ['texto:Ajustar', 'Aplicar un ajuste', 'Abre Ajustar para ingresar una corrección entre -100 y 100. El ajuste modifica el resultado ponderado, no el cálculo base del cumplimiento.']
+      ],
+      'monitoring:commitments': [
+        ['.monitor-hero', 'Compromisos institucionales', 'Aquí se organizan actividades, responsables, fechas y seguimiento de los compromisos.'],
+        ['.metric', 'Resumen de estados', 'Las tarjetas muestran compromisos registrados, pendientes, vencidos y completados.'],
+        ['#commitment-search', 'Buscar compromisos', 'Busca por meta, solicitante o territorio.'],
+        ['texto:Agregar compromiso', 'Crear un compromiso', 'Selecciona la delegación y luego una actividad relacionada. Los datos asociados se completan automáticamente.'],
+        ['.table', 'Revisar seguimiento', 'El estado proviene de la actividad asociada. Desde Comentarios puedes consultar observaciones e historial.'],
+        ['texto:Reasignación pendiente', 'Reasignar un vencido', 'Permite asignar otro responsable disponible sin modificar el responsable original.']
+      ],
+      'monitoring:dashboard': [
+        ['.monitor-hero', 'Resumen ejecutivo', 'Consolida el cumplimiento, las evidencias, las ponderaciones y las alertas del período.'],
+        ['#dashboard-delegation', 'Filtrar por delegación', 'Limita el resumen a los funcionarios de la delegación seleccionada.'],
+        ['#dashboard-period', 'Seleccionar período', 'Usa el período para consultar sus metas, evidencias y umbrales vigentes.'],
+        ['.metric', 'Alertas principales', 'Estas tarjetas muestran evidencias pendientes, compromisos vencidos y rendimientos bajo 80 %.'],
+        ['.table', 'Consolidado por funcionario', 'Cada fila reúne metas, cumplimiento promedio, resultado ponderado, evidencias y semáforo.']
+      ],
+      'monitoring:activity': [
+        ['.monitor-hero', 'Control de actividad', 'Distingue los días sin iniciar sesión de los días transcurridos desde la última actividad registrada.'],
+        ['#activity-delegation', 'Filtrar funcionarios', 'Combina delegación, cargo y período para revisar un grupo específico.'],
+        ['.table', 'Interpretar la actividad', 'Último ingreso mide acceso al sistema; última actividad y registros válidos miden trabajo registrado.'],
+        ['texto:Resumen ejecutivo', 'Volver al resumen', 'Abre el panel consolidado de indicadores y alertas.']
+      ],
+      'monitoring:audit': [
+        ['.monitor-hero', 'Registro de auditoría', 'Conserva quién realizó cada acción, sobre qué entidad y cuándo ocurrió.'],
+        ['#audit-search', 'Buscar eventos', 'Busca por nombre del evento o entidad afectada.'],
+        ['#audit-date', 'Filtrar por fecha', 'Limita los resultados a eventos ocurridos desde la fecha indicada.'],
+        ['.table', 'Consultar trazabilidad', 'Revisa usuario, entidad, identificador y fecha de cada movimiento.'],
+        ['texto:Ver cambios', 'Ver detalle', 'Despliega los valores anteriores y nuevos registrados para el evento.']
       ]
     };
     const textSelector = (needle) => {
       // Busca controles visibles; los que dependen de permisos no están en el HTML.
-      const nodes = layout.querySelectorAll('.sgr-guide-main button, .sgr-guide-main a, .mec-panel button, .mec-panel a');
+      const nodes = layout.querySelectorAll('.sgr-guide-main button, .sgr-guide-main a, .mec-panel button, .mec-panel a, button, a');
       for (const el of nodes) {
         if (el.textContent && el.textContent.trim().toLowerCase().includes(needle.toLowerCase()) && el.getClientRects().length) return el;
       }

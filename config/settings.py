@@ -178,8 +178,35 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [
     BASE_DIR / "static",
 ]
-MEDIA_URL = "media/"
+MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+CITIZEN_REQUEST_ACTION_PRIVATE_ROOT = Path(
+    os.getenv(
+        "CITIZEN_REQUEST_ACTION_PRIVATE_ROOT",
+        str(BASE_DIR.parent / "sgr_private_uploads"),
+    )
+).expanduser()
+if not CITIZEN_REQUEST_ACTION_PRIVATE_ROOT.is_absolute():
+    CITIZEN_REQUEST_ACTION_PRIVATE_ROOT = BASE_DIR / CITIZEN_REQUEST_ACTION_PRIVATE_ROOT
+CITIZEN_REQUEST_ACTION_PRIVATE_ROOT = CITIZEN_REQUEST_ACTION_PRIVATE_ROOT.resolve()
+
+
+def _is_within_path(path, parent):
+    return path == parent or parent in path.parents
+
+
+if any(
+    _is_within_path(CITIZEN_REQUEST_ACTION_PRIVATE_ROOT, public_root.resolve())
+    or _is_within_path(public_root.resolve(), CITIZEN_REQUEST_ACTION_PRIVATE_ROOT)
+    for public_root in (BASE_DIR, MEDIA_ROOT, STATIC_ROOT)
+):
+    from django.core.exceptions import ImproperlyConfigured
+
+    raise ImproperlyConfigured(
+        "CITIZEN_REQUEST_ACTION_PRIVATE_ROOT debe ubicarse fuera del "
+        "proyecto, MEDIA_ROOT y STATIC_ROOT."
+    )
 
 
 # Email

@@ -220,3 +220,5 @@ __marimo__/
 *.respaldo_*
 
 *.sqlite3
+# Archivos de respaldo
+*.bak

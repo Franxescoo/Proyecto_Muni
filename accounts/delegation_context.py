@@ -9,17 +9,29 @@ from django.views.decorators.http import require_POST
 
 
 def authorized_delegations(user):
-    """Never trust ids from the session or a request parameter."""
-    if not user.is_authenticated or not user.is_active or user.is_superuser:
-        return []
-    profile = getattr(user, "profile", None)
-    if profile is None or profile.deleted_at is not None:
-        return []
-    ids = set(profile.authorized_delegations.values_list("pk", flat=True))
-    if not ids and profile.delegation_id:
-        ids = {profile.delegation_id}
+    """Delegaciones disponibles en el selector global del SGR."""
+
+    from accounts.permissions import allowed_delegation_ids
     from organization.models import Delegation
-    return list(Delegation.objects.filter(pk__in=ids, deleted_at__isnull=True).order_by("name", "pk"))
+
+    if (
+        not user.is_authenticated
+        or not user.is_active
+        or user.is_superuser
+    ):
+        return []
+
+    ids = allowed_delegation_ids(
+        user,
+        active_only=False,
+    )
+
+    return list(
+        Delegation.objects.filter(
+            pk__in=ids
+        ).order_by("name", "pk")
+    )
+
 
 
 class ActiveDelegationMiddleware:

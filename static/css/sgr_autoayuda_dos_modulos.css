@@ -8,6 +8,7 @@
 .sgr-selfhelp-caption { margin-right:auto; color:#68545a; font-weight:600; font-size:.85rem; }
 .sgr-selfhelp-caption i {color:#9f1221; margin-right:.3rem;}
 .sgr-selfhelp-toolbar .btn { white-space:nowrap; border-radius:9px; font-size:.8rem; }
+.sgr-selfhelp-toolbar[data-sgr-help-module="monitoring"] [data-sgr-guide-toggle] { display:none; }
 .sgr-guide-layout.sgr-guide-collapsed { grid-template-columns:minmax(0,1fr) !important; }
 .sgr-guide-layout.sgr-guide-collapsed > .sgr-guide-rail { display:none !important; }
 .sgr-help-hint {
@@ -17,6 +18,15 @@
   vertical-align:middle; margin:0 0 .3rem .45rem; padding:0; cursor:help;
 }
 .sgr-help-hint:hover, .sgr-help-hint:focus-visible { color:#fff; background:#971124; outline:2px solid #f2c6cc; outline-offset:2px; }
+.sgr-help-tooltip {
+  position:fixed; z-index:1100; left:0; top:0;
+  width:max-content; max-width:280px; padding:.55rem .7rem;
+  border-radius:7px; background:#2d2528;
+  color:#fff; font-size:.76rem; font-weight:400; line-height:1.35;
+  text-align:left; white-space:normal; box-shadow:0 5px 16px rgba(0,0,0,.2);
+  pointer-events:none;
+}
+[data-help] { position:relative; }
 .sgr-selfhelp-highlight { outline:3px solid #bb2338 !important; outline-offset:4px; border-radius:5px; }
 .sgr-selfhelp-tour {
   position:fixed; z-index:1045; bottom:22px; left:clamp(12px,2vw,28px);

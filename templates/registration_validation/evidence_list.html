@@ -142,6 +142,14 @@
 
                         {% if status|lower == "pending" or status|lower == "pendiente" %}
                             Pendiente
+                        {% elif status|lower == "in review" %}
+                            En revisión
+                        {% elif status|lower == "observed" %}
+                            Con observaciones
+                        {% elif status|lower == "approved" %}
+                            Aprobada
+                        {% elif status|lower == "rejected" %}
+                            Rechazada
                         {% else %}
                             {{ status }}
                         {% endif %}

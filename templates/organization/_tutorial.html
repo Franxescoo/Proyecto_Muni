@@ -1,0 +1,171 @@
+{% comment %}Ayuda visual exclusiva de Organización. No ejecuta operaciones CRUD.{% endcomment %}
+
+{% if tutorial_mode == "toolbar" %}
+<div class="org-help-toolbar" role="group" aria-label="Ayuda de Organización">
+    <span><i class="bi bi-patch-question" aria-hidden="true"></i> ¿Necesitas orientación?</span>
+    <div class="d-flex flex-wrap gap-2 ms-auto">
+        <button type="button" class="btn btn-outline-danger btn-sm" data-org-start>
+            <i class="bi bi-signpost-split me-1" aria-hidden="true"></i>Iniciar tutorial
+        </button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-org-toggle aria-expanded="true">
+            <i class="bi bi-layout-sidebar-reverse me-1" aria-hidden="true"></i>
+            <span data-org-toggle-label>Ocultar guía lateral</span>
+        </button>
+    </div>
+</div>
+{% endif %}
+
+{% if tutorial_mode == "rail" %}
+<div class="org-help-guide" data-org-guide aria-label="Guía rápida de esta sección">
+    <div class="org-help-heading">
+        <i class="bi bi-info-circle" aria-hidden="true"></i>
+        <strong>Guía rápida de Organización</strong>
+    </div>
+
+    {% if active_page == 'employees' %}
+        <p>Consulta los datos de cada empleado y su cuenta integrada. Los roles se heredan del cargo.</p>
+        <ol>
+            <li>Busca por nombre, RUT, cargo o delegación.</li>
+            <li>Usa <strong>Ver</strong> para consultar y <strong>Modificar</strong> para editar, según tus permisos.</li>
+            <li>En <strong>Historial</strong> revisa las acciones realizadas por la persona y los cambios recibidos en su ficha.</li>
+            <li>Al guardar, comprueba el resultado antes de salir.</li>
+        </ol>
+    {% elif active_page == 'delegations' %}
+        <p>Administra las unidades territoriales municipales y sus responsables.</p>
+        <ol>
+            <li>Filtra delegaciones por nombre, código, comuna o estado.</li>
+            <li>Usa <strong>Nueva delegación</strong> cuando tengas permiso para crear.</li>
+            <li>Consulta o modifica la delegación desde su tarjeta.</li>
+            <li>Antes de desactivar una delegación, revisa sus vinculaciones.</li>
+        </ol>
+    {% elif active_page == 'positions' %}
+        <p>Los cargos definen funciones, vigencia y roles que se heredan a las cuentas de empleados vinculados.</p>
+        <ol>
+            <li>Busca cargos por nombre, servicio o ítem.</li>
+            <li>Filtra por vigencia para consultar cargos actuales o históricos.</li>
+            <li>Usa <strong>Nuevo cargo</strong> si tienes permiso.</li>
+            <li>Al modificar los roles de un cargo, revisa las consecuencias para los empleados asociados.</li>
+        </ol>
+    {% elif active_page == 'roles' %}
+        <p>Los roles reúnen permisos; solo puedes realizar las operaciones autorizadas para tu cuenta.</p>
+        <ol>
+            <li>Busca un rol por nombre o descripción.</li>
+            <li>Usa <strong>Crear rol</strong> si cuentas con el permiso correspondiente.</li>
+            <li>Revisa cuidadosamente los permisos antes de guardar.</li>
+            <li>Los cambios autorizados quedan asociados al historial de actividad del usuario que los realizó.</li>
+        </ol>
+    {% else %}
+        <p>Usa los filtros, revisa los registros y realiza únicamente las acciones habilitadas por tus permisos.</p>
+    {% endif %}
+
+    <small><i class="bi bi-shield-check" aria-hidden="true"></i> La guía no modifica información ni concede permisos.</small>
+</div>
+{% endif %}
+
+<style>
+.org-help-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .65rem;
+    background: #fff;
+    border: 1px solid #e1e3e6;
+    border-radius: .65rem;
+    padding: .8rem 1rem;
+    box-shadow: 0 2px 10px rgba(23,31,40,.04);
+    margin-bottom: 1rem;
+}
+.org-help-toolbar > span {
+    font-weight: 600;
+    color: #343a40;
+    margin-right: auto;
+}
+
+.org-help-guide {
+    background: #fff;
+    border: 1px solid #e3d7d9;
+    border-left: 4px solid #a60a17;
+    border-radius: .75rem;
+    padding: 1rem 1.1rem;
+    color: #343a40;
+    position: sticky;
+    top: 90px;
+}
+.org-help-heading {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    color: #920c18;
+    margin-bottom: .45rem;
+}
+.org-help-guide p { margin: .3rem 0 .5rem; }
+.org-help-guide ol { margin: .5rem 0; padding-left: 1.3rem; }
+.org-help-guide li { margin: .25rem 0; }
+.org-help-guide small { display: block; color: #66717e; margin-top: .7rem; }
+
+.sgr-guide-layout {
+    display: grid;
+    grid-template-columns: minmax(0,1fr) 300px;
+    gap: 18px;
+    align-items: start;
+}
+.sgr-guide-main { min-width: 0; }
+.sgr-guide-rail { display: block; min-width: 0; }
+
+.sgr-guide-layout.sgr-guide-collapsed {
+    grid-template-columns: minmax(0,1fr) !important;
+}
+.sgr-guide-layout.sgr-guide-collapsed .sgr-guide-rail {
+    display: none !important;
+}
+
+@media (max-width: 991.98px) {
+    .sgr-guide-layout {
+        grid-template-columns: 1fr;
+    }
+    .sgr-guide-rail {
+        display: none;
+    }
+}
+</style>
+
+<script>
+(function () {
+    'use strict';
+
+    function init() {
+        const layout = document.getElementById('organization-guide-layout');
+        const toggle = document.querySelector('[data-org-toggle]');
+        const toggleLabel = document.querySelector('[data-org-toggle-label]');
+
+        if (layout && toggle && toggleLabel) {
+            let collapsed = false;
+            try {
+                collapsed = window.localStorage.getItem('sgr-org-guide-collapsed') === '1';
+            } catch (_) {}
+
+            function sync() {
+                layout.classList.toggle('sgr-guide-collapsed', collapsed);
+                toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+                toggleLabel.textContent = collapsed ? 'Mostrar guía lateral' : 'Ocultar guía lateral';
+            }
+
+            toggle.addEventListener('click', function () {
+                collapsed = !collapsed;
+                sync();
+                try {
+                    window.localStorage.setItem('sgr-org-guide-collapsed', collapsed ? '1' : '0');
+                } catch (_) {}
+            });
+
+            sync();
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+})();
+</script>

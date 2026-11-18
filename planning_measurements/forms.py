@@ -9,8 +9,12 @@ from organization.models import Employee, PositionFunction
 from .models import Goal, Period, MeasurementItem
 
 from .working_days import calculate_computable_days
-from .measurement_rules import (SUPPORTED_PERCENTAGE_FORMULA, canonical_percentage_formula)
-from .parameter_history import compliance_cap_value
+from .measurement_rules import (
+    FORMULA_VARIABLES,
+    FormulaError,
+    validate_formula,
+)
+from .parameter_history import compliance_cap_value, parameters_version_is_valid
 import re
 from decimal import Decimal
 
@@ -109,6 +113,12 @@ class PeriodForm(BootstrapMixin, forms.ModelForm):
             50,
             "La versión de parámetros",
         )
+        if self.instance.pk:
+            self.fields["parameters_version"].disabled = True
+            self.fields["parameters_version"].help_text = (
+                "La versión se incrementa automáticamente al cambiar "
+                "parámetros efectivos."
+            )
 
         # El administrador no ingresa manualmente los días.
         self.fields["computable_days"].required = False
@@ -160,6 +170,16 @@ class PeriodForm(BootstrapMixin, forms.ModelForm):
             )
 
         return valor
+
+
+    def clean_parameters_version(self):
+        value = self.cleaned_data["parameters_version"].strip()
+        if not parameters_version_is_valid(value):
+            raise forms.ValidationError(
+                "La versión debe tener un formato numérico, por ejemplo "
+                "SGR050-v1, v1 o SGR044-v1.3."
+            )
+        return value
 
 
     def clean(self):
@@ -622,25 +642,26 @@ class MeasurementItemForm(BootstrapMixin, forms.ModelForm):
         _set_text_limit(self.fields["formula"], 500, "La fórmula")
 
         self.fields["formula"].help_text = (
-            "Para ítems porcentuales, fórmula admitida: "
-            + SUPPORTED_PERCENTAGE_FORMULA
+            "Expresión configurable (+, -, *, / y paréntesis). "
+            "Ejemplo: (actividades_aprobadas / actividades_registradas) * 100. "
+            "Variables disponibles: " + ", ".join(FORMULA_VARIABLES) + ". "
+            "Solo se permiten variables cuyo origen esté implementado en el SGR."
         )
 
     def clean(self):
         data = super().clean()
-        if data.get("item_type") == MeasurementItem.ItemType.PERCENTAGE:
-            expression = canonical_percentage_formula(data.get("formula"))
-            unchanged_legacy = (
-                self.instance.pk
-                and self.instance.item_type == MeasurementItem.ItemType.PERCENTAGE
-                and data.get("formula") == self.instance.formula
-            )
-            if expression is None and not unchanged_legacy:
-                self.add_error(
-                    "formula",
-                    "La fórmula porcentual admitida actualmente es: "
-                    + SUPPORTED_PERCENTAGE_FORMULA,
+        formula = (data.get("formula") or "").strip()
+        if data.get("item_type") == MeasurementItem.ItemType.PERCENTAGE and not formula:
+            self.add_error("formula", "Los ítems porcentuales necesitan una fórmula.")
+        elif formula and data.get("item_type") == MeasurementItem.ItemType.PERCENTAGE:
+            try:
+                validate_formula(formula)
+            except FormulaError as exc:
+                # Valores históricos antiguos pueden consultarse sin reescribirlos;
+                # toda fórmula nueva o modificada debe ser interpretable.
+                legacy_unchanged = (
+                    self.instance.pk and formula == (self.instance.formula or "").strip()
                 )
-            elif expression is not None:
-                data["formula"] = expression
+                if not legacy_unchanged:
+                    self.add_error("formula", str(exc))
         return data

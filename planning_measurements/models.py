@@ -1,9 +1,16 @@
 from django.core.exceptions import ValidationError
 from django.conf import settings
 from django.db import models
+import re
+
 from django.core.validators import MinValueValidator
 
 from core.models import BaseModel
+
+_PARAMETERS_VERSION_PATTERN = re.compile(
+    r"^(?:[A-Za-z0-9_-]*v)?\d+(?:\.\d+)*$",
+    re.I,
+)
 
 
 class Period(BaseModel):
@@ -16,13 +23,17 @@ class Period(BaseModel):
     )
     thresholds = models.CharField(max_length=255, verbose_name="Thresholds")
     parameters_version = models.CharField(
-        max_length=50, verbose_name="Parameters version"
+        max_length=50,
+        verbose_name="Parameters version",
     )
 
     class Meta:
         verbose_name = "Period"
         verbose_name_plural = "Periods"
-        permissions = [("delete_closed_period", "Puede archivar períodos cerrados sin historial")]
+        permissions = [
+            ("delete_closed_period", "Puede archivar períodos cerrados sin historial"),
+            ("reopen_closed_period", "Puede reabrir períodos cerrados"),
+        ]
 
     class Status(models.TextChoices):
         ACTIVE = "Active", "Activo"
@@ -31,6 +42,14 @@ class Period(BaseModel):
     def clean(self):
         super().clean()
         errors = {}
+
+        if not _PARAMETERS_VERSION_PATTERN.fullmatch(
+            (self.parameters_version or "").strip()
+        ):
+            errors["parameters_version"] = (
+                "La versión debe tener un formato numérico, por ejemplo "
+                "SGR050-v1, v1 o SGR044-v1.3."
+            )
 
         if self.computable_days is not None:
             if self.computable_days <= 0:
@@ -214,27 +233,93 @@ class Goal(BaseModel):
                 "el cargo actual del funcionario."
             )
 
+        if self.measurement_item_id and self.position_id:
+            historical_item = False
+            if self.pk:
+                previous = (
+                    type(self).objects
+                    .filter(pk=self.pk)
+                    .values(
+                        "measurement_item_id", "employee_id", "position_id"
+                    )
+                    .first()
+                )
+                historical_item = bool(
+                    previous
+                    and previous["measurement_item_id"] == self.measurement_item_id
+                    and previous["employee_id"] == self.employee_id
+                    and previous["position_id"] == self.position_id
+                )
 
-        # Evitar metas duplicadas en el mismo período.
+            item = self.measurement_item
+            if not historical_item:
+                if item.deleted_at is not None or not item.is_active:
+                    errors.setdefault("measurement_item", []).append(
+                        "El ítem de medición no está activo."
+                    )
+                elif not self.position.catalog_items.filter(pk=item.pk).exists():
+                    errors.setdefault("measurement_item", []).append(
+                        "El ítem de medición no está autorizado para el cargo."
+                    )
+
+            if (
+                item.item_type == MeasurementItem.ItemType.PERCENTAGE
+                and not historical_item
+            ):
+                from .measurement_rules import canonical_percentage_formula
+
+                if not canonical_percentage_formula(item.formula):
+                    errors.setdefault("measurement_item", []).append(
+                        "El ítem porcentual no tiene una fórmula compatible."
+                    )
+
+
+        # Impedir duplicados nuevos sin bloquear metas históricas ya guardadas.
+        # Al modificar solo las fechas del período, el formset vuelve a validar
+        # cada meta existente aunque sus claves no hayan cambiado.
         if (
             self.period_id
             and self.employee_id
             and self.position_id
             and self.measurement_item_id
         ):
-            duplicada = Goal.objects.filter(
-                period_id=self.period_id,
-                employee_id=self.employee_id,
-                position_id=self.position_id,
-                measurement_item_id=self.measurement_item_id,
-                deleted_at__isnull=True,
-            ).exclude(pk=self.pk).exists()
-
-            if duplicada:
-                errors.setdefault("__all__", []).append(
-                    "Ya existe una meta con este período, "
-                    "funcionario, cargo e ítem de medición."
+            unique_fields = (
+                "period_id",
+                "employee_id",
+                "position_id",
+                "measurement_item_id",
+            )
+            key_unchanged = False
+            if self.pk:
+                saved_key = (
+                    type(self).objects.filter(pk=self.pk)
+                    .values(*unique_fields)
+                    .first()
                 )
+                key_unchanged = bool(
+                    saved_key is not None
+                    and all(
+                        saved_key[field] == getattr(self, field)
+                        for field in unique_fields
+                    )
+                )
+
+            # Una meta nueva o cuyo período/funcionario/cargo/ítem cambie
+            # debe seguir respetando la restricción de no duplicarse.
+            if not key_unchanged:
+                duplicada = Goal.objects.filter(
+                    period_id=self.period_id,
+                    employee_id=self.employee_id,
+                    position_id=self.position_id,
+                    measurement_item_id=self.measurement_item_id,
+                    deleted_at__isnull=True,
+                ).exclude(pk=self.pk).exists()
+
+                if duplicada:
+                    errors.setdefault("__all__", []).append(
+                        "Ya existe una meta con este período, "
+                        "funcionario, cargo e ítem de medición."
+                    )
 
         if errors:
             raise ValidationError(errors)

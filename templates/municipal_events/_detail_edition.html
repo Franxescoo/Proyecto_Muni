@@ -13,7 +13,7 @@
 {% if edition.notes %}<p class="mt-3"><strong>Observaciones:</strong> {{ edition.notes|linebreaksbr }}</p>{% endif %}
 
 {% if audit_history %}
-<div class="mt-3"><h3 class="h6 fw-bold">Historial de cambios de estado</h3>
+<div class="mt-3"><h3 class="h6 fw-bold">Historial de cambios</h3>
 <ul class="list-group list-group-flush">
 {% for entry in audit_history %}<li class="list-group-item px-0 small">
 <strong>{{ entry.get_action_display|default:entry.action }}</strong> · {{ entry.created_at|date:"d/m/Y H:i" }} · {{ entry.actor.get_username }}

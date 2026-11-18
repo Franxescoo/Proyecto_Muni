@@ -6,6 +6,7 @@ AttentionEntry existente y las campañas referencian AttentionType por PK.
 """
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
 
@@ -73,6 +74,24 @@ class EventEdition(models.Model):
         verbose_name = "Edición de evento municipal"
         verbose_name_plural = "Ediciones de eventos"
 
+    def occupied_capacity(self):
+        """Cupos confirmados de la edición; excluye retirados y bajas lógicas.
+
+        Una inscripción PENDING o REJECTED no consume cupo. Esta consulta se
+        utiliza dentro de un bloqueo select_for_update() de la edición cuando
+        se aprueba/reactiva, para impedir superar el límite entre campañas.
+        """
+        if not self.pk:
+            return 0
+        participants = self.participations.filter(
+            status__in=("ACCEPTED", "REGISTERED"), withdrawn_at__isnull=True
+        ).count()
+        approved_enrollments = Enrollment.objects.filter(
+            campaign__edition_id=self.pk,
+            status="APPROVED", deleted_at__isnull=True,
+        ).count()
+        return participants + approved_enrollments
+
     def clean(self):
         if self.date and self.year and self.date.year != self.year:
             raise ValidationError({"year": "El año debe coincidir con la fecha del evento."})
@@ -84,9 +103,9 @@ class EventEdition(models.Model):
             original = type(self).objects.get(pk=self.pk)
             if self.participation_mode != original.participation_mode:
                 raise ValidationError({"participation_mode": "No puedes cambiar el tipo de participación cuando ya hay registros."})
-            occupied = self.participations.filter(status__in=("ACCEPTED", "REGISTERED"), withdrawn_at__isnull=True).count()
-            if self.participation_capacity is not None and occupied > self.participation_capacity:
-                raise ValidationError({"participation_capacity": "Los cupos no pueden ser inferiores a los participantes confirmados."})
+        if self.pk and self.participation_capacity is not None:
+            if self.occupied_capacity() > self.participation_capacity:
+                raise ValidationError({"participation_capacity": "Los cupos no pueden ser inferiores al total de participantes e inscripciones aprobadas."})
         if self.pk and self.campaigns.exists():
             original = type(self).objects.get(pk=self.pk)
             if self.year != original.year:
@@ -103,9 +122,21 @@ class Campaign(models.Model):
     attention_type = models.ForeignKey("registration_validation.AttentionType", on_delete=models.PROTECT, related_name="municipal_campaigns", verbose_name="Tipo de atención relacionado")
     edition = models.ForeignKey(EventEdition, on_delete=models.PROTECT, blank=True, null=True, related_name="campaigns", verbose_name="Edición de evento (opcional)")
     organizing_delegation = models.ForeignKey("organization.Delegation", on_delete=models.PROTECT, related_name="organized_campaigns", verbose_name="Delegación organizadora")
+    participating_delegations = models.ManyToManyField(
+        "organization.Delegation",
+        related_name="participating_campaigns",
+        blank=True,
+        verbose_name="Delegaciones participantes",
+    )
     description = models.TextField("Descripción", blank=True)
     opens_on = models.DateField("Inicio de inscripciones")
     closes_on = models.DateField("Fin de inscripciones")
+    max_age = models.PositiveIntegerField(
+        "Edad máxima permitida",
+        default=10,
+        validators=[MinValueValidator(0), MaxValueValidator(120)],
+        help_text="Edad calculada al 31 de diciembre del año de la campaña.",
+    )
     status = models.CharField("Estado", max_length=10, choices=STATUS, default="DRAFT")
     deleted_at = models.DateTimeField("Desactivada el", null=True, blank=True, db_index=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
@@ -119,6 +150,15 @@ class Campaign(models.Model):
     def __str__(self):
         return f"{self.title} ({self.year})"
 
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+
+        # La delegación organizadora participa siempre.
+        if self.organizing_delegation_id:
+            self.participating_delegations.add(
+                self.organizing_delegation_id
+            )
+
     def clean(self):
         if self.opens_on and self.closes_on and self.closes_on < self.opens_on:
             raise ValidationError({"closes_on": "La fecha de cierre no puede ser anterior a la apertura."})
@@ -128,7 +168,17 @@ class Campaign(models.Model):
             self.edition.deleted_at is not None or self.edition.event.deleted_at is not None
         ):
             raise ValidationError({"edition": "No se puede activar una campaña con su edición o evento desactivado."})
-        if self.attention_type_id and not self.attention_type.status:
+        if (
+            self.attention_type_id
+            and not self.attention_type.status
+            and (
+                self._state.adding
+                or not self.pk
+                or type(self).objects.filter(pk=self.pk).exclude(
+                    attention_type_id=self.attention_type_id
+                ).exists()
+            )
+        ):
             raise ValidationError({"attention_type": "Selecciona un tipo de atención activo."})
         if self.pk and self.enrollments.exists():
             original = type(self).objects.get(pk=self.pk)
@@ -140,6 +190,8 @@ class Campaign(models.Model):
     def accepts_enrollments(self):
         now = timezone.localdate()
         return (self.deleted_at is None
+                and self.attention_type.status
+                and getattr(self.attention_type, "deleted_at", None) is None
                 and (not self.edition_id or (
                     self.edition.deleted_at is None and self.edition.event.deleted_at is None))
                 and self.status == "OPEN" and self.opens_on <= now <= self.closes_on)
@@ -181,6 +233,12 @@ class Beneficiary(models.Model):
         if age <= 10: return "9 a 10 años"
         return "Otro"
 
+    def age_at(self, reference_date):
+        return reference_date.year - self.birth_date.year - (
+            (reference_date.month, reference_date.day)
+            < (self.birth_date.month, self.birth_date.day)
+        )
+
 
 class Enrollment(models.Model):
     STATUS = [("PENDING", "Pendiente"), ("APPROVED", "Aprobada"), ("REJECTED", "Rechazada")]
@@ -204,10 +262,32 @@ class Enrollment(models.Model):
         verbose_name_plural = "Inscripciones a campañas"
 
     def clean(self):
+        if (
+            self._state.adding
+            and self.campaign_id
+            and self.delegation_id
+            and not self.campaign.participating_delegations.filter(
+                pk=self.delegation_id
+            ).exists()
+        ):
+            raise ValidationError({
+                "delegation": "Esta delegación no participa en la campaña."
+            })
         if self.attention_id and self.campaign_id and self.attention.attention_type_id != self.campaign.attention_type_id:
             raise ValidationError("El tipo de atención no coincide con el de la campaña.")
         if self.attention_id and self.delegation_id and self.attention.delegation_id != self.delegation_id:
             raise ValidationError("La delegación debe coincidir con la atención de origen.")
+        if self.beneficiary_id and self.campaign_id:
+            reference_date = timezone.datetime(
+                self.campaign.year, 12, 31
+            ).date()
+            if self.beneficiary.age_at(reference_date) > self.campaign.max_age:
+                raise ValidationError({
+                    "beneficiary": (
+                        f"El beneficiario supera la edad máxima de "
+                        f"{self.campaign.max_age} años para esta campaña."
+                    )
+                })
 
     def __str__(self):
         return f"Inscripción {self.pk or 'nueva'} — {self.campaign}"

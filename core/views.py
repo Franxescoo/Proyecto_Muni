@@ -1,7 +1,8 @@
 from django.shortcuts import render
 from django.urls import NoReverseMatch, reverse
-
 from citizen_requests.views import public_portal
+
+from .personal_alerts import personal_monitoring_alerts
 
 from .modules import MODULES
 
@@ -54,9 +55,14 @@ def home(request):
     profile = getattr(request.user, "profile", None)
     delegation = profile.delegation if profile and profile.delegation_id else None
 
+    # El panel de Inicio siempre muestra avisos personales, nunca los de otros
+    # funcionarios de la misma delegación ni alertas sin permiso de lectura.
+    personal_alerts = personal_monitoring_alerts(request.user)
     context = {
         "sections": build_sections(request.user),
         "delegation": delegation,
         "visits": visits,
+        "personal_alerts": personal_alerts,
+        "has_personal_alerts": bool(personal_alerts),
     }
     return render(request, "home.html", context)

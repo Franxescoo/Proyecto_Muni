@@ -1,4 +1,4 @@
-from django.db.models.signals import post_delete, post_save
+from django.db.models.signals import post_delete, post_save, pre_save
 from django.dispatch import receiver
 
 from planning_measurements.models import Goal, Period
@@ -7,6 +7,7 @@ from registration_validation.models import Activity, Evidence, Validation
 from .models import (
     Audit,
     Commitment,
+    CommitmentStatusHistory,
     CommitmentComment,
     Indicator,
 )
@@ -51,6 +52,33 @@ def validation_changed(sender, instance, **kwargs):
 @receiver([post_save, post_delete], sender=Activity)
 def activity_changed(sender, instance, **kwargs):
     _recalculate_goal(instance.goal_id)
+
+
+# Los indicadores porcentuales también cambian si una atención o solicitud
+# asociada cambia de estado, aunque la actividad permanezca igual.
+from registration_validation.models import AttentionEntry
+from citizen_requests.models import CitizenRequest
+
+
+@receiver([post_save, post_delete], sender=AttentionEntry)
+def attention_changed_for_monitoring(sender, instance, **kwargs):
+    goal_ids = instance.activities.filter(
+        deleted_at__isnull=True,
+    ).values_list("goal_id", flat=True).distinct()
+    for goal_id in goal_ids:
+        _recalculate_goal(goal_id)
+
+
+@receiver([post_save, post_delete], sender=CitizenRequest)
+def citizen_request_changed_for_monitoring(sender, instance, **kwargs):
+    if not instance.attention_entry_id:
+        return
+    goal_ids = Activity.objects.filter(
+        attention_id=instance.attention_entry_id,
+        deleted_at__isnull=True,
+    ).values_list("goal_id", flat=True).distinct()
+    for goal_id in goal_ids:
+        _recalculate_goal(goal_id)
 
 
 @receiver(post_save, sender=Goal)
@@ -133,6 +161,20 @@ def _record_audit(instance, event):
             ),
         }
 
+    elif isinstance(instance, Commitment):
+        # RF-036: conservar valores anteriores y nuevos para auditoría.
+        fields = (
+            "delegation_id", "responsible_id", "activity_id", "origin",
+            "requester", "territory", "commitment_date", "support",
+            "status", "observation",
+        )
+        previous_value = getattr(instance, "_audit_before_values", None)
+        actor = getattr(instance, "_audit_actor_user", None)
+        new_value = {
+            "datos": {field: str(getattr(instance, field)) for field in fields},
+            "editado_por": actor.get_username() if actor else "No identificado",
+        }
+
     elif isinstance(instance, CommitmentComment):
         new_value = {"text": instance.text}
 
@@ -144,6 +186,42 @@ def _record_audit(instance, event):
         previous_value=previous_value,
         new_value=new_value,
     )
+
+
+@receiver(pre_save, sender=Commitment)
+def commitment_before_save(sender, instance, **kwargs):
+    if not instance.pk:
+        instance._previous_status = ""
+        instance._audit_before_values = None
+        return
+    fields = (
+        "delegation_id", "responsible_id", "activity_id", "origin",
+        "requester", "territory", "commitment_date", "support",
+        "status", "observation",
+    )
+    original = sender.objects.filter(pk=instance.pk).values(*fields).first()
+    instance._previous_status = original["status"] if original else ""
+    instance._audit_before_values = (
+        {field: str(original[field]) for field in fields}
+        if original else None
+    )
+
+
+@receiver(post_save, sender=Commitment)
+def commitment_status_changed(sender, instance, created, **kwargs):
+    previous = getattr(instance, "_previous_status", "")
+    if created or previous != instance.status:
+        CommitmentStatusHistory.objects.create(
+            commitment=instance,
+            previous_status=previous,
+            new_status=instance.status,
+            changed_by=getattr(instance, "_audit_actor_user", None),
+            observation=getattr(instance, "_status_observation", ""),
+        )
+    # Recalcular tanto al validar como al revertir un estado o registrar uno
+    # nuevo; evita que quede contado un compromiso que dejó de estar validado.
+    if instance.activity_id:
+        _recalculate_goal(instance.activity.goal_id)
 
 
 
@@ -174,8 +252,6 @@ def tracked_object_deleted(sender, instance, **kwargs):
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
-from django.db.models.signals import pre_save
-
 from accounts.models import UserProfile
 from organization.models import (
     Delegation,

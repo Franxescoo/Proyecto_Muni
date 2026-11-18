@@ -77,6 +77,7 @@ class IntegratedChangesTests(TestCase):
         ).exists())
 
     def test_create_and_edit_multidelegation_user(self):
+        self.position.role_groups.add(self.group)
         url = reverse("organization:user_list")
         result = self.client.post(url, {
             "action": "create", "username": "usuario-integrado",
@@ -102,7 +103,7 @@ class IntegratedChangesTests(TestCase):
         self.assertEqual(user.last_name, "Actualizada")
         self.assertTrue(self.employee.assigned_groups.filter(pk=self.group.pk).exists())
 
-    def test_role_permission_cannot_open_unauthorized_delegation(self):
+    def test_role_permission_uses_employee_authorized_delegations(self):
         self.group.permissions.add(self.view_employee)
         self.role.application_delegations.set([self.north])
         user = get_user_model().objects.create_user("empleado-con-alcance", password="Test2026!segura")
@@ -112,7 +113,10 @@ class IntegratedChangesTests(TestCase):
         self.client.force_login(user)
         response = self.client.get(reverse("organization:employee_list"))
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(list(response.context["employees"]), [self.employee])
+        self.assertCountEqual(
+            list(response.context["employees"]),
+            [self.employee, self.south_employee],
+        )
 
     def test_users_have_only_one_search_and_a_visible_pager(self):
         response = self.client.get(reverse("organization:user_list"))

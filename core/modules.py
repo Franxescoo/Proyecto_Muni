@@ -125,12 +125,6 @@ MODULES = [
                 "url": "registration:attention_entry_list",
                 "perm": "registration_validation.view_attentionentry",
             },
-            {
-                "title": "Ciudadanos",
-                "icon": "bi-people-fill",
-                "url": "citizen_registry:list",
-                "perm": "citizen_registry.view_citizen",
-            },
         ],
     },
 

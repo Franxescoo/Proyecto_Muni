@@ -1,10 +1,12 @@
 {% extends "base.html" %}
 {% load i18n %}
+{% load static %}
 
 {% block titulo %}Resumen ejecutivo · Monitoreo y trazabilidad{% endblock %}
 
 {% block estilos %}
 <style>
+    @import url("{% static 'css/sgr_autoayuda_dos_modulos.css' %}?v=3");
     .monitor-shell { max-width: 1480px; margin: 0 auto; }
     .monitor-hero { background: linear-gradient(135deg, #a60a17, #760710); color: #fff; border-radius: .65rem; padding: 1.5rem 1.75rem; box-shadow: 0 6px 18px rgba(166, 10, 23, .18); }
     .monitor-hero h1 { font-size: clamp(1.35rem, 2vw, 1.85rem); }
@@ -36,6 +38,7 @@
         </div>
         <i class="bi bi-speedometer2 display-5 opacity-75" aria-hidden="true"></i>
     </section>
+    {% include "shared/_sgr_autoayuda.html" with help_namespace="monitoring" help_section="dashboard" only %}
 
     <section class="section-card p-3 p-lg-4 mb-4">
         <form method="get" class="row g-3 align-items-end">
@@ -60,30 +63,114 @@
                     {% for period in periods %}<option value="{{ period.pk }}" {% if selected_period.pk == period.pk %}selected{% endif %}>{{ period.start_date }} - {{ period.end_date }}</option>{% endfor %}
                 </select>
             </div>
-            <div class="col-12 col-md-2"><button class="btn btn-dark w-100" type="submit"><i class="bi bi-funnel me-1"></i>Filtrar</button></div>
+            <div class="col-12 col-md-2"><button class="btn btn-dark w-100" data-help="Aplica los filtros de delegación, cargo y período al resumen." type="submit"><i class="bi bi-funnel me-1"></i>Filtrar</button></div>
         </form>
     </section>
 
     <div class="row g-3 mb-4">
-        <div class="col-12 col-md-4"><div class="section-card metric alert-warning h-100"><div class="alert-value">{{ alerts.pending_evidences }}</div><div class="metric-label">Evidencias pendientes</div></div></div>
-        <div class="col-12 col-md-4"><div class="section-card metric alert-danger h-100"><div class="alert-value">{{ alerts.overdue_commitments }}</div><div class="metric-label">Compromisos vencidos</div></div></div>
-        <div class="col-12 col-md-4"><div class="section-card metric alert-secondary h-100"><div class="alert-value">{{ alerts.low_performance }}</div><div class="metric-label">Rendimientos bajo 80%</div></div></div>
+        <div class="col-12 col-md-3"><div class="section-card metric alert-warning h-100"><div class="alert-value">{{ alerts.pending_evidences }}</div><div class="metric-label">Evidencias pendientes</div></div></div>
+        <div class="col-12 col-md-3"><div class="section-card metric alert-danger h-100"><div class="alert-value">{{ alerts.overdue_commitments }}</div><div class="metric-label">Compromisos vencidos</div></div></div>
+        <div class="col-12 col-md-3"><div class="section-card metric alert-secondary h-100"><div class="alert-value">{{ alerts.low_performance }}</div><div class="metric-label">Rendimientos bajo 80%</div></div></div>
+        <div class="col-12 col-md-3"><div class="section-card metric alert-warning h-100"><div class="alert-value">{{ alerts.inactive_employees }}</div><div class="metric-label">Funcionarios sin registros recientes</div></div></div>
     </div>
+    {% if selected_period %}
+    <div class="alert alert-info py-2 small" role="status">
+        <strong>Semáforo del período:</strong>
+        {{ selected_period.thresholds|default:"Sin umbrales registrados" }}
+        <span class="text-muted">· Parámetros {{ selected_period.parameters_version }}</span>
+    </div>
+    {% endif %}
 
     <section class="section-card p-3 p-lg-4">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
             <div><h2 class="h5 mb-1 fw-bold">Consolidado por funcionario</h2><p class="text-muted small mb-0">Resultados agregados de las metas y evidencias vigentes.</p></div>
-            <a class="btn btn-outline-secondary btn-sm" href="{% url 'monitoring:activity_control' %}"><i class="bi bi-person-check me-1"></i>Control de actividad</a>
+            <div class="d-flex gap-2">{% if perms.monitoring_traceability.change_monitoringsettings %}<a class="btn btn-outline-dark btn-sm" href="{% url 'monitoring:monitoring_settings' %}">Configurar alertas y ajustes</a>{% endif %}<a class="btn btn-outline-secondary btn-sm" data-help="Descarga el consolidado respetando los filtros actuales." href="{% url 'monitoring:dashboard_export' %}?{{ request.GET.urlencode }}"><i class="bi bi-download me-1"></i>Exportar</a><a class="btn btn-outline-secondary btn-sm" data-help="Abre el seguimiento de ingresos y registros por funcionario." href="{% url 'monitoring:activity_control' %}{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}"><i class="bi bi-person-check me-1"></i>Control de actividad</a></div>
+        </div>
+        <div id="alertas-monitoreo" class="border rounded p-3 bg-light mb-3">
+            <h3 class="h6 fw-bold mb-2"><i class="bi bi-bell-fill me-2 text-warning" aria-hidden="true"></i>Detalle de las alertas</h3>
+            <p class="small text-muted mb-3">Las alertas corresponden a las delegaciones autorizadas y filtros del resumen. Cada registro indica qué ocurre y a quién afecta.</p>
+
+            <h4 class="small fw-bold">Compromisos por vencer o vencidos</h4>
+            {% if perms.monitoring_traceability.view_commitment %}
+            {% for alert in commitment_alerts %}
+            <div class="bg-white border rounded p-2 mb-2 small">
+                <strong>{% if alert.alert_type == "overdue" %}Compromiso vencido{% else %}Compromiso próximo a vencer{% endif %} — #{{ alert.commitment_id }}</strong>
+                <div>{{ alert.message }}</div>
+                <div><strong>Territorio:</strong> {{ alert.commitment.territory|default:"Sin indicar" }} · <strong>Delegación:</strong> {{ alert.commitment.delegation }}</div>
+                <div><strong>Responsable:</strong> {{ alert.commitment.responsible }} · <strong>Solicitante:</strong> {{ alert.commitment.requester|default:"No indicado" }} · <strong>Fecha límite:</strong> {{ alert.commitment.commitment_date|date:"d/m/Y" }}</div>
+                {% if perms.monitoring_traceability.view_commitment %}
+                <a href="{% url 'monitoring:commitment_list' %}#compromiso-{{ alert.commitment_id }}" class="small">Ir al compromiso</a>
+                {% endif %}
+                {% if alert.monitor_reviewed %}<span class="badge bg-secondary ms-2">Revisada</span>{% elif perms.monitoring_traceability.change_commitment %}<form method="post" class="mt-2">{% csrf_token %}<input type="hidden" name="alert_key" value="{{ alert.monitor_key }}"><button type="submit" class="btn btn-outline-secondary btn-sm">Marcar como revisada</button></form>{% endif %}
+            </div>
+            {% empty %}
+            <p class="small text-muted">No hay compromisos con alertas abiertas para estos filtros.</p>
+            {% endfor %}
+            {% else %}
+            <p class="small text-muted">No tienes permiso para consultar los detalles de compromisos.</p>
+            {% endif %}
+
+            <h4 class="small fw-bold mt-3">Evidencias sin aprobar (incluye rechazadas)</h4>
+            {% if perms.registration_validation.view_evidence %}
+            {% for evidence in pending_evidence_details %}
+            <div class="bg-white border rounded p-2 mb-2 small">
+                <strong>{{ evidence.code }}</strong> — Estado: {{ evidence.review_status }}
+                <div><strong>Meta:</strong> {{ evidence.activity.goal.item }} · <strong>Funcionario:</strong> {{ evidence.activity.author }} · <strong>Delegación:</strong> {{ evidence.activity.author.delegation }}</div>
+                <div><strong>Actividad:</strong> #{{ evidence.activity_id }} · {{ evidence.activity.date|date:"d/m/Y" }}</div>
+                {% if evidence.monitor_reviewed %}<span class="badge bg-secondary">Revisada</span>{% elif perms.monitoring_traceability.change_indicator %}<form method="post" class="mt-2">{% csrf_token %}<input type="hidden" name="alert_key" value="{{ evidence.monitor_key }}"><button type="submit" class="btn btn-outline-secondary btn-sm">Marcar como revisada</button></form>{% endif %}
+            </div>
+            {% empty %}
+            <p class="small text-muted">No hay evidencias sin aprobar en el ámbito seleccionado.</p>
+            {% endfor %}
+            {% if alerts.pending_evidences > 20 %}<p class="small text-muted">Se muestran como máximo 20 evidencias. Revisa Registro y Validación para consultar todas.</p>{% endif %}
+            {% else %}
+            <p class="small text-muted">Se cuentan las evidencias pendientes, pero su detalle requiere el permiso de consulta de evidencias.</p>
+            {% endif %}
+
+            <h4 class="small fw-bold mt-3">Funcionarios sin registros recientes</h4>
+            {% for record in alerts.inactive_details %}
+            <div class="bg-white border rounded p-2 mb-2 small">
+                <strong>{{ record.employee.name }}</strong> · {{ record.employee.delegation.name }}
+                <div><strong>Motivo:</strong> {{ record.missing_days }} días hábiles sin registros (umbral {{ record.threshold }} días).
+                    <strong>Último registro:</strong> {{ record.last_activity|date:"d/m/Y"|default:"Sin registros en el período" }}.</div>
+                <a href="{% url 'monitoring:activity_control' %}{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}">Ver control de actividad</a>
+                {% if record.monitor_reviewed %}<span class="badge bg-secondary ms-2">Revisada</span>{% elif perms.monitoring_traceability.change_indicator %}<form method="post" class="mt-2">{% csrf_token %}<input type="hidden" name="alert_key" value="{{ record.monitor_key }}"><button type="submit" class="btn btn-outline-secondary btn-sm">Marcar como revisada</button></form>{% endif %}
+            </div>
+            {% empty %}<p class="small text-muted">No hay alertas de inactividad vigentes.</p>{% endfor %}
+            {% if alerts.inactive_employees > 20 %}<p class="small text-muted">Se muestran los primeros 20 funcionarios.</p>{% endif %}
+
+            <h4 class="small fw-bold mt-3">Indicadores con cumplimiento bajo {{ monitoring_rule.low_compliance_threshold }} %</h4>
+            {% for indicator in low_performance_details %}
+            <div class="bg-white border rounded p-2 mb-2 small">
+                <strong>{{ indicator.goal.item }}</strong> — {{ indicator.compliance }} %
+                <div><strong>Funcionario:</strong> {{ indicator.employee }} · <strong>Delegación:</strong> {{ indicator.employee.delegation }} · <strong>Meta:</strong> #{{ indicator.goal_id }}</div>
+                {% if indicator.monitor_reviewed %}<span class="badge bg-secondary">Revisada</span>{% elif perms.monitoring_traceability.change_indicator %}<form method="post" class="mt-2">{% csrf_token %}<input type="hidden" name="alert_key" value="{{ indicator.monitor_key }}"><button type="submit" class="btn btn-outline-secondary btn-sm">Marcar como revisada</button></form>{% endif %}
+            </div>
+            {% empty %}
+            <p class="small text-muted">No se encontraron indicadores con cumplimiento bajo 80 %.</p>
+            {% endfor %}
+            {% if alerts.low_performance > 20 %}<p class="small text-muted">Se muestran los primeros 20 indicadores.</p>{% endif %}
         </div>
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
                 <thead><tr><th>Funcionario</th><th class="text-end">Metas</th><th class="text-end">Cumplimiento promedio</th><th class="text-end">Ponderación</th><th class="text-end">Resultado ponderado</th><th class="text-end">Evidencias aprobadas</th><th>Semáforo</th></tr></thead>
                 <tbody>
-                {% for row in rows %}<tr><td class="fw-semibold">{{ row.employee }}</td><td class="text-end">{{ row.goals }}</td><td class="text-end fw-semibold">{{ row.compliance }}%</td><td class="text-end">{{ row.weighting }}</td><td class="text-end">{{ row.weighted_result }}</td><td class="text-end">{{ row.approved_evidences }}</td><td><span class="text-success">Verdes: {{ row.green }}</span> · <span class="text-warning">Amarillas: {{ row.yellow }}</span> · <span class="text-danger">Rojas: {{ row.red }}</span></td></tr>
+                {% for row in rows %}<tr><td class="fw-semibold">{{ row.employee }}</td><td class="text-end">{{ row.goals }}</td><td class="text-end fw-semibold">{{ row.compliance }}%</td><td class="text-end">{{ row.weighting }}</td><td class="text-end">{{ row.weighted_result }}</td><td class="text-end">{{ row.approved_evidences }}</td><td><span class="text-success">Verdes: {{ row.green }}</span> · <span class="text-warning">Amarillas: {{ row.yellow }}</span> · <span class="text-danger">Rojas: {{ row.red }}</span> · <span class="text-secondary">Pendientes de evidencias: {{ row.pending }}</span></td></tr>
                 {% empty %}<tr><td colspan="7" class="text-center py-5"><i class="bi bi-speedometer2 fs-2 text-muted d-block mb-2"></i><span class="text-muted">No hay información para los filtros seleccionados.</span></td></tr>{% endfor %}
                 </tbody>
             </table>
         </div>
     </section>
+    <section class="section-card p-3 p-lg-4 mt-4" id="consolidado-cargos">
+        <h2 class="h5 fw-bold">Consolidado por cargo y período</h2>
+        <p class="text-muted small">Agrupado por el cargo asignado a cada meta, para respetar las referencias históricas. La ponderación acumulada suma todas las metas del grupo.</p>
+        <div class="table-responsive"><table class="table table-hover align-middle">
+          <thead><tr><th>Cargo</th><th>Período</th><th class="text-end">Funcionarios</th><th class="text-end">Metas</th><th class="text-end">Cumplimiento promedio</th><th class="text-end">Ponderación acumulada</th><th class="text-end">Resultado ponderado</th><th class="text-end">Evidencias aprobadas</th><th>Último cálculo</th><th>Detalle</th></tr></thead>
+          <tbody>{% for summary in positions_summary %}
+            <tr><td>{{ summary.position }}</td><td>{{ summary.period.start_date|date:"d/m/Y" }} – {{ summary.period.end_date|date:"d/m/Y" }}</td><td class="text-end">{{ summary.employee_count }}</td><td class="text-end">{{ summary.goals }}</td><td class="text-end">{{ summary.compliance }}%</td><td class="text-end">{{ summary.weighting }}</td><td class="text-end">{{ summary.weighted_result }}</td><td class="text-end">{{ summary.approved_evidences }}</td><td>{{ summary.latest_calculation|date:"d/m/Y" }}</td><td><a href="{% url 'monitoring:indicator_list' %}?position={{ summary.position.pk }}&amp;period={{ summary.period.pk }}{% if request.GET.delegation %}&amp;delegation={{ request.GET.delegation }}{% endif %}">Ver indicadores</a></td></tr>
+          {% empty %}<tr><td colspan="10" class="text-center text-muted">No hay metas para estos filtros.</td></tr>{% endfor %}</tbody>
+        </table></div>
+    </section>
 </div>
 {% endblock %}
+{% block scripts %}<script src="{% static 'js/sgr_autoayuda_dos_modulos.js' %}?v=4" defer></script>{% endblock %}
