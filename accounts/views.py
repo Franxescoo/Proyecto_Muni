@@ -3,6 +3,10 @@ from functools import wraps
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth import update_session_auth_hash
+from django.contrib.auth.forms import PasswordChangeForm
+from django.conf import settings
+from django.views.decorators.debug import sensitive_post_parameters
+from django.views.decorators.cache import never_cache
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import Group
 from django.core.exceptions import PermissionDenied
@@ -43,6 +47,38 @@ RECOVERY_SESSION_KEY = "password_recovery_code_id"
 RECOVERY_VERIFIED_SESSION_KEY = "password_recovery_verified"
 PROFILE_PASSWORD_SESSION_KEY = "profile_password_code_id"
 PROFILE_PASSWORD_VERIFIED_SESSION_KEY = "profile_password_verified"
+
+
+@login_required
+@sensitive_post_parameters("old_password", "new_password1", "new_password2")
+@never_cache
+def first_login_password_change(request):
+    """La contraseña temporal debe reemplazarse antes de entrar al SGR."""
+    profile = UserProfile.objects.filter(
+        user=request.user, deleted_at__isnull=True,
+    ).first()
+    if profile is None or not profile.must_change_password:
+        return redirect(getattr(settings, "LOGIN_REDIRECT_URL", "/"))
+
+    form = PasswordChangeForm(request.user, request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        if request.user.check_password(form.cleaned_data["new_password1"]):
+            form.add_error("new_password1", "La nueva contraseña debe ser distinta a la temporal.")
+        else:
+            with transaction.atomic():
+                locked = UserProfile.objects.select_for_update().get(pk=profile.pk)
+                if not locked.must_change_password:
+                    return redirect(getattr(settings, "LOGIN_REDIRECT_URL", "/"))
+                form.save()
+                locked.must_change_password = False
+                locked.save(update_fields=["must_change_password", "updated_at"])
+            update_session_auth_hash(request, request.user)
+            messages.success(request, "Contraseña actualizada. Ya puedes usar el SGR.")
+            return redirect(getattr(settings, "LOGIN_REDIRECT_URL", "/"))
+
+    return render(request, "accounts/first_login_password_change.html", {
+        "form": form,
+    })
 
 
 def _get_or_create_user_profile(user):
@@ -129,6 +165,9 @@ def password_reset_password(request):
                 user = locked.user
                 user.set_password(form.cleaned_data["new_password1"])
                 user.save(update_fields=["password"])
+                UserProfile.objects.filter(
+                    user=user, deleted_at__isnull=True,
+                ).update(must_change_password=False)
                 locked.used_at = timezone.now()
                 locked.save(update_fields=["used_at"])
                 request.session.pop(RECOVERY_SESSION_KEY, None)
@@ -315,6 +354,9 @@ def profile_password_change(request):
                     form.cleaned_data["new_password1"]
                 )
                 request.user.save(update_fields=["password"])
+                UserProfile.objects.filter(
+                    user=request.user, deleted_at__isnull=True,
+                ).update(must_change_password=False)
                 update_session_auth_hash(request, request.user)
                 locked.used_at = timezone.now()
                 locked.save(update_fields=["used_at"])
@@ -506,7 +548,8 @@ def account_create(request):
         else:
             messages.success(
                 request,
-                "Cuenta creada correctamente."
+                "Cuenta creada con contraseña temporal. El funcionario "
+                "debe cambiarla en el primer ingreso. Entrégasela de forma privada."
             )
             return redirect("accounts:access_home")
 

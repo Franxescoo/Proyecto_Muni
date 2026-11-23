@@ -407,13 +407,14 @@ class EmployeeForm(AccountsEmployeeForm):
         required=False,
     )
     password1 = forms.CharField(
-        label="Contraseña",
+        label="Contraseña temporal",
         max_length=128,
         required=False,
+        help_text="Al primer ingreso, el funcionario deberá cambiar esta contraseña. En una cuenta existente, déjala en blanco para conservar la contraseña actual.",
         widget=forms.PasswordInput,
     )
     password2 = forms.CharField(
-        label="Confirmar contraseña",
+        label="Confirmar contraseña temporal",
         max_length=128,
         required=False,
         widget=forms.PasswordInput,

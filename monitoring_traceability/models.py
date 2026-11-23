@@ -104,9 +104,22 @@ class Indicator(BaseModel):
         ordering = ("-calculation_date", "indicator_id")
 
     @property
+    def effective_evidence_requirement(self):
+        """Exigencia de evidencias ajustada por ausencias justificadas."""
+        from .absence_rules import effective_goal_values
+        _target, required, _expected, _lost = effective_goal_values(self.goal)
+        return required
+
+    @property
+    def absent_computable_days(self):
+        from .absence_rules import effective_goal_values
+        _target, _required, _expected, lost = effective_goal_values(self.goal)
+        return lost
+
+    @property
     def evidence_remaining(self):
         """Evidencias independientes pendientes (no archivos adjuntos)."""
-        required = self.goal.required_evidence_count or 0
+        required = self.effective_evidence_requirement
         return max(0, required - (self.approved_evidences or 0))
 
     @property
@@ -600,3 +613,95 @@ class MonitoringAlertReview(models.Model):
     class Meta:
         ordering = ("-reviewed_at", "-pk")
         default_permissions = ("add", "view")
+
+
+# SGR-AUSENCIAS-RESULTADOS-20261121: ausencia histórica informada por delegado.
+class EmployeeAbsence(BaseModel):
+    ABSENCE_TYPES = [
+        ('LICENSE', 'Licencia'),
+        ('VACATION', 'Vacaciones'),
+        ('PERMISSION', 'Permiso'),
+        ('OTHER', 'Otra ausencia justificada'),
+    ]
+    employee = models.ForeignKey(
+        'organization.Employee', on_delete=models.PROTECT,
+        related_name='reported_absences', verbose_name='Funcionario ausente',
+    )
+    delegation = models.ForeignKey(
+        'organization.Delegation', on_delete=models.PROTECT,
+        related_name='employee_absences', verbose_name='Delegación que informa',
+    )
+    reported_by = models.ForeignKey(
+        'auth.User', on_delete=models.PROTECT,
+        related_name='reported_absences', verbose_name='Usuario delegado informante',
+    )
+    start_date = models.DateField(verbose_name='Desde')
+    end_date = models.DateField(verbose_name='Hasta')
+    absence_type = models.CharField(max_length=12, choices=ABSENCE_TYPES)
+    reason = models.TextField(verbose_name='Motivo del reporte')
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    cancelled_by = models.ForeignKey(
+        'auth.User', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='cancelled_employee_absences',
+    )
+    cancel_reason = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name = 'Ausencia informada por delegado'
+        verbose_name_plural = 'Ausencias informadas por delegado'
+        ordering = ('-created_at', '-pk')
+        indexes = [models.Index(fields=['employee', 'start_date', 'end_date'], name='sgr_abs_emp_dates_idx')]
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        if self.start_date and self.end_date:
+            if self.end_date < self.start_date:
+                errors['end_date'] = 'La fecha final debe ser igual o posterior al inicio.'
+            elif (self.end_date - self.start_date).days > 366:
+                errors['end_date'] = 'El reporte no puede abarcar más de 367 días.'
+            elif not self.cancelled_at and self.employee_id:
+                active = type(self).objects.filter(
+                    employee_id=self.employee_id, cancelled_at__isnull=True,
+                    start_date__lte=self.end_date, end_date__gte=self.start_date,
+                )
+                if self.pk:
+                    active = active.exclude(pk=self.pk)
+                if active.exists():
+                    errors['start_date'] = 'Ya existe una ausencia vigente en esas fechas.'
+        if self.employee_id and self.delegation_id:
+            from organization.models import Employee
+            if not Employee.objects.filter(pk=self.employee_id, delegation_id=self.delegation_id).exists():
+                errors['employee'] = 'El funcionario debe pertenecer a la delegación informante.'
+        if not (self.reason or '').strip():
+            errors['reason'] = 'Debes escribir el motivo de la ausencia.'
+        elif len(self.reason) > 1000:
+            errors['reason'] = 'El motivo no puede superar 1000 caracteres.'
+        if self.cancelled_at and not (self.cancel_reason or '').strip():
+            errors['cancel_reason'] = 'La anulación necesita un motivo.'
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            historic = type(self).objects.filter(pk=self.pk).values(
+                'employee_id', 'delegation_id', 'reported_by_id', 'start_date',
+                'end_date', 'absence_type', 'reason', 'cancelled_at',
+                'cancelled_by_id', 'cancel_reason', 'deleted_at',
+            ).first()
+            if historic:
+                for key in ('employee_id', 'delegation_id', 'reported_by_id',
+                            'start_date', 'end_date', 'absence_type', 'reason', 'deleted_at'):
+                    if getattr(self, key) != historic[key]:
+                        raise ValidationError('Los datos de una ausencia registrada son históricos e inmutables.')
+                if historic['cancelled_at'] and any(
+                    getattr(self, k) != historic[k]
+                    for k in ('cancelled_at', 'cancelled_by_id', 'cancel_reason')
+                ):
+                    raise ValidationError('Una ausencia anulada no se puede modificar ni reactivar.')
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f'Ausencia {self.employee_id} {self.start_date} a {self.end_date}'
+

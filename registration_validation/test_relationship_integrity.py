@@ -850,8 +850,9 @@ class RegistrationRelationshipIntegrityTests(TestCase):
         )
         self.assertEqual(
             create_form.fields["result"].widget.input_type,
-            "text",
+            "select",
         )
+        self.assertIn("Approved", dict(create_form.fields["result"].choices))
         self.assertTrue(create_form.is_valid(), create_form.errors)
 
         legacy_label_data = self.validation_form_data(

@@ -780,6 +780,45 @@ class CitizenRequestActionModelTests(TestCase):
         self.assertEqual(action.delegation_id, self.north.pk)
         self.assertEqual(action.registered_by_id, self.user.pk)
 
+    def test_finalized_action_blocks_direct_edit_url(self):
+        citizen_request = self.make_request(delegation=self.north)
+        action = self.make_action(citizen_request)
+        CitizenRequestAction.objects.filter(pk=action.pk).update(
+            execution_status="FINISHED"
+        )
+        self.client.force_login(self.user)
+        url = reverse(
+            "citizen_requests:edit_request_action",
+            args=(citizen_request.pk, action.pk),
+        )
+
+        response_get = self.client.get(url)
+        response_post = self.client.post(
+            url, self.action_form_data(description="Cambio no autorizado"),
+        )
+
+        self.assertEqual(response_get.status_code, 403)
+        self.assertEqual(response_post.status_code, 403)
+        action.refresh_from_db()
+        self.assertEqual(action.execution_status, "FINISHED")
+        self.assertEqual(action.description, "Se inspeccionó el lugar.")
+
+    def test_reopened_action_allows_edit_form_again(self):
+        citizen_request = self.make_request(delegation=self.north)
+        action = self.make_action(citizen_request)
+        CitizenRequestAction.objects.filter(pk=action.pk).update(
+            execution_status="FINISHED"
+        )
+        CitizenRequestAction.objects.filter(pk=action.pk).update(
+            execution_status="PENDING"
+        )
+        self.client.force_login(self.user)
+        response = self.client.get(reverse(
+            "citizen_requests:edit_request_action",
+            args=(citizen_request.pk, action.pk),
+        ))
+        self.assertEqual(response.status_code, 200)
+
     def test_user_without_change_permission_cannot_edit_action(self):
         citizen_request = self.make_request(delegation=self.north)
         action = self.make_action(citizen_request)

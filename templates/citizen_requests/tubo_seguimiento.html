@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block titulo %}Tubo de seguimiento · SGR{% endblock %}
+
+{% block estilos %}
+<style>
+    .sgr-tubo { max-width: 1450px; margin: 0 auto; }
+    .sgr-tubo-head { background: linear-gradient(120deg, #ae1320, #720917); color: white; padding: 1.45rem 1.65rem; border-radius: .7rem; }
+    .sgr-tubo-card { background: var(--bs-body-bg, #fff); border: 1px solid var(--bs-border-color, #e5e7eb); border-radius: .7rem; }
+    .sgr-tubo-stat { border-left: 4px solid #ae1320; }
+    .sgr-tubo th { font-size: .78rem; letter-spacing: .02em; white-space: nowrap; }
+    .sgr-tubo td { vertical-align: middle; }
+    .sgr-tubo-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-wrap: anywhere; font-size: .78rem; }
+    .sgr-tubo-clip { max-width: 270px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+</style>
+{% endblock %}
+
+{% block contenido %}
+<div class="sgr-tubo pb-4">
+    <header class="sgr-tubo-head mb-4">
+        <div class="text-uppercase small opacity-75 fw-semibold mb-2">Registro y validación · seguimiento</div>
+        <h1 class="h3 fw-bold mb-2"><i class="bi bi-diagram-3 me-2" aria-hidden="true"></i>Tubo de seguimiento</h1>
+        <p class="mb-0 opacity-75">Consulta general de las gestiones ya registradas en solicitudes y atenciones, sin duplicar información.</p>
+    </header>
+
+    {% if not delegation %}
+    <div class="alert alert-warning" role="alert">
+        Selecciona una delegación autorizada en el selector global para consultar sus gestiones.
+    </div>
+    {% else %}
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+        <div><strong>Delegación:</strong> {{ delegation.name }}</div>
+        <span class="badge text-bg-light border">Vista de consulta · datos originales</span>
+    </div>
+    {% endif %}
+
+    <div class="row g-3 mb-4">
+        <div class="col-sm-6"><div class="sgr-tubo-card sgr-tubo-stat p-3 h-100"><div class="small text-muted">Gestiones registradas en la delegación</div><div class="fs-3 fw-bold">{{ total_gestiones }}</div></div></div>
+        <div class="col-sm-6"><div class="sgr-tubo-card sgr-tubo-stat p-3 h-100"><div class="small text-muted">Solicitudes con gestiones</div><div class="fs-3 fw-bold">{{ total_solicitudes }}</div></div></div>
+    </div>
+
+    <section class="sgr-tubo-card p-3 p-lg-4 mb-4" aria-labelledby="tubo-filtros-titulo">
+        <h2 id="tubo-filtros-titulo" class="h5 mb-3">Buscar y filtrar gestiones</h2>
+        <form method="get" id="sgr-tubo-filters" class="row g-3 align-items-end">
+            <div class="col-12 col-lg-5">
+                <label for="tubo-q" class="form-label">Código, RUT, nombre, asunto o descripción</label>
+                <input id="tubo-q" type="search" name="q" class="form-control" maxlength="100" value="{{ q }}" placeholder="Escribe para buscar..." autocomplete="off">
+            </div>
+            <div class="col-6 col-lg-3">
+                <label for="tubo-funcionario" class="form-label">Funcionario responsable</label>
+                <select id="tubo-funcionario" name="employee" class="form-select">
+                    <option value="">Todos</option>
+                    {% for employee in employees %}
+                    <option value="{{ employee.pk }}" {% if employee_filter == employee.pk|stringformat:'s' %}selected{% endif %}>{{ employee.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-6 col-lg-2">
+                <label for="tubo-tipo" class="form-label">Tipo de gestión</label>
+                <select id="tubo-tipo" name="type" class="form-select">
+                    <option value="">Todos</option>
+                    {% for value,label in type_options %}
+                    <option value="{{ value }}" {% if type_filter == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-6 col-lg-2">
+                <label for="tubo-estado" class="form-label">Estado solicitud</label>
+                <select id="tubo-estado" name="status" class="form-select">
+                    <option value="">Todos</option>
+                    {% for value,label in status_options %}
+                    <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-6 col-lg-3">
+                <label for="tubo-desde" class="form-label">Fecha de gestión desde</label>
+                <input id="tubo-desde" name="from" class="form-control" type="date" value="{{ from_filter }}">
+            </div>
+            <div class="col-6 col-lg-3">
+                <label for="tubo-hasta" class="form-label">Fecha de gestión hasta</label>
+                <input id="tubo-hasta" name="until" class="form-control" type="date" value="{{ until_filter }}">
+            </div>
+            <div class="col-6 col-lg-3 d-flex gap-2">
+                <button type="submit" class="btn btn-danger flex-grow-1"><i class="bi bi-funnel me-1"></i>Filtrar</button>
+                <a href="{% url 'citizen_requests:tubo_seguimiento' %}" class="btn btn-outline-secondary" title="Limpiar filtros">Limpiar</a>
+            </div>
+        </form>
+        <div class="form-text mt-2">La búsqueda se aplica automáticamente al dejar de escribir. Los demás filtros se aplican con «Filtrar».</div>
+        {% for error in filter_errors %}<div class="alert alert-warning mt-3 mb-0 py-2" role="alert">{{ error }}</div>{% endfor %}
+    </section>
+
+    <section class="sgr-tubo-card p-3 p-lg-4" aria-labelledby="tubo-registros-titulo">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+            <h2 id="tubo-registros-titulo" class="h5 mb-0">Gestiones encontradas</h2>
+            <span class="text-muted small">{{ page_obj.paginator.count }} resultado{{ page_obj.paginator.count|pluralize }} · página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th scope="col">Fecha de gestión</th>
+                        <th scope="col">Solicitud / código</th>
+                        <th scope="col">Solicitante</th>
+                        <th scope="col">Asunto</th>
+                        <th scope="col">Gestión</th>
+                        <th scope="col">Responsable</th>
+                        <th scope="col">Estado</th>
+                        <th scope="col">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for action in page_obj %}
+                    <tr>
+                        <td class="text-nowrap">{{ action.performed_at|date:'d/m/Y H:i' }}</td>
+                        <td>
+                            <div class="fw-semibold">Solicitud #{{ action.request_id }}</div>
+                            <div class="sgr-tubo-code text-muted" title="{{ action.request.tracking_code }}">{{ action.request.tracking_code }}</div>
+                        </td>
+                        <td>
+                            <div>{{ action.request.requester_name|default:'Sin nombre' }}</div>
+                            {% if action.request.citizen %}<div class="small text-muted">RUT: {{ action.request.citizen.rut }}</div>{% endif %}
+                        </td>
+                        <td><div class="sgr-tubo-clip" title="{{ action.request.subject }}">{{ action.request.subject|default:'—' }}</div></td>
+                        <td>
+                            <div class="fw-semibold">{{ action.get_action_type_display }}</div>
+                            <div class="sgr-tubo-clip small text-muted" title="{{ action.description }}">{{ action.description }}</div>
+                        </td>
+                        <td>{{ action.responsible.name }}</td>
+                        <td><span class="badge {% if action.request.status == 'CLOSED' %}text-bg-secondary{% elif action.request.status == 'IN_PROGRESS' %}text-bg-info{% else %}text-bg-light border text-dark{% endif %}">{{ action.request.get_status_display }}</span></td>
+                        <td class="text-nowrap">
+                            <a class="btn btn-sm btn-outline-danger" href="{% url 'citizen_requests:request_action_list' action.request_id %}" title="Abrir las gestiones originales de esta atención/solicitud"><i class="bi bi-list-check me-1" aria-hidden="true"></i>Gestiones</a>
+                            {# SGR-ENLACE-ATENCION-20261122: nunca abrir el endpoint JSON de la solicitud. #}
+                            {% if action.request.attention_entry_id and can_view_attention %}
+                            <a class="btn btn-sm btn-outline-secondary" href="{% url 'citizen_requests:view_attention_from_request' action.request_id %}" title="Abrir la atención vinculada"><i class="bi bi-eye me-1" aria-hidden="true"></i>Ver atención</a>
+                            {% elif action.request.attention_entry_id %}
+                            <span class="small text-muted">Atención sin acceso</span>
+                            {% else %}
+                            <span class="small text-muted">Sin atención</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="8" class="text-center py-5 text-muted"><i class="bi bi-inbox fs-2 d-block mb-2" aria-hidden="true"></i>No hay gestiones que coincidan con estos filtros.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if page_obj.paginator.num_pages > 1 %}
+        <nav aria-label="Paginación de gestiones" class="d-flex justify-content-between align-items-center gap-2 flex-wrap mt-3">
+            <div class="small text-muted">Mostrando {{ page_obj.start_index }}–{{ page_obj.end_index }} de {{ page_obj.paginator.count }}</div>
+            <div class="btn-group" role="group" aria-label="Cambiar página">
+                {% if page_obj.has_previous %}<a class="btn btn-outline-secondary btn-sm" href="?page={{ page_obj.previous_page_number }}{% if querystring %}&amp;{{ querystring }}{% endif %}">Anterior</a>{% endif %}
+                <span class="btn btn-outline-secondary btn-sm disabled" aria-current="page">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+                {% if page_obj.has_next %}<a class="btn btn-outline-secondary btn-sm" href="?page={{ page_obj.next_page_number }}{% if querystring %}&amp;{{ querystring }}{% endif %}">Siguiente</a>{% endif %}
+            </div>
+        </nav>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ block.super }}
+<script>
+(function () {
+    "use strict";
+    var input = document.getElementById('tubo-q');
+    var form = document.getElementById('sgr-tubo-filters');
+    if (!input || !form) return;
+    var timer;
+    input.addEventListener('input', function () {
+        window.clearTimeout(timer);
+        timer = window.setTimeout(function () { form.requestSubmit(); }, 500);
+    });
+})();
+</script>
+{% endblock %}

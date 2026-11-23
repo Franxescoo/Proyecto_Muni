@@ -110,6 +110,38 @@
 
                             {{ form.description }}
 
+                            <!-- SGR-CLASIFICACION-PREPARATORIAS-20261121 -->
+                            <div class="form-check mt-3">
+                                {{ form.is_preparatory_coordination }}
+                                <label class="form-check-label fw-semibold"
+                                       for="{{ form.is_preparatory_coordination.id_for_label }}">
+                                    ¿Es una coordinación preparatoria?
+                                </label>
+                                <div class="form-text">
+                                    Si está marcada, las actividades de este tipo
+                                    no contabilizan en las metas, incluso con evidencia aprobada.
+                                </div>
+                                {% for error in form.is_preparatory_coordination.errors %}
+                                    <div class="text-danger small mt-1">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+                            <!-- SGR-RESPALDO-FELICITACIONES-20261121: mismo modal institucional -->
+                            <div class="form-check mt-3">
+                                {{ form.is_congratulation }}
+                                <label class="form-check-label fw-semibold"
+                                       for="{{ form.is_congratulation.id_for_label }}">
+                                    ¿Es una felicitación?
+                                </label>
+                                <div class="form-text">
+                                    Las actividades de este tipo solo cuentan con evidencia
+                                    aprobada y respaldo formal del delegado responsable.
+                                </div>
+                                {% for error in form.is_congratulation.errors %}
+                                    <div class="text-danger small mt-1">{{ error }}</div>
+                                {% endfor %}
+                            </div>
+
+
                             {% for error in form.description.errors %}
                                 <div class="text-danger small mt-1">
                                     {{ error }}

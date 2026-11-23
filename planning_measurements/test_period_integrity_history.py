@@ -278,17 +278,17 @@ class PlanIntegrityTests(TestCase):
         })
         self.assertTrue(form.is_valid(), form.errors)
 
-    def test_cap_is_explicit_without_changing_monitoring_code(self):
+    def test_cap_is_explicit_with_120_percent_limit(self):
         data = {
             "start_date": "2026-11-02", "end_date": "2026-11-30",
             "status": "Active", "computable_days": "",
             "thresholds": "Verde: 100, Amarillo: 80, Rojo: 60",
-            "parameters_version": "v2", "compliance_cap": "180",
+            "parameters_version": "v2", "compliance_cap": "120",
         }
         form = PeriodForm(data=data, instance=self.period)
         self.assertTrue(form.is_valid(), form.errors)
         updated = form.save()
-        self.assertIn("Tope: 180.00", updated.thresholds)
+        self.assertIn("Tope: 120.00", updated.thresholds)
 
     def test_period_form_rejects_invalid_parameter_version(self):
         data = {
@@ -306,7 +306,7 @@ class PlanIntegrityTests(TestCase):
             "start_date": "2026-11-02", "end_date": "2026-11-30",
             "status": "Active", "computable_days": "",
             "thresholds": "Verde: 100, Amarillo: 80, Rojo: 60",
-            "parameters_version": "SGR044-v1.3", "compliance_cap": "150",
+            "parameters_version": "SGR044-v1.3", "compliance_cap": "120",
         }
         form = PeriodForm(data=data, instance=self.period)
         self.assertTrue(form.is_valid(), form.errors)
@@ -332,6 +332,7 @@ class PlanIntegrityTests(TestCase):
         self.period.save(update_fields=["thresholds", "computable_days"])
         data = self._period_post_data(Period.Status.ACTIVE)
         data["thresholds"] = self.period.thresholds
+        data["compliance_cap"] = "150"  # Valor histórico sin cambios.
         data["parameters_version"] = "v999"
 
         response = self.client.post(
@@ -383,7 +384,7 @@ class PlanIntegrityTests(TestCase):
             "start_date": "2026-11-02", "end_date": "2026-11-30",
             "computable_days": "", "status": status,
             "thresholds": "Verde: 100, Amarillo: 80, Rojo: 60",
-            "parameters_version": "v1", "compliance_cap": "150",
+            "parameters_version": "v1", "compliance_cap": "120",
             "goals-TOTAL_FORMS": "0", "goals-INITIAL_FORMS": "0",
             "goals-MIN_NUM_FORMS": "0", "goals-MAX_NUM_FORMS": "1000",
         }
@@ -417,7 +418,7 @@ class PlanIntegrityTests(TestCase):
         ))
         self.client.force_login(self.user)
         data = self._period_post_data(Period.Status.ACTIVE)
-        data["compliance_cap"] = "130"
+        data["compliance_cap"] = "120"
 
         response = self.client.post(
             reverse("planning:period_edit", args=[self.period.pk]),
@@ -427,9 +428,9 @@ class PlanIntegrityTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.period.refresh_from_db()
         self.assertEqual(self.period.parameters_version, "v2")
-        self.assertIn("Tope: 130.00", self.period.thresholds)
+        self.assertIn("Tope: 120.00", self.period.thresholds)
         snapshot = self.period.parameter_snapshots.get()
-        self.assertEqual(snapshot.content["compliance_cap"], "130.00")
+        self.assertEqual(snapshot.content["compliance_cap"], "120.00")
 
         response = self.client.post(
             reverse("planning:period_edit", args=[self.period.pk]),

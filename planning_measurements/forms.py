@@ -59,10 +59,10 @@ class PeriodForm(BootstrapMixin, forms.ModelForm):
     compliance_cap = forms.DecimalField(
         label="Tope de cumplimiento (%)",
         required=False,
-        min_value=Decimal("100"), max_value=Decimal("300"),
+        min_value=Decimal("100"),
         max_digits=6, decimal_places=2,
-        initial=Decimal("150"),
-        help_text="Valor inicial 150 %. Configurable entre 100 y 300 %.",
+        initial=Decimal("120"),
+        help_text="Máximo 120 %. Los valores históricos se conservan sin cambios.",
     )
 
     status = forms.ChoiceField(
@@ -104,9 +104,21 @@ class PeriodForm(BootstrapMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
 
         self._apply_bootstrap()
-        self.fields["compliance_cap"].initial = Decimal(
-            compliance_cap_value(self.instance.thresholds if self.instance.pk else "")
+        # SGR: conservar valores históricos, pero limitar configuraciones nuevas.
+        current_cap = (
+            Decimal(compliance_cap_value(self.instance.thresholds))
+            if self.instance.pk else Decimal("120")
         )
+        self.fields["compliance_cap"].initial = current_cap
+        self.fields["compliance_cap"].widget.attrs.update({
+            "min": "100",
+            "max": str(max(current_cap, Decimal("120"))),
+        })
+        if current_cap > Decimal("120"):
+            self.fields["compliance_cap"].help_text = (
+                f"Valor histórico: {current_cap} %. Se conserva si no modifica "
+                "los umbrales. Toda configuración nueva tiene máximo 120 %."
+            )
         _set_text_limit(self.fields["thresholds"], 255, "Los umbrales")
         _set_text_limit(
             self.fields["parameters_version"],
@@ -196,16 +208,39 @@ class PeriodForm(BootstrapMixin, forms.ModelForm):
             threshold_string, re.I,
         )
         if threshold_valid and "compliance_cap" in cleaned_data:
+            old_thresholds = self.instance.thresholds if self.instance.pk else None
+            old_cap = (
+                Decimal(compliance_cap_value(old_thresholds))
+                if old_thresholds is not None else None
+            )
             cap = cleaned_data["compliance_cap"]
             if cap is None:
-                cap = Decimal(compliance_cap_value(threshold_string))
-            base = re.sub(
-                r"\s*,\s*(?:Tope|Max)\s*:\s*\d+(?:[.,]\d+)?\s*$",
-                "", threshold_string, flags=re.I,
+                # Un campo omitido nunca debe crear un límite implícito de 150 %.
+                cap = (
+                    old_cap if old_thresholds is not None
+                    and threshold_string == old_thresholds else Decimal("120")
+                )
+            # Se puede reenviar exactamente el tope antiguo de un período
+            # existente, sin alterar la versión ni el historial de parámetros.
+            preserving_legacy = (
+                old_thresholds is not None
+                and threshold_string == old_thresholds
+                and cap == old_cap
             )
-            cleaned_data["thresholds"] = (
-                base.rstrip() + f", Tope: {cap:.2f}"
-            )
+            if cap > Decimal("120") and not preserving_legacy:
+                self.add_error(
+                    "compliance_cap",
+                    "El tope máximo permitido es 120 %. Para conservar uno "
+                    "histórico superior, mantenga los umbrales sin cambios.",
+                )
+            elif not preserving_legacy:
+                base = re.sub(
+                    r"\s*,\s*(?:Tope|Max)\s*:\s*\d+(?:[.,]\d+)?\s*$",
+                    "", threshold_string, flags=re.I,
+                )
+                cleaned_data["thresholds"] = (
+                    base.rstrip() + f", Tope: {cap:.2f}"
+                )
 
         start_date = cleaned_data.get("start_date")
         end_date = cleaned_data.get("end_date")

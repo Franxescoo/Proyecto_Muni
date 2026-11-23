@@ -181,6 +181,18 @@ class CitizenRequest(models.Model):
 
 
 class CitizenRequestAction(BaseModel):
+    EXECUTOR_TYPE_CHOICES = [
+        ("MUNICIPAL", "Funcionario municipal"),
+        ("TECHNICIAN", "Técnico externo"),
+        ("COMPANY", "Empresa externa"),
+    ]
+    EXECUTION_STATUS_CHOICES = [
+        ("PENDING", "Pendiente de coordinación"),
+        ("COORDINATED", "Coordinado"),
+        ("IN_PROGRESS", "En ejecución"),
+        ("FINISHED", "Finalizado"),
+    ]
+
     ACTION_TYPE_CHOICES = [
         ("INSPECTION", "Inspección"),
         ("COORDINATION", "Coordinación"),
@@ -226,6 +238,21 @@ class CitizenRequestAction(BaseModel):
     outcome = models.TextField(
         blank=True,
         verbose_name="Resultado u observaciones",
+    )
+
+    # Campos opcionales para conservar intactas las gestiones históricas.
+    executor_type = models.CharField(
+        "Tipo de ejecutor", max_length=20,
+        choices=EXECUTOR_TYPE_CHOICES, blank=True, default="",
+    )
+    executor_name = models.CharField("Nombre del ejecutor", max_length=160, blank=True)
+    executor_contact = models.CharField("Contacto del ejecutor", max_length=200, blank=True)
+    expected_execution_date = models.DateField(
+        "Fecha prevista de ejecución", blank=True, null=True,
+    )
+    execution_status = models.CharField(
+        "Estado del encargo", max_length=20,
+        choices=EXECUTION_STATUS_CHOICES, blank=True, default="",
     )
 
     class Meta:
@@ -329,6 +356,32 @@ class CitizenRequestAction(BaseModel):
                         "delegación histórica de la gestión."
                     )
 
+        # Las gestiones históricas sin encargo externo siguen siendo válidas.
+        if self.executor_type and not (self.executor_name or "").strip():
+            errors["executor_name"] = "Indica el nombre de quien ejecutará el trabajo."
+        if self.execution_status and not self.executor_type:
+            errors["executor_type"] = "El encargo necesita un tipo de ejecutor."
+        if not self.executor_type and (
+            (self.executor_name or "").strip() or self.executor_contact
+            or self.expected_execution_date
+        ):
+            errors["executor_type"] = "Selecciona el tipo de ejecutor."
+
+        # SGR_CIERRE_SEMANAL_V1: bloquear cambios a semanas ya cerradas.
+        if self.delegation_id and self.performed_at:
+            from .weekly_rules import assert_week_open
+            try:
+                assert_week_open(self.delegation_id, self.performed_at)
+                if self.pk:
+                    prior_time = (
+                        type(self).objects.filter(pk=self.pk)
+                        .values_list("performed_at", flat=True).first()
+                    )
+                    if prior_time is not None:
+                        assert_week_open(self.delegation_id, prior_time)
+            except ValidationError as error:
+                errors["performed_at"] = error.messages
+
         if errors:
             raise ValidationError(errors)
 
@@ -371,14 +424,50 @@ class CitizenRequestAction(BaseModel):
                         )
 
         try:
-            self.full_clean()
-            super().save(*args, **kwargs)
+            # SGR_CIERRE_SEMANAL_V1: el mismo bloqueo que al cerrar semanas.
+            from django.db import transaction
+            with transaction.atomic():
+                if self.delegation_id:
+                    from organization.models import Delegation
+                    Delegation.objects.select_for_update().get(pk=self.delegation_id)
+                self.full_clean()
+                super().save(*args, **kwargs)
         finally:
             for field_name, value in restore_values.items():
                 setattr(self, field_name, value)
 
     def __str__(self):
         return f"{self.get_action_type_display()} — Solicitud {self.request_id}"
+
+
+class CitizenRequestActionProgress(models.Model):
+    """Historial inalterable de cambios de estado de un encargo."""
+
+    id = models.BigAutoField(primary_key=True)
+    action = models.ForeignKey(
+        "citizen_requests.CitizenRequestAction", on_delete=models.PROTECT,
+        related_name="progress_events", verbose_name="Gestión operativa",
+    )
+    previous_status = models.CharField(max_length=20, blank=True)
+    new_status = models.CharField(max_length=20)
+    note = models.TextField("Motivo u observación")
+    recorded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
+        related_name="sgr_action_progress_events",
+    )
+    recorded_at = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def display_status(self):
+        return dict(CitizenRequestAction.EXECUTION_STATUS_CHOICES).get(
+            self.new_status, self.new_status,
+        )
+
+    class Meta:
+        ordering = ("recorded_at", "id")
+        default_permissions = ()  # No se crean permisos nuevos: usa el permiso de la gestión.
+        verbose_name = "Seguimiento de gestión operativa"
+        verbose_name_plural = "Seguimientos de gestiones operativas"
 
 
 class CitizenRequestActionAttachment(BaseModel):
@@ -497,3 +586,10 @@ class RequestEvent(models.Model):
         ordering = ["created_at", "pk"]
         verbose_name = "Evento de solicitud"
         verbose_name_plural = "Eventos de solicitudes"
+
+
+# SGR_CIERRE_SEMANAL_V1 — nuevos modelos aislados para no alterar los modelos existentes.
+from .weekly_models import CitizenRequestActionWeek, CitizenRequestActionWeekEvent
+
+# SGR-TUBO-CARTAS-20261121: metadatos sin duplicar solicitudes.
+from .letter_models import CitizenRequestLetter

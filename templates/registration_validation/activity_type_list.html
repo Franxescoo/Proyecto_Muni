@@ -120,6 +120,7 @@ Tipos de actividad · Registro y validación
                         <th>Código</th>
                         <th>Nombre</th>
                         <th>Descripción</th>
+                        <th>Clasificación</th>
                         <th>Estado</th>
                         <th class="text-end">Acciones</th>
                     </tr>
@@ -139,6 +140,15 @@ Tipos de actividad · Registro y validación
 
                         <td>
                             {{ activity_type.description|default:"Sin descripción"|truncatechars:100 }}
+                        </td>
+                        <td>
+                            {% if activity_type.is_preparatory_coordination %}
+                                <span class="badge text-bg-warning">Preparatoria · no pondera</span>
+                            {% elif activity_type.is_congratulation %}
+                                <span class="badge text-bg-info">Felicitación · requiere respaldo</span>
+                            {% else %}
+                                <span class="text-muted">Ordinaria</span>
+                            {% endif %}
                         </td>
 
                         <td>
@@ -196,7 +206,7 @@ Tipos de actividad · Registro y validación
                     {% empty %}
 
                     <tr>
-                        <td colspan="5" class="text-center py-4">
+                        <td colspan="6" class="text-center py-4">
                             No hay tipos de actividad registrados.
                         </td>
                     </tr>

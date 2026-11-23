@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block titulo %}Tubo de cartas · SGR{% endblock %}
+{% block estilos %}
+<style>
+    .sgr-letters{max-width:1450px;margin:0 auto}
+    .sgr-letters-hero{border-radius:.75rem;background:linear-gradient(125deg,#aa1220,#710818);color:#fff;padding:1.5rem 1.75rem}
+    .sgr-letters-card{border:1px solid #e2e4e7;border-radius:.7rem;background:var(--bs-body-bg,#fff);padding:1.2rem}
+    .sgr-letters-code{font-size:.79rem;overflow-wrap:anywhere;font-family:ui-monospace,Consolas,monospace}
+    .sgr-letters .table th{font-size:.75rem;white-space:nowrap}
+    .sgr-letters .table td{vertical-align:middle}
+</style>
+{% endblock %}
+{% block contenido %}
+<div class="sgr-letters pb-4">
+    <div class="sgr-letters-hero mb-4 d-flex align-items-center justify-content-between flex-wrap gap-3">
+        <div>
+            <div class="text-uppercase small fw-semibold opacity-75 mb-1">Registro y validación · Correspondencia</div>
+            <h1 class="h3 fw-bold mb-1"><i class="bi bi-envelope-paper me-2"></i>Tubo de cartas</h1>
+            <p class="mb-0 opacity-75">Seguimiento de cartas y oficios vinculados a solicitudes municipales.</p>
+        </div>
+        {% if can_create %}
+        <button type="button" class="btn btn-light" data-bs-toggle="modal" data-bs-target="#sgrNuevaCarta">
+            <i class="bi bi-plus-circle me-1"></i>Registrar carta
+        </button>
+        {% endif %}
+    </div>
+    {% if not delegation %}
+    <div class="alert alert-warning">Selecciona una delegación activa y autorizada para consultar cartas.</div>
+    {% else %}
+    <p class="text-muted small">Delegación activa: <strong>{{ delegation.name }}</strong> · Las cartas se tramitan desde sus solicitudes vinculadas.</p>
+    {% endif %}
+    <div class="row mb-3">
+        <div class="col-md-4"><div class="sgr-letters-card h-100"><div class="text-muted small">Cartas y oficios registrados en la delegación</div><strong class="fs-3">{{ total }}</strong></div></div>
+    </div>
+    <section class="sgr-letters-card mb-3">
+        <h2 class="h5 fw-bold mb-3">Buscar correspondencia</h2>
+        <form method="get" class="row g-3 align-items-end" id="sgrLetterFilters">
+            <div class="col-md-5"><label class="form-label" for="letters-q">Código, folio, RUT, remitente o asunto</label><input class="form-control" type="search" name="q" id="letters-q" value="{{ search }}" maxlength="100" placeholder="Escribe para buscar..."></div>
+            <div class="col-md-2"><label class="form-label" for="letters-kind">Tipo</label><select class="form-select" name="kind" id="letters-kind"><option value="">Todos</option>{% for value,label in kind_options %}<option value="{{ value }}" {% if kind_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+            <div class="col-md-2"><label class="form-label" for="letters-status">Estado</label><select class="form-select" name="status" id="letters-status"><option value="">Todos</option>{% for value,label in status_options %}<option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+            <div class="col-md-2"><label class="form-label" for="letters-from">Desde</label><input class="form-control" type="date" name="from" id="letters-from" value="{{ from_filter }}"></div>
+            <div class="col-md-2"><label class="form-label" for="letters-until">Hasta</label><input class="form-control" type="date" name="until" id="letters-until" value="{{ until_filter }}"></div>
+            <div class="col-md-3 d-flex gap-2"><button type="submit" class="btn btn-danger flex-grow-1">Filtrar</button><a href="{% url 'citizen_requests:tubo_cartas' %}" class="btn btn-outline-secondary">Limpiar</a></div>
+        </form>
+        {% for error in filter_errors %}<div class="alert alert-warning mt-2 mb-0">{{ error }}</div>{% endfor %}
+    </section>
+    <section class="sgr-letters-card">
+        <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2"><h2 class="h5 fw-bold mb-0">Correspondencia recibida</h2><span class="small text-muted">{{ page_obj.paginator.count }} resultados</span></div>
+        <div class="table-responsive"><table class="table table-hover align-middle mb-0">
+            <thead><tr><th>Recepción</th><th>Tipo / folio</th><th>Solicitante</th><th>Asunto</th><th>Código seguimiento</th><th>Estado</th><th>Acción</th></tr></thead>
+            <tbody>
+            {% for letter in page_obj %}
+            <tr>
+                <td class="text-nowrap">{{ letter.received_at|date:"d/m/Y H:i" }}</td>
+                <td><strong>{{ letter.get_kind_display }}</strong><div class="small text-muted">{{ letter.external_folio|default:"Sin folio externo" }}</div></td>
+                <td>{{ letter.request.requester_name }}{% if letter.request.citizen %}<div class="text-muted small">RUT: {{ letter.request.citizen.rut }}</div>{% endif %}{% if letter.sender_institution %}<div class="text-muted small">{{ letter.sender_institution }}</div>{% endif %}</td>
+                <td>{{ letter.request.subject }}</td>
+                <td><span class="sgr-letters-code">{{ letter.request.tracking_code }}</span></td>
+                <td><span class="badge {% if letter.request.status == 'CLOSED' %}text-bg-secondary{% elif letter.request.status == 'IN_PROGRESS' %}text-bg-info{% else %}text-bg-warning text-dark{% endif %}">{{ letter.request.get_status_display }}</span></td>
+                <td><a class="btn btn-sm btn-outline-danger" href="{% url 'citizen_requests:carta_detalle' letter.request_id %}"><i class="bi bi-eye me-1"></i>Seguimiento</a></td>
+            </tr>
+            {% empty %}<tr><td colspan="7" class="text-center text-muted py-5">No se registraron cartas que coincidan con los filtros.</td></tr>{% endfor %}
+            </tbody>
+        </table></div>
+        {% if page_obj.paginator.num_pages > 1 %}
+        <div class="d-flex flex-wrap justify-content-between mt-3 gap-2"><span class="small text-muted">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span><div class="btn-group">
+            {% if page_obj.has_previous %}<a class="btn btn-sm btn-outline-secondary" href="?page={{ page_obj.previous_page_number }}{% if querystring %}&amp;{{ querystring }}{% endif %}">Anterior</a>{% endif %}
+            {% if page_obj.has_next %}<a class="btn btn-sm btn-outline-secondary" href="?page={{ page_obj.next_page_number }}{% if querystring %}&amp;{{ querystring }}{% endif %}">Siguiente</a>{% endif %}
+        </div></div>
+        {% endif %}
+    </section>
+</div>
+{% if can_create %}
+<div class="modal fade" id="sgrNuevaCarta" tabindex="-1" aria-labelledby="sgrNuevaCartaTitulo" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable"><div class="modal-content">
+        <form method="post" action="{% url 'citizen_requests:tubo_cartas' %}">
+            {% csrf_token %}
+            <div class="modal-header" style="background:#a60a17;color:white"><div><div class="small opacity-75">REGISTRO Y VALIDACIÓN</div><h2 class="modal-title h5" id="sgrNuevaCartaTitulo">Registrar carta u oficio</h2></div><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button></div>
+            <div class="modal-body">
+                <p class="text-muted small">Si la solicitud ya existe, ingresa su código para vincular la carta sin duplicarla. Si es nueva, deja el código vacío y completa los datos del solicitante. Ninguno de los casos crea otra atención automáticamente.</p>
+                <div class="alert alert-light border small">El código de solicitud existente tiene prioridad: los campos del solicitante solo son necesarios cuando se crea una solicitud nueva.</div>
+                <div class="alert alert-light border small">Al introducir un RUT registrado, se reutilizan los datos del catálogo de Ciudadanos (nombre, teléfono, correo y dirección). Si no hay RUT, ingresa los datos de la carta.</div>
+                {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+                <div class="row g-3">
+                {% for field in form %}<div class="col-md-6 {% if field.name == 'description' %}col-12{% endif %} {% if field.name != 'existing_request_code' and field.name != 'kind' and field.name != 'external_folio' and field.name != 'sender_institution' %}sgr-letter-new-fields{% endif %}">
+                    <label class="form-label fw-semibold" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} *{% endif %}</label>
+                    {{ field }}
+                    {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+                    {% for error in field.errors %}<div class="small text-danger">{{ error }}</div>{% endfor %}
+                </div>{% endfor %}
+                </div>
+            </div>
+            <div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cancelar</button><button class="btn btn-danger" type="submit">Guardar carta</button></div>
+        </form>
+    </div></div>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+{{ block.super }}
+<script>
+(function(){
+  var i=document.getElementById('letters-q'), f=document.getElementById('sgrLetterFilters'), t;
+  if(i&&f){i.addEventListener('input',function(){clearTimeout(t);t=setTimeout(function(){f.requestSubmit()},500)})}
+  var existing=document.getElementById('id_existing_request_code');
+  if(existing){
+      var fields=document.querySelectorAll('.sgr-letter-new-fields');
+      var toggle=function(){
+          var linked=existing.value.trim().length>0;
+          fields.forEach(function(el){el.classList.toggle('d-none',linked)});
+      };
+      existing.addEventListener('input',toggle);
+      toggle();
+  }
+  {% if perms.citizen_registry.view_citizen %}
+  var rutEl=document.getElementById('id_rut'), rutTimer;
+  var lookupUrl="{% url 'citizen_registry:lookup' %}";
+  if(rutEl){
+    var feedback=document.createElement('div');
+    feedback.className='form-text';feedback.setAttribute('aria-live','polite');
+    rutEl.parentElement.appendChild(feedback);
+    rutEl.addEventListener('input',function(){
+      clearTimeout(rutTimer);
+      feedback.textContent='';
+      var entered=rutEl.value.trim();
+      if(entered.length<7)return;
+      rutTimer=setTimeout(async function(){
+        try{
+          var response=await fetch(lookupUrl+'?rut='+encodeURIComponent(entered),{credentials:'same-origin',headers:{'Accept':'application/json'}});
+          if(!response.ok)return;
+          var data=await response.json();
+          if(rutEl.value.trim()!==entered)return;
+          if(data.found&&data.citizen){
+            var map={requester_name:'name',requester_phone:'phone',requester_email:'email',address:'address'};
+            Object.keys(map).forEach(function(key){var el=document.getElementById('id_'+key);if(el)el.value=data.citizen[map[key]]||''});
+            feedback.textContent='Ciudadano encontrado: datos completados desde el registro central.';
+          }else if(data.inactive){feedback.textContent='El ciudadano está inactivo. Solicita su reactivación.';}
+          else{feedback.textContent='RUT no registrado. Primero crea al ciudadano en el mantenedor.';}
+        }catch(_){feedback.textContent='No se pudo consultar el RUT; revisa los datos antes de guardar.';}
+      },450);
+    });
+  }
+  {% endif %}
+  {% if open_create %}
+  var m=document.getElementById('sgrNuevaCarta');
+  if(m&&window.bootstrap){bootstrap.Modal.getOrCreateInstance(m).show()}
+  {% endif %}
+})();
+</script>
+{% endblock %}

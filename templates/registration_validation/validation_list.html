@@ -209,6 +209,7 @@
                         <th>Decisión</th>
                         <th>Fecha</th>
                         <th>Resultado</th>
+                        <th>Respaldo del delegado</th>
                         <th>Versión</th>
                         <th>Período</th>
                         <th class="text-end">Acciones</th>
@@ -248,6 +249,19 @@
 
                         <td>
                             {{ validation.result }}
+                        </td>
+                        <td class="small">
+                            {% if validation.formal_delegate_endorsement %}
+                                <span class="badge text-bg-success">Formalizado</span>
+                                <div class="text-muted mt-1">
+                                    {{ validation.delegate_endorsed_by.get_username }}<br>
+                                    {{ validation.delegate_endorsed_at|date:"d/m/Y H:i" }}
+                                </div>
+                            {% elif validation.evidence.activity.activity_type.is_congratulation %}
+                                <span class="badge text-bg-warning">Sin respaldo</span>
+                            {% else %}
+                                <span class="text-muted">No corresponde</span>
+                            {% endif %}
                         </td>
 
 
@@ -290,7 +304,10 @@
                             {% else %}
 
 
-                                {% if perms.registration_validation.change_validation %}
+                                {% if validation.formal_delegate_endorsement %}
+                                <span class="status status-muted">Aval formal · solo lectura</span>
+                                {% endif %}
+                                {% if perms.registration_validation.change_validation and not validation.formal_delegate_endorsement %}
 
                                 <a href="{% url 'registration:validation_update' validation.validation_id %}"
                                    class="btn btn-sm btn-light border me-1"
@@ -307,7 +324,7 @@
                                 {% endif %}
 
 
-                                {% if perms.registration_validation.delete_validation %}
+                                {% if perms.registration_validation.delete_validation and not validation.formal_delegate_endorsement %}
 
                                 <form id="delete-validation-form-{{ validation.validation_id }}"
                                       method="post"
@@ -349,7 +366,7 @@
 
                     <tr>
 
-                        <td colspan="8"
+                        <td colspan="9"
                             class="text-center py-5">
 
                             <i class="bi bi-patch-question fs-2 text-muted d-block mb-2"></i>

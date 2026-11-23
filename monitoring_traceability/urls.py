@@ -1,6 +1,7 @@
 from django.urls import path
 
 from . import views
+from .absence_views import manage_absence
 
 app_name = "monitoring"
 
@@ -10,6 +11,7 @@ urlpatterns = [
     path("resumen/exportar/", views.dashboard_export, name="dashboard_export"),
     path("actividad/", views.activity_control, name="activity_control"),
     path("indicadores/", views.indicator_list, name="indicator_list"),
+    path("indicadores/ausencias/", manage_absence, name="manage_absence"),
     path("indicadores/exportar/", views.indicator_export, name="indicator_export"),
     path("compromisos/", views.commitment_list, name="commitment_list"),
     path("compromisos/nuevo/", views.commitment_create, name="commitment_create"),

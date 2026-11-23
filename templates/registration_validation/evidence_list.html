@@ -452,7 +452,7 @@
                         <!-- Acciones -->
                         <td class="text-end">
 
-                            {% if evidence.activity.goal.period.status == "Closed" %}
+                            {% if evidence.activity.goal.period.status == "Closed" or evidence.sgr_approved_lock %}
 
                             <span class="status status-muted">
                                 Solo lectura

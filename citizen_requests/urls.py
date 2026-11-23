@@ -1,6 +1,8 @@
 from django.urls import path
 
 from . import views
+from .letter_views import tubo_cartas, carta_detalle  # SGR-TUBO-CARTAS-20261121
+from .tubo_views import tubo_seguimiento  # SGR-TUBO-SEGUIMIENTO-20261121
 from .history import public_request_history
 from .verify_followup import verify_followup_email
 
@@ -8,6 +10,9 @@ from .verify_followup import verify_followup_email
 app_name = "citizen_requests"
 
 urlpatterns = [
+    path("seguimiento/cartas/", tubo_cartas, name="tubo_cartas"),
+    path("seguimiento/cartas/<int:request_id>/", carta_detalle, name="carta_detalle"),  # SGR-INTEGRACION-CARTAS-20261122
+    path("seguimiento/gestiones/", tubo_seguimiento, name="tubo_seguimiento"),
     path("portal/verificar-correo/<str:token>/", verify_followup_email, name="verify_followup_email"),
     path(
         "portal/mis-solicitudes/",
@@ -54,6 +59,12 @@ urlpatterns = [
         views.request_detail,
         name="request_detail",
     ),
+    # SGR_CIERRE_SEMANAL_V1: gestión de semanas por delegación.
+    path(
+        "solicitudes/bandeja/<int:request_id>/gestiones/cierre-semanal/",
+        views.manage_request_action_week,
+        name="manage_request_action_week",
+    ),
     path(
         "solicitudes/bandeja/<int:request_id>/gestiones/",
         views.request_action_list,
@@ -63,6 +74,11 @@ urlpatterns = [
         "solicitudes/bandeja/<int:request_id>/gestiones/nueva/",
         views.create_request_action,
         name="create_request_action",
+    ),
+    path(
+        "solicitudes/bandeja/<int:request_id>/gestiones/<int:action_id>/avance/",
+        views.update_request_action_progress,
+        name="update_request_action_progress",
     ),
     path(
         "solicitudes/bandeja/<int:request_id>/gestiones/<int:action_id>/editar/",

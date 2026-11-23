@@ -1,87 +1,75 @@
 {% extends "base.html" %}
 {% load static %}
-
-{% block titulo %}
-    {% if is_editing %}Editar gestión operativa{% else %}Registrar gestión operativa{% endif %}
+{% block titulo %}{% if is_editing %}Modificar gestión{% else %}Registrar gestión{% endif %} · SGR{% endblock %}
+{% block estilos %}
+<style>
+.sgr-actions-form-shell{max-width:940px;margin:1.7rem auto 3rem;padding:0 1rem}
+.sgr-actions-form-hero{background:linear-gradient(125deg,#a60a17,#790713);color:white;border-radius:.85rem;padding:1.4rem 1.6rem;box-shadow:0 8px 20px rgba(146,11,24,.13)}
+.sgr-actions-form-card{background:#fff;border:1px solid #e4e7eb;border-radius:.85rem;box-shadow:0 4px 15px rgba(30,39,49,.06);overflow:hidden}
+.sgr-actions-form-card .form-control,.sgr-actions-form-card .form-select{border-radius:.55rem}
+</style>
 {% endblock %}
-
 {% block contenido %}
-<div class="container py-4" style="max-width: 900px;">
-    <div class="mb-3">
-        <h1 class="h3">
-            {% if is_editing %}Editar gestión operativa{% else %}Registrar gestión operativa{% endif %}
-        </h1>
-        <p class="text-muted mb-0">
-            Solicitud #{{ citizen_request.pk }} — {{ citizen_request.subject }}
-        </p>
-    </div>
-
-    <form method="post" enctype="multipart/form-data" class="card card-body shadow-sm">
-        {% csrf_token %}
-        {% if form.non_field_errors %}
-        <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+<main class="sgr-actions-form-shell">
+  <header class="sgr-actions-form-hero mb-3">
+    <p class="small text-uppercase fw-bold opacity-75 mb-2">Solicitudes · Gestiones operativas</p>
+    <h1 class="h3 fw-bold mb-1">{% if is_editing %}Modificar gestión operativa{% else %}Registrar gestión operativa{% endif %}</h1>
+    <p class="mb-0 opacity-75">Solicitud #{{ citizen_request.pk }} · {{ citizen_request.subject }}</p>
+  </header>
+  <section class="sgr-actions-form-card">
+    <form method="post" enctype="multipart/form-data" class="p-3 p-md-4">
+      {% csrf_token %}
+      {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+      <div class="row g-3">
+      {% for field in form %}
+        {% if field.name == 'executor_type' %}
+          <div class="col-12 mt-4"><h2 class="h5 fw-bold border-top pt-3">Ejecución del trabajo (opcional)</h2><p class="small text-muted mb-0">El funcionario municipal conserva la responsabilidad de seguimiento. Si asignas un ejecutor, el encargo comienza pendiente de coordinación.</p></div>
         {% endif %}
-        {% for field in form %}
-        <div class="mb-3">
-            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-        {% if field.name == "attachments" %}
-        <div data-sgr-multi-upload
-             data-max-files="5" data-min-files="0"
-             data-max-bytes="52428800"
-             data-existing-files="{% if is_editing %}{{ action.attachments.count }}{% else %}0{% endif %}">
-            <div data-sgr-original-input>{{ field }}</div>
-            <button type="button" class="btn btn-outline-primary btn-sm mt-2 d-none"
-                    data-sgr-add-files>
-                <i class="bi bi-plus-circle me-1" aria-hidden="true"></i>
-                Agregar archivos
-            </button>
-            <div class="small text-muted mt-2" data-sgr-file-summary aria-live="polite">
-                No hay archivos nuevos seleccionados.
+        <div class="col-12 {% if field.name == 'responsible' or field.name == 'action_type' or field.name == 'performed_at' or field.name == 'executor_type' or field.name == 'expected_execution_date' %}col-md-6{% endif %}">
+          <label class="form-label fw-semibold" for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {% if field.name == 'attachments' %}
+            <div data-sgr-multi-upload data-max-files="5" data-min-files="0" data-max-bytes="52428800" data-existing-files="{% if is_editing %}{{ action.attachments.count }}{% else %}0{% endif %}">
+              <div data-sgr-original-input>{{ field }}</div>
+              <button class="btn btn-outline-danger btn-sm mt-2 d-none" type="button" data-sgr-add-files><i class="bi bi-plus-circle me-1"></i>Agregar archivos</button>
+              <p class="small text-muted mt-2 mb-1" data-sgr-file-summary aria-live="polite">No hay archivos nuevos seleccionados.</p>
+              <p class="small text-danger d-none" data-sgr-file-message role="alert"></p>
+              <ul class="list-group d-none" data-sgr-file-list aria-label="Archivos nuevos seleccionados"></ul>
             </div>
-            <div class="small text-danger mt-2 d-none" data-sgr-file-message role="alert"></div>
-            <ul class="list-group mt-2 d-none" data-sgr-file-list
-                aria-label="Archivos nuevos seleccionados"></ul>
+          {% else %}{{ field }}{% endif %}
+          {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+          {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
         </div>
-        {% else %}
-        {{ field }}
-        {% endif %}
-            {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
-            {% for error in field.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+      {% endfor %}
+      </div>
+      {% if is_editing %}
+      <div class="mt-4 border-top pt-3"><h2 class="h6 fw-bold">Archivos existentes</h2>
+        <ul class="list-group">{% for attachment in action.attachments.all %}
+          <li class="list-group-item d-flex flex-wrap align-items-center justify-content-between gap-2"><span>{{ attachment.original_name }} · {{ attachment.file_type }} · {{ attachment.file.size|filesizeformat }}</span><a class="btn btn-outline-danger btn-sm" href="{% url 'citizen_requests:download_request_action_attachment' citizen_request.pk action.pk attachment.pk %}">Descargar</a></li>
+          {% empty %}<li class="list-group-item text-muted">Sin archivos adjuntos.</li>{% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+      {% if is_editing %}
+      <div class="mt-4 border rounded-3 p-3" role="group" aria-labelledby="sgr-notify-citizen-label">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" name="notify_citizen" id="id_notify_citizen" value="on">
+          <label class="form-check-label fw-semibold" for="id_notify_citizen" id="sgr-notify-citizen-label">
+            Notificar al ciudadano sobre esta modificación
+          </label>
         </div>
-        {% endfor %}
-        {% if is_editing %}
-        <div class="mb-3">
-            <h2 class="h6">Archivos existentes</h2>
-            <ul class="list-group">
-                {% for attachment in action.attachments.all %}
-                <li class="list-group-item d-flex justify-content-between align-items-center gap-2">
-                    <span>{{ attachment.original_name }} · {{ attachment.file_type }} · {{ attachment.file.size|filesizeformat }}</span>
-                    <a class="btn btn-sm btn-outline-danger"
-                       href="{% url 'citizen_requests:download_request_action_attachment' citizen_request.pk action.pk attachment.pk %}">
-                        Descargar
-                    </a>
-                </li>
-                {% endfor %}
-            </ul>
-        </div>
-        {% endif %}
-        <div class="d-flex gap-2">
-            <button type="submit" class="btn btn-danger">
-                {% if is_editing %}Guardar cambios{% else %}Registrar gestión{% endif %}
-            </button>
-            {% if can_view_actions %}
-            <a class="btn btn-outline-secondary"
-               href="{% url 'citizen_requests:request_action_list' citizen_request.pk %}">
-                Cancelar
-            </a>
-            {% else %}
-            <a class="btn btn-outline-secondary"
-               href="{% url 'citizen_requests:request_detail' citizen_request.pk %}">
-                Cancelar
-            </a>
-            {% endif %}
-        </div>
+        <p class="form-text mb-0 ms-4">
+          Opcional. Envía un correo al guardar cambios reales. Se informará la nueva
+          fecha prevista si fue modificada, pero no notas ni contactos internos.
+          Los avisos automáticos por cambio de ejecutor se mantienen y no se duplican.
+        </p>
+      </div>
+      {% endif %}
+      <div class="d-flex gap-2 flex-wrap justify-content-end border-top mt-4 pt-3">
+        <a class="btn btn-outline-secondary" href="{% url 'citizen_requests:request_action_list' citizen_request.pk %}">Cancelar</a>
+        <button class="btn btn-danger" type="submit">{% if is_editing %}Guardar cambios{% else %}Registrar gestión{% endif %}</button>
+      </div>
     </form>
-</div>
+  </section>
+</main>
 <script src="{% static 'js/sgr_multi_file_picker.js' %}" defer></script>
 {% endblock %}

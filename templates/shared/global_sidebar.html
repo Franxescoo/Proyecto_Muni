@@ -704,22 +704,22 @@
             </div>
         </div>
         {% endif %}
-        {% if perms.citizen_registry.view_citizen or perms.registration_validation.view_activity or perms.registration_validation.view_evidence or perms.registration_validation.view_validation or perms.registration_validation.view_service or perms.registration_validation.view_activitytype or perms.registration_validation.view_attentiontype or perms.registration_validation.view_subattention or perms.registration_validation.view_attentionentry %}
+        {% if perms.citizen_registry.view_citizen or perms.registration_validation.view_activity or perms.registration_validation.view_evidence or perms.registration_validation.view_validation or perms.registration_validation.view_service or perms.registration_validation.view_activitytype or perms.registration_validation.view_attentiontype or perms.registration_validation.view_subattention or perms.registration_validation.view_attentionentry or perms.citizen_requests.view_citizenrequestaction %}
         <div class="accordion-item">
             <h2 class="accordion-header">
-                <button class="accordion-button {% if request.resolver_match.namespace != 'registration' and request.resolver_match.namespace != 'citizen_registry' %}collapsed{% endif %}"
+                <button class="accordion-button {% if request.resolver_match.namespace != 'registration' and request.resolver_match.namespace != 'citizen_registry' and request.resolver_match.url_name != 'tubo_seguimiento' and request.resolver_match.url_name != 'tubo_cartas' %}collapsed{% endif %}"
                         type="button"
                         data-bs-toggle="collapse"
                         data-bs-target="#globalSidebarRegistration"
-                        aria-expanded="{% if request.resolver_match.namespace == 'registration' or request.resolver_match.namespace == 'citizen_registry' %}true{% else %}false{% endif %}"
+                        aria-expanded="{% if request.resolver_match.namespace == 'registration' or request.resolver_match.namespace == 'citizen_registry' or request.resolver_match.url_name == 'tubo_seguimiento' or request.resolver_match.url_name == 'tubo_cartas' %}true{% else %}false{% endif %}"
                         aria-controls="globalSidebarRegistration">
                     <span class="d-inline-flex align-items-center gap-2"><i class="bi bi-clipboard-check"></i> Registro y validación</span>
                 </button>
             </h2>
-            <div id="globalSidebarRegistration" class="accordion-collapse collapse {% if request.resolver_match.namespace == 'registration' or request.resolver_match.namespace == 'citizen_registry' %}show{% endif %}">
+            <div id="globalSidebarRegistration" class="accordion-collapse collapse {% if request.resolver_match.namespace == 'registration' or request.resolver_match.namespace == 'citizen_registry' or request.resolver_match.url_name == 'tubo_seguimiento' or request.resolver_match.url_name == 'tubo_cartas' %}show{% endif %}">
                 <div class="accordion-body">
                     {% if perms.citizen_registry.view_citizen %}
-                        <a class="global-sidebar-link{% if request.resolver_match.namespace == 'citizen_registry' %} active{% endif %}" href="{% url 'citizen_registry:list' %}{% if request.resolver_match.namespace == 'registration' or request.resolver_match.namespace == 'citizen_registry' and request.GET.sgr_context == 'registration_validation' %}?sgr_context=registration_validation{% endif %}"><i class="bi bi-people"></i> Ciudadanos</a>
+                        <a class="global-sidebar-link{% if request.resolver_match.namespace == 'citizen_registry' or request.resolver_match.url_name == 'tubo_seguimiento' or request.resolver_match.url_name == 'tubo_cartas' %} active{% endif %}" href="{% url 'citizen_registry:list' %}{% if request.resolver_match.namespace == 'registration' or request.resolver_match.namespace == 'citizen_registry' and request.GET.sgr_context == 'registration_validation' %}?sgr_context=registration_validation{% endif %}"><i class="bi bi-people"></i> Ciudadanos</a>
                     {% endif %}
 
                     {% if perms.registration_validation.view_activity %}
@@ -745,6 +745,12 @@
                     {% endif %}
                     {% if perms.registration_validation.view_attentionentry %}
                         <a class="global-sidebar-link{% if request.resolver_match.url_name == 'attention_entry_list' %} active{% endif %}" href="{% url 'registration:attention_entry_list' %}"><i class="bi bi-journal-check"></i> Ingreso de atención</a>
+                    {% endif %}
+                    {% if perms.citizen_requests.view_citizenrequestaction %}
+                        {# SGR-TUBO-SEGUIMIENTO-20261121: consulta general, sin duplicar gestiones. #}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'tubo_seguimiento' or request.resolver_match.url_name == 'tubo_cartas' %} active{% endif %}" href="{% url 'citizen_requests:tubo_seguimiento' %}"><i class="bi bi-diagram-3"></i> Tubo de seguimiento</a>
+                        {% comment %}SGR-TUBO-CARTAS-20261121{% endcomment %}
+                        <a class="global-sidebar-link{% if request.resolver_match.url_name == 'tubo_cartas' %} active{% endif %}" href="{% url 'citizen_requests:tubo_cartas' %}"><i class="bi bi-envelope-paper"></i> Tubo de cartas</a>
                     {% endif %}
                 </div>
             </div>

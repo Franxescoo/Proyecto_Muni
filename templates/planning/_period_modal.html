@@ -48,6 +48,12 @@
 
                             {{ field }}
 
+                            {% if field.name == "compliance_cap" and field.help_text %}
+                            <small class="form-text text-muted d-block mt-1">
+                                {{ field.help_text }}
+                            </small>
+                            {% endif %}
+
                             {% if field.errors %}
                             <div class="text-danger small mt-1">
                                 {{ field.errors }}

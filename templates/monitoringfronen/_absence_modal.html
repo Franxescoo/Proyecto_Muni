@@ -1,0 +1,78 @@
+{% if can_manage_absences %}
+<div class="modal fade sgr-upgraded-modal" id="absenceManagementModal" tabindex="-1" aria-labelledby="absenceManagementModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div class="sgr-modal-title-block">
+          <div class="sgr-modal-eyebrow"><i class="bi bi-calendar2-check me-1" aria-hidden="true"></i> MONITOREO Y TRAZABILIDAD</div>
+          <h5 class="modal-title fw-bold" id="absenceManagementModalLabel">Ausencias informadas por el delegado</h5>
+          <p class="sgr-modal-subtitle mb-0">{{ absence_delegation.name }} · Ajuste proporcional del semáforo sin cambiar las metas originales.</p>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <form method="post" action="{% url 'monitoring:manage_absence' %}">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="report">
+        <div class="modal-body">
+          <h6 class="fw-bold text-danger mb-3">Registrar ausencia</h6>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label for="absence-employee" class="form-label fw-semibold">Funcionario *</label>
+              <select id="absence-employee" class="form-select" name="employee_id" required>
+                <option value="">Seleccione un funcionario</option>
+                {% for employee in absence_employees %}<option value="{{ employee.pk }}">{{ employee.name }}</option>{% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label for="absence-kind" class="form-label fw-semibold">Tipo de ausencia *</label>
+              <select id="absence-kind" class="form-select" name="absence_type" required>
+                <option value="">Seleccione</option>
+                <option value="LICENSE">Licencia</option>
+                <option value="VACATION">Vacaciones</option>
+                <option value="PERMISSION">Permiso</option>
+                <option value="OTHER">Otra ausencia justificada</option>
+              </select>
+            </div>
+            <div class="col-md-6"><label for="absence-start" class="form-label fw-semibold">Desde *</label><input id="absence-start" type="date" name="start_date" class="form-control" required></div>
+            <div class="col-md-6"><label for="absence-end" class="form-label fw-semibold">Hasta *</label><input id="absence-end" type="date" name="end_date" class="form-control" required></div>
+            <div class="col-12"><label for="absence-reason" class="form-label fw-semibold">Motivo / respaldo *</label><textarea id="absence-reason" name="reason" maxlength="1000" rows="2" class="form-control" required placeholder="Explica la ausencia informada por la delegación."></textarea></div>
+          </div>
+          <div class="alert alert-light border mt-3 small mb-1">
+            Se descuentan los días hábiles (excluidos feriados) de la exigencia efectiva de metas cuantitativas y del avance esperado del semáforo. Los datos históricos y el valor objetivo original no se modifican. Las metas de períodos cerrados no admiten cambios.
+          </div>
+          <hr>
+          <h6 class="fw-bold mb-3">Historial de ausencias</h6>
+          <div class="table-responsive" style="max-height:260px; overflow:auto;">
+            <table class="table table-sm table-hover align-middle">
+              <thead><tr><th>Funcionario</th><th>Desde / Hasta</th><th>Motivo</th><th>Informada por</th><th>Estado</th><th>Acción</th></tr></thead>
+              <tbody>
+                {% for item in absence_rows %}
+                <tr>
+                  <td>{{ item.employee.name }}</td>
+                  <td class="small">{{ item.start_date|date:"d/m/Y" }} – {{ item.end_date|date:"d/m/Y" }}</td>
+                  <td class="small">{{ item.reason|truncatechars:65 }}</td>
+                  <td class="small">{{ item.reported_by.username }}<div class="text-muted">{{ item.created_at|date:"d/m/Y H:i" }}</div></td>
+                  <td>{% if item.cancelled_at %}<span class="status status-muted" title="{{ item.cancel_reason }}">Anulada</span>{% else %}<span class="status status-green">Vigente</span>{% endif %}</td>
+                  <td>
+                    {% if not item.cancelled_at %}
+                    <label for="cancel-absence-{{ item.pk }}" class="visually-hidden">Motivo de anulación</label><input id="cancel-absence-{{ item.pk }}" name="cancel_reason" form="sgr-absence-cancel-{{ item.pk }}" class="form-control form-control-sm mb-1" style="min-width:160px;" required maxlength="1000" placeholder="Motivo de anulación"><button type="submit" class="btn btn-sm btn-outline-danger" form="sgr-absence-cancel-{{ item.pk }}">Anular</button>
+                    {% else %}—{% endif %}
+                  </td>
+                </tr>
+                {% empty %}<tr><td colspan="6" class="text-center text-muted small">No hay ausencias registradas.</td></tr>{% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button><button type="submit" class="btn btn-danger">Registrar ausencia</button></div>
+      </form>
+      {% for item in absence_rows %}{% if not item.cancelled_at %}
+      <form method="post" id="sgr-absence-cancel-{{ item.pk }}" action="{% url 'monitoring:manage_absence' %}" class="d-none">
+        {% csrf_token %}<input type="hidden" name="action" value="cancel"><input type="hidden" name="absence_id" value="{{ item.pk }}">
+        
+      </form>
+      {% endif %}{% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}

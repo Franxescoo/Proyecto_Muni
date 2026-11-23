@@ -520,7 +520,7 @@
                         {% endif %}
                     </span>
                     <span class="profile-menu-label">
-                        <strong>{{ user.username }}</strong>
+                        <strong>{% if user.profile.employee_id %}{{ user.profile.employee.name }}{% else %}{{ user.get_full_name|default:user.username }}{% endif %}</strong>
                         <small>{% if user.is_superuser %}Administrador global{% elif sgr_display_roles %}{{ sgr_display_roles|join:", " }}{% else %}Sin rol asignado{% endif %}</small>
                     </span>
                 </button>
@@ -534,7 +534,7 @@
                             {% endif %}
                         </span>
                         <div>
-                            <strong>{{ user.get_full_name|default:user.username }}</strong>
+                            <strong>{% if user.profile.employee_id %}{{ user.profile.employee.name }}{% else %}{{ user.get_full_name|default:user.username }}{% endif %}</strong>
                             <small>{{ user.email|default:"Sin correo registrado" }}</small>
                         </div>
                     </div>
@@ -616,13 +616,15 @@
         <div class="workspace-content">
             {% block submenu %}{% endblock %}
             <main>
-        {% if messages %}
-            {% for message in messages %}
-            <div class="alert alert-{{ message.tags }} alert-dismissible fade show shadow-sm" role="alert">
-                {{ message }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>
-            {% endfor %}
+        {% if request.resolver_match.url_name != 'request_action_list' %}
+            {% if messages %}
+                {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show shadow-sm" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+                {% endfor %}
+            {% endif %}
         {% endif %}
 
         <!-- Aquí se insertará el contenido de tus páginas (como la tabla de metas) -->
@@ -1245,6 +1247,16 @@ document.addEventListener("DOMContentLoaded", function () {
         delegated: {items: []},
         active_delegations: [],
     };
+
+    // Navegación desde Gestiones operativas: abre la solicitud dentro del modal,
+    // sin navegar al endpoint JSON de su detalle.
+    window.addEventListener("sgr:open-request-detail", function (event) {
+        const requestId = String((event.detail && event.detail.id) || "");
+        if (!/^[0-9]+$/.test(requestId)) return;
+        activeDetailId = null;
+        bootstrap.Modal.getOrCreateInstance(modal).show();
+        loadDetail(requestId);
+    });
 
     modal.addEventListener("shown.bs.modal", function () {
         if (!loaded) loadRequests();

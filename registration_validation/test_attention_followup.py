@@ -38,13 +38,20 @@ class AttentionFollowupTests(TestCase):
         group.permissions.add(*Permission.objects.filter(
             content_type__app_label="registration_validation",
             codename__in=["view_attentionentry","add_attentionentry","change_attentionentry","delete_attentionentry"]))
+        group.permissions.add(Permission.objects.get(
+            content_type__app_label="citizen_registry", codename="view_citizen"
+        ))
         cls.user.groups.add(group)
+        cls.catalog_citizen = Citizen.objects.create(
+            rut="76.543.210-3", full_name="Vecina FUP", email="vecino@example.com",
+            phone="123456", address="Dirección de prueba",
+        )
 
     def setUp(self):
         self.client.force_login(self.user)
 
     def payload(self, email="vecino@example.com", status=None, observation=""):
-        d={"requester":"Vecina FUP", "requester_email":email, "requester_phone":"123456",
+        d={"citizen_rut": self.catalog_citizen.rut, "requester":"Vecina FUP", "requester_email":email, "requester_phone":"123456",
            "address":"Dirección de prueba", "subject":"Solicitud", "description":"Descripción",
            "attention_type":self.attention_type.pk, "sub_attention":self.sub_attention.pk,
            "delegation":self.delegation.pk, "responsible_employee":self.employee.pk}
@@ -53,6 +60,10 @@ class AttentionFollowupTests(TestCase):
         return d
 
     def create_manual(self, email="vecino@example.com"):
+        # La creación exige una ficha activa con correo. No modificar el correo
+        # del formulario porque los datos personales se toman desde Ciudadanos.
+        self.catalog_citizen.email = email
+        self.catalog_citizen.save(update_fields=["email"])
         with self.captureOnCommitCallbacks(execute=True):
             result=self.client.post(reverse("registration:attention_entry_create"), self.payload(email))
         self.assertEqual(result.status_code,302)
@@ -66,6 +77,11 @@ class AttentionFollowupTests(TestCase):
             address="Dirección original", subject="Asunto original",
             description="Descripción original", delegation=self.delegation,
         )
+        self.catalog_citizen.full_name = original.requester_name
+        self.catalog_citizen.email = original.requester_email
+        self.catalog_citizen.phone = original.requester_phone
+        self.catalog_citizen.address = original.address
+        self.catalog_citizen.save()
         new_data = self.payload(email="actualizado@example.com")
         new_data.update({
             "citizen_request": str(original.pk),
@@ -332,10 +348,19 @@ class AttentionFollowupTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertContains(self.client.get(history_url), str(request_obj.tracking_code))
 
-    def test_manual_without_email_has_record_but_no_mail(self):
-        a,r=self.create_manual(email="")
-        self.assertTrue(r.tracking_code)
-        self.assertEqual(len(mail.outbox),0)
+    def test_manual_without_email_is_rejected_without_creating_request(self):
+        # Un registro histórico puede carecer de correo en la base, pero no
+        # se puede generar una atención nueva a partir de esa ficha incompleta.
+        Citizen.objects.filter(pk=self.catalog_citizen.pk).update(email="")
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                reverse("registration:attention_entry_create"), self.payload(email="")
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "correo")
+        self.assertFalse(AttentionEntry.objects.filter(requester="Vecina FUP").exists())
+        self.assertFalse(CitizenRequest.objects.filter(requester_name="Vecina FUP").exists())
+        self.assertEqual(len(mail.outbox), 0)
 
     def test_change_to_resolved_then_closed_and_reopen(self):
         a,r=self.create_manual()
