@@ -1,6 +1,8 @@
 from datetime import date
 
 from django.core.exceptions import ValidationError
+from django import forms
+from citizen_registry.models import Citizen
 from django.test import TestCase
 from django.utils import timezone
 
@@ -131,6 +133,10 @@ class RegistrationCharacterLimitTests(TestCase):
             name="Subatención",
             attention_type=cls.attention_type,
         )
+        cls.citizen = Citizen.objects.create(
+            rut="76.543.210-3", full_name="Solicitante",
+            email="solicitante@example.com", phone="55512345", address="Dirección",
+        )
         cls.attention = AttentionEntry.objects.create(
             origin="INTERNAL",
             requester="Solicitante de prueba",
@@ -159,7 +165,7 @@ class RegistrationCharacterLimitTests(TestCase):
     def attention_entry_data(self, **overrides):
         data = {
             "requester": "Solicitante",
-            "requester_email": "",
+            "requester_email": "solicitante@example.com",
             "requester_phone": "55512345",
             "address": "Dirección",
             "subject": "Asunto",
@@ -168,7 +174,7 @@ class RegistrationCharacterLimitTests(TestCase):
             "description": "Descripción",
             "delegation": self.delegation.pk,
             "responsible_employee": self.employee.pk,
-            "citizen_rut": "",
+            "citizen_rut": self.citizen.rut,
             "confirm_citizen_change": "",
         }
         data.update(overrides)
@@ -223,10 +229,18 @@ class RegistrationCharacterLimitTests(TestCase):
                         f'maxlength="{limit}"',
                         str(form[field_name]),
                     )
-                    self.assertEqual(
-                        field.clean(boundary_value),
-                        boundary_value,
-                    )
+                    if isinstance(field, forms.ChoiceField):
+                        # Un selector no admite texto libre aunque el modelo
+                        # tenga longitud máxima; validar una opción reconocida.
+                        valid_value = next(
+                            value for value, label in field.choices if value
+                        )
+                        self.assertEqual(field.clean(valid_value), valid_value)
+                    else:
+                        self.assertEqual(
+                            field.clean(boundary_value),
+                            boundary_value,
+                        )
                 with self.subTest(
                     form=form_class.__name__,
                     field=field_name,

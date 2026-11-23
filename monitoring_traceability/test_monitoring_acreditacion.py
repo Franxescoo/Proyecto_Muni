@@ -64,7 +64,7 @@ class AccreditationMonitoringTests(TestCase):
         indicator = recalculate_indicator_for_goal(self.goal)
         self.assertEqual(indicator.approved_evidences, 1)
         self.assertEqual(indicator.actual_progress, Decimal("100"))
-        self.assertEqual(indicator.compliance, Decimal("150"))
+        self.assertEqual(indicator.compliance, Decimal("120.00"))
         self.assertEqual(indicator.evidence_remaining, 11)
         self.assertEqual(indicator.traffic_light, "Green")
         self.assertEqual(indicator.effective_traffic_light, "Pending")
@@ -93,6 +93,45 @@ class AccreditationMonitoringTests(TestCase):
         self.assertEqual(indicator.approved_evidences, 12)
         self.assertTrue(indicator.evidence_accreditation_met)
         self.assertEqual(indicator.effective_traffic_light, "Green")
+
+    def test_una_aprobada_y_otra_pendiente_no_acredita_actividad(self):
+        self._validate("EVI-PARCIAL-OK")
+        pendiente = Evidence.objects.create(
+            code="EVI-PARCIAL-PEND", activity=self.activity, author=self.owner,
+            date=timezone.now(), review_status="Pending",
+        )
+        indicator = recalculate_indicator_for_goal(self.goal)
+        self.assertEqual(indicator.approved_activities, 0)
+        self.assertEqual(indicator.approved_evidences, 0)
+        self.assertEqual(indicator.actual_progress, Decimal("0"))
+
+        self._validate("EVI-PARCIAL-PEND", evidence=pendiente)
+        indicator = recalculate_indicator_for_goal(self.goal)
+        self.assertEqual(indicator.approved_activities, 1)
+        self.assertEqual(indicator.approved_evidences, 2)
+        self.assertEqual(indicator.actual_progress, Decimal("100"))
+
+    def test_ultima_validacion_rechazada_retira_aprobacion_conjunta(self):
+        self._validate("EVI-CONJ-1")
+        segunda = self._validate("EVI-CONJ-2")
+        self.assertEqual(recalculate_indicator_for_goal(self.goal).approved_activities, 1)
+        self._validate("EVI-CONJ-2", decision="rejected", result="rejected", evidence=segunda)
+        indicator = recalculate_indicator_for_goal(self.goal)
+        self.assertEqual(indicator.approved_activities, 0)
+        self.assertEqual(indicator.approved_evidences, 0)
+        self.assertEqual(indicator.actual_progress, Decimal("0"))
+
+    def test_evidencia_archivada_no_impide_aprobacion_de_vigentes(self):
+        self._validate("EVI-ACTIVA")
+        archivada = Evidence.objects.create(
+            code="EVI-ARCHIVADA", activity=self.activity, author=self.owner,
+            date=timezone.now(), review_status="Pending", deleted_at=timezone.now(),
+        )
+        indicator = recalculate_indicator_for_goal(self.goal)
+        self.assertEqual(indicator.approved_activities, 1)
+        self.assertEqual(indicator.approved_evidences, 1)
+        archivada.refresh_from_db()
+        self.assertIsNotNone(archivada.deleted_at)
 
     def test_recalcular_refresca_fecha_sin_cambiar_periodos_cerrados(self):
         self._validate("EVI-FECHA")

@@ -46,6 +46,7 @@ MODEL_NAMES = {
     "comment": "Comentarios",
     "commitmentcomment": "Comentarios de compromisos",
     "citizenrequest": "Solicitudes ciudadanas",
+    "citizenrequestactionweek": "Cierres semanales de gestiones",  # SGR_CIERRE_SEMANAL_V1
     "requestevent": "Historial de solicitudes",
     "passwordrecoverycode": "Códigos de recuperación",
     "periodarchivelog": "Historial de archivado de períodos",
@@ -72,6 +73,7 @@ SPECIAL = {
     "view_citizenrequestaction": "Puede consultar gestiones operativas",
     "add_citizenrequestaction": "Puede registrar gestiones operativas",
     "change_citizenrequestaction": "Puede editar gestiones operativas",
+    "manage_citizenrequestaction_week": "Puede cerrar y reabrir semanas de gestiones",  # SGR_CIERRE_SEMANAL_V1
 }
 
 CATALOG_MODELS = {
@@ -86,6 +88,7 @@ CATALOG_MODELS = {
     "citizen_requests": {
         "citizenrequest",
         "citizenrequestaction",
+        "citizenrequestactionweek",  # SGR_CIERRE_SEMANAL_V1
     },
     "organization": {
         "delegation",
@@ -134,6 +137,10 @@ CATALOG_ACTIONS = {
         "view_citizenrequestaction",
         "add_citizenrequestaction",
         "change_citizenrequestaction",
+    },
+    # SGR_CIERRE_SEMANAL_V1: únicamente el permiso de gestión, sin CRUD extra.
+    ("citizen_requests", "citizenrequestactionweek"): {
+        "manage_citizenrequestaction_week",
     },
     ("monitoring_traceability", "commitment"): {
     "view_commitment",

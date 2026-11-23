@@ -478,8 +478,12 @@ class AccountCreateForm(BootstrapMixin, UserCreationForm):
         ).order_by("name")
 
         self.fields["email"].required = True
-        self.fields["password1"].label = "Contraseña"
-        self.fields["password2"].label = "Confirmar contraseña"
+        self.fields["password1"].label = "Contraseña temporal"
+        self.fields["password2"].label = "Confirmar contraseña temporal"
+        self.fields["password1"].help_text = (
+            str(self.fields["password1"].help_text or "")
+            + " El funcionario debe cambiar esta contraseña en su primer ingreso."
+        )
 
         _restrict_account_actor_choices(self, self.actor, "add")
         self.apply_bootstrap()

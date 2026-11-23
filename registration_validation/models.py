@@ -204,6 +204,26 @@ class Activity(BaseModel):
         related_name="activities_created",
         verbose_name="Funcionario autor",
     )
+    # Cuenta que realmente pulso Crear, distinta de la persona dueña de la meta.
+    created_by_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="sgr_activities_registered",
+        verbose_name="Usuario que registró la actividad",
+        null=True,
+        blank=True,
+        editable=False,
+    )
+    # Identidad congelada del funcionario en el momento del registro.
+    created_by_employee = models.ForeignKey(
+        "organization.Employee",
+        on_delete=models.PROTECT,
+        related_name="sgr_activities_registered_by_employee",
+        verbose_name="Funcionario que registró la actividad",
+        null=True,
+        blank=True,
+        editable=False,
+    )
     activity_type = models.ForeignKey(
         "registration_validation.ActivityType",
         on_delete=models.PROTECT,
@@ -313,7 +333,16 @@ class Activity(BaseModel):
             ("goal", "author"),
             kwargs.get("update_fields"),
         )
-        return super().save(*args, **kwargs)
+        # SGR-REGLAS-ACTIVIDADES-20261119: bloqueo también a nivel de modelo.
+        # El lock del funcionario serializa ingresos simultáneos de sus metas.
+        from organization.models import Employee
+        from .activity_rules import validate_daily_activity_limit
+
+        with transaction.atomic():
+            if self.author_id and self.date and self.deleted_at is None:
+                Employee.objects.select_for_update().get(pk=self.author_id)
+                validate_daily_activity_limit(self)
+            return super().save(*args, **kwargs)
 
     def __str__(self):
         return (
@@ -637,6 +666,21 @@ class Validation(BaseModel):
         verbose_name="Versión",
     )
 
+    # SGR-RESPALDO-FELICITACIONES-20261121: la declaración de respaldo sólo puede emitirla la cuenta
+    # autenticada del delegado; los dos campos de trazabilidad NO se editan.
+    formal_delegate_endorsement = models.BooleanField(
+        default=False, verbose_name="Respaldo formal del delegado",
+    )
+    delegate_endorsed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+        editable=False, related_name="formal_congratulations_endorsements",
+        verbose_name="Cuenta delegada que respaldó",
+    )
+    delegate_endorsed_at = models.DateTimeField(
+        null=True, blank=True, editable=False,
+        verbose_name="Fecha y hora del respaldo formal",
+    )
+
     class Meta:
         verbose_name = "Validación"
         verbose_name_plural = "Validaciones"
@@ -644,6 +688,11 @@ class Validation(BaseModel):
 
     def clean(self):
         super().clean()
+        from .congratulation_endorsement import (
+            assert_existing_endorsement_immutable, validate_new_endorsement,
+        )
+        assert_existing_endorsement_immutable(self)
+        validate_new_endorsement(self)
         _validate_changed_text_lengths(
             self,
             {"observation": (1000, "La observación")},
@@ -752,6 +801,12 @@ class Validation(BaseModel):
             )
 
     def save(self, *args, **kwargs):
+        from .congratulation_endorsement import (
+            assert_existing_endorsement_immutable, validate_new_endorsement,
+        )
+        assert_existing_endorsement_immutable(self)
+        if self.formal_delegate_endorsement:
+            validate_new_endorsement(self)
         if self.version is not None and self.version < 1:
             update_fields = kwargs.get("update_fields")
             version_included = update_fields is None or (
@@ -810,6 +865,23 @@ class ActivityType(BaseModel):
         verbose_name="Descripción",
     )
 
+    # SGR-CLASIFICACION-PREPARATORIAS-20261121: clasificación independiente del nombre y del código.
+    is_preparatory_coordination = models.BooleanField(
+        default=False,
+        verbose_name="¿Es una coordinación preparatoria?",
+        help_text=(
+            "Cuando está marcado, sus actividades no suman al cumplimiento "
+            "de las metas, aunque tengan evidencias aprobadas."
+        ),
+    )
+
+    # SGR-RESPALDO-FELICITACIONES-20261121: clasificación administrativa, nunca por nombre o código.
+    is_congratulation = models.BooleanField(
+        default=False,
+        verbose_name="¿Es una felicitación?",
+        help_text="Requiere evidencia aprobada y respaldo formal del delegado para sumar a una meta.",
+    )
+
     status = models.BooleanField(
         default=True,
         verbose_name="Estado",
@@ -822,10 +894,23 @@ class ActivityType(BaseModel):
 
     def clean(self):
         super().clean()
+        if self.is_congratulation and self.is_preparatory_coordination:
+            raise ValidationError({
+                "is_congratulation": (
+                    "Un tipo no puede ser a la vez felicitación y coordinación preparatoria."
+                ),
+            })
         _validate_changed_text_lengths(
             self,
             {"description": (300, "La descripción")},
         )
+
+    def save(self, *args, **kwargs):
+        if self.is_congratulation and self.is_preparatory_coordination:
+            raise ValidationError({
+                "is_congratulation": "La clasificación felicitación y preparatoria son excluyentes.",
+            })
+        return super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.code} - {self.name}"

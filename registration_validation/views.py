@@ -160,6 +160,75 @@ def ensure_activity_editable(activity):
             "Las actividades asociadas solo pueden "
             "consultarse."
         )
+    if activity.pk and activity.pk in _approved_activity_ids([activity.pk]):
+        raise PermissionDenied("La actividad ya tiene evidencia aprobada y es de solo lectura.")
+
+
+# SGR-BLOQUEO-APROBADOS-20261123: la última validación vigente manda.
+# El campo de revisión se usa solo como respaldo para registros históricos sin validación.
+def _approved_evidence_ids(evidences):
+    rows = list(evidences)
+    ids = [evidence.pk for evidence in rows]
+    if not ids:
+        return set()
+    latest = {}
+    for evidence_id, decision, result in (
+        Validation.objects.filter(
+            evidence_id__in=ids, deleted_at__isnull=True,
+        ).order_by(
+            "evidence_id", "-date", "-version", "-validation_id",
+        ).values_list("evidence_id", "decision", "result")
+    ):
+        if evidence_id not in latest:
+            # Coincide con la acreditación que usa Monitoreo.
+            latest[evidence_id] = (
+                (decision or "").strip().casefold() == "approved"
+                and (result or "").strip().casefold() == "approved"
+            )
+    return {
+        evidence.pk for evidence in rows
+        if latest.get(
+            evidence.pk,
+            (evidence.review_status or "").strip().casefold()
+            in {"approved", "aprobada", "aprobado"},
+        )
+    }
+
+
+def _approved_activity_ids(activity_ids):
+    evidences = list(Evidence.objects.filter(
+        activity_id__in=activity_ids,
+        deleted_at__isnull=True,
+    ).only("evidence_id", "activity_id", "review_status"))
+    approved = _approved_evidence_ids(evidences)
+    return {e.activity_id for e in evidences if e.pk in approved}
+
+
+def _mark_activity_approval(items):
+    rows = list(items)
+    locked = _approved_activity_ids([a.pk for a in rows])
+    # La edición sigue protegida si ALGUNA evidencia fue aprobada.
+    # La acreditación para Monitoreo requiere TODAS (reglas distintas).
+    from django.db.models import prefetch_related_objects
+    from monitoring_traceability.services import _activity_evidence_progress
+    prefetch_related_objects(rows, "evidences__validations")
+    for activity in rows:
+        activity.sgr_approved_lock = activity.pk in locked
+        total, approved = _activity_evidence_progress(activity)
+        activity.sgr_approval_is_complete = total > 0 and approved == total
+        if not total:
+            activity.sgr_approval_label = "Sin evidencias"
+        elif activity.sgr_approval_is_complete:
+            activity.sgr_approval_label = f"Aprobada ({approved}/{total})"
+        else:
+            activity.sgr_approval_label = f"En revisión ({approved}/{total})"
+
+
+def _mark_evidence_approval(items):
+    rows = list(items)
+    locked = _approved_evidence_ids(rows)
+    for evidence in rows:
+        evidence.sgr_approved_lock = evidence.pk in locked
 
 
 def filtered_activities(request):
@@ -292,6 +361,8 @@ def ensure_evidence_editable(evidence):
             "Las evidencias asociadas solo pueden "
             "consultarse."
         )
+    if evidence.pk and evidence.pk in _approved_evidence_ids([evidence]):
+        raise PermissionDenied("La evidencia está aprobada y es de solo lectura.")
 
 
 def filtered_evidences(request):
@@ -490,6 +561,11 @@ def ensure_validation_editable(validation):
     la evidencia, actividad, meta o período asociado
     no permite cambios.
     """
+    if getattr(validation, "formal_delegate_endorsement", False):
+        raise PermissionDenied(
+            "El aval formal no se puede modificar ni eliminar. "
+            "Registra una nueva validación para cambiar la decisión."
+        )
     evidence = validation.evidence
     activity = evidence.activity
     goal = activity.goal
@@ -661,6 +737,7 @@ class ActivityPageContextMixin:
                 self.request,
             )
         )
+        _mark_activity_approval(context["activities"])
         context["query"] = (
             self.request.GET.get(
                 "q",
@@ -773,6 +850,7 @@ class EvidencePageContextMixin:
                 self.request,
             )
         )
+        _mark_evidence_approval(context["evidences"])
         context["query"] = (
             self.request.GET.get(
                 "q",
@@ -955,6 +1033,7 @@ class ActivityListView(
         context = super().get_context_data(
             **kwargs,
         )
+        _mark_activity_approval(context["activities"])
         context["query"] = (
             self.request.GET.get(
                 "q",
@@ -1012,6 +1091,11 @@ class ActivityCreateView(
         self,
         form,
     ):
+        # Guardar quien registra de verdad, no asumir que es el titular
+        # de la meta ni quien creó la atención o verificó la evidencia.
+        form.instance.created_by_user = self.request.user
+        profile = getattr(self.request.user, "profile", None)
+        form.instance.created_by_employee_id = getattr(profile, "employee_id", None)
         response = super().form_valid(
             form,
         )
@@ -1154,6 +1238,7 @@ class EvidenceListView(
         context = super().get_context_data(
             **kwargs,
         )
+        _mark_evidence_approval(context["evidences"])
         context["query"] = (
             self.request.GET.get(
                 "q",
@@ -1199,6 +1284,18 @@ class EvidenceCreateView(
     )
 
     def form_valid(self, form):
+        # No permitir anexar nuevas evidencias a una actividad ya acreditada.
+        # De hacerlo, una evidencia sin validar revocaría automáticamente su
+        # cumplimiento. La decisión formal anterior no debe alterarse así.
+        from monitoring_traceability.services import _activity_is_approved
+        activity = form.cleaned_data.get("activity")
+        if activity is not None and _activity_is_approved(activity):
+            form.add_error(
+                "activity",
+                "Esta actividad ya tiene todas sus evidencias aprobadas. "
+                "No se pueden agregar más evidencias.",
+            )
+            return self.form_invalid(form)
         with transaction.atomic():
             self.object = form.save()
             save_evidence_files(self.object, form)
@@ -3016,11 +3113,28 @@ class AttentionEntryCreateView(
     def form_valid(self, form):
         citizen_request = self.get_citizen_request()
         rut = form.cleaned_data.get("citizen_rut")
-        linked_citizen = Citizen.objects.filter(rut=rut, is_active=True).first() if rut else None
-        if rut and linked_citizen is None:
+        if not rut:
+            form.add_error("citizen_rut", "Debes ingresar el RUT de un ciudadano registrado.")
+            return self.form_invalid(form)
+        linked_citizen = Citizen.objects.filter(rut=rut, is_active=True).first()
+        if linked_citizen is None:
             form.add_error("citizen_rut", "El RUT no está registrado como ciudadano activo.")
             return self.form_invalid(form)
-        if linked_citizen and not self.request.user.has_perm("citizen_registry.view_citizen"):
+        # Validación adicional al guardar: evita errores de modelo si la ficha
+        # cambió entre la validación del formulario y el envío definitivo.
+        if not (linked_citizen.email or "").strip():
+            form.add_error(
+                "requester_email",
+                "Debes registrar un correo en el mantenedor Ciudadanos.",
+            )
+            return self.form_invalid(form)
+        if not (linked_citizen.address or "").strip():
+            form.add_error(
+                "address",
+                "Debes registrar una dirección en el mantenedor Ciudadanos.",
+            )
+            return self.form_invalid(form)
+        if not self.request.user.has_perm("citizen_registry.view_citizen"):
             raise PermissionDenied("No tienes permiso para consultar ciudadanos.")
         if citizen_request is not None and citizen_request.citizen_id:
             if linked_citizen and citizen_request.citizen_id != linked_citizen.pk:

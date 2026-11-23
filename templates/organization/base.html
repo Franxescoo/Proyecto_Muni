@@ -302,7 +302,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     document.querySelectorAll('input[name="rut"]').forEach(function (input) {
         function formatRut() {
-            const compact = input.value.replace(/[^0-9]/g, "");
+            const compact = input.value.replace(/[^0-9Kk]/g, "").toUpperCase();
             if (compact.length < 2) {
                 input.value = compact;
                 return;

@@ -93,14 +93,20 @@ def _period_from_request(request):
 
 
 def _filter_effective_traffic_light(indicators, color):
-    """Filtra por estado visible, no solo por semáforo técnico."""
-    color = (color or "").casefold()
-    missing = Q(approved_evidences__lt=F("goal__required_evidence_count"))
-    if color in {"pending", "pendiente"}:
-        return indicators.filter(missing)
-    if color in {"green", "yellow", "red", "verde", "amarillo", "rojo"}:
-        return indicators.exclude(missing).filter(traffic_light__iexact=color)
-    return indicators
+    """Filtra por el semáforo visible, incluida la acreditación por ausencias."""
+    normalized = (color or "").strip().casefold()
+    names = {
+        "verde": "green", "amarillo": "yellow", "rojo": "red",
+        "pendiente": "pending",
+    }
+    wanted = names.get(normalized, normalized)
+    if wanted not in {"green", "yellow", "red", "pending"}:
+        return indicators
+    ids = [
+        indicator.pk for indicator in indicators
+        if (indicator.effective_traffic_light or "").casefold() == wanted
+    ]
+    return indicators.filter(pk__in=ids)
 
 
 @login_required
@@ -222,20 +228,42 @@ def indicator_list(request):
         return redirect(request.get_full_path())
 
     total = indicators.count()
-    compliant = indicators.filter(
-        traffic_light__iregex=r"^(green|verde)$",
-        approved_evidences__gte=F("goal__required_evidence_count"),
-    ).count()
-    attention = indicators.filter(
-        Q(traffic_light__iregex=r"^(red|rojo)$")
-        | Q(approved_evidences__lt=F("goal__required_evidence_count"))
-    ).count()
+    compliant = sum(
+        1 for row in indicators
+        if (row.effective_traffic_light or "").casefold() in {"green", "verde"}
+    )
+    attention = sum(
+        1 for row in indicators
+        if (row.effective_traffic_light or "").casefold() in {
+            "red", "rojo", "pending", "pendiente"
+        }
+    )
 
+    # SGR-AUSENCIAS-RESULTADOS-20261121: modal por delegación responsable.
+    from .absence_views import current_delegate_delegation
+    from .models import EmployeeAbsence
+    absence_delegation = current_delegate_delegation(request.user)
+    can_manage_absences = absence_delegation is not None
+    absence_employees = (
+        Employee.objects.filter(
+            delegation=absence_delegation, deleted_at__isnull=True,
+        ).exclude(pk=absence_delegation.responsible_id).order_by('name')
+        if can_manage_absences else Employee.objects.none()
+    )
+    absence_rows = (
+        EmployeeAbsence.objects.filter(delegation=absence_delegation)
+        .select_related('employee', 'reported_by').order_by('-created_at')[:60]
+        if can_manage_absences else EmployeeAbsence.objects.none()
+    )
     return render(
         request,
         "monitoringfronen/indic.html",
         {
             "indicators": indicators,
+            "can_manage_absences": can_manage_absences,
+            "absence_delegation": absence_delegation,
+            "absence_employees": absence_employees,
+            "absence_rows": absence_rows,
             "total_indicators": total,
             "compliant_indicators": compliant,
             "attention_indicators": attention,

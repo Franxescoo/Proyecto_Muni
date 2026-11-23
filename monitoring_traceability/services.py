@@ -110,32 +110,48 @@ def _compliance_cap(period):
             values[match.group("label").lower()] = Decimal(
                 match.group("value").replace(",", ".")
             )
-    return values.get("max", values.get("tope", Decimal("150")))
+    # Límite efectivo universal: no reescribir parámetros históricos.
+    configured_cap = values.get("max", values.get("tope", Decimal("120")))
+    return min(configured_cap, Decimal("120"))
 
 
 def _evidence_is_approved(evidence):
+    """La última validación activa manda; review_status no acredita una evidencia."""
     if evidence.deleted_at is not None:
         return False
 
-    validations = list(
-        evidence.validations.filter(
-            deleted_at__isnull=True
-        ).order_by("-date", "-version", "-validation_id")
-    )
-    if validations:
-        latest = validations[0]
-        return (
-            latest.decision.strip().casefold() == "approved"
-            and latest.result.strip().casefold() == "approved"
+    # Reutilizar prefetch_related para no consultar la base por cada evidencia.
+    cached = getattr(evidence, "_prefetched_objects_cache", {}).get("validations")
+    if cached is not None:
+        latest = max(
+            (v for v in cached if v.deleted_at is None),
+            key=lambda v: (v.date, v.version, v.pk),
+            default=None,
         )
-    return False
+    else:
+        latest = evidence.validations.filter(
+            deleted_at__isnull=True,
+        ).order_by("-date", "-version", "-validation_id").first()
+    return bool(
+        latest
+        and (latest.decision or "").strip().casefold() == "approved"
+        and (latest.result or "").strip().casefold() == "approved"
+    )
+
+
+def _activity_evidence_progress(activity):
+    """Cuenta solo evidencias vigentes y aprobaciones formales vigentes."""
+    evidences = [
+        evidence for evidence in activity.evidences.all()
+        if evidence.deleted_at is None
+    ]
+    return len(evidences), sum(_evidence_is_approved(e) for e in evidences)
 
 
 def _activity_is_approved(activity):
-    return any(
-        _evidence_is_approved(evidence)
-        for evidence in activity.evidences.all()
-    )
+    """La actividad se acredita solo si tiene evidencias y TODAS están aprobadas."""
+    total, approved = _activity_evidence_progress(activity)
+    return total > 0 and total == approved
 
 
 def pending_evidence_queryset(queryset):
@@ -238,16 +254,33 @@ def recalculate_indicator_for_goal(goal, create_if_missing=True):
             deleted_at__isnull=True,
             date__gte=goal.period.start_date,
             date__lte=min(today, goal.period.end_date),
-        ).select_related("attention").prefetch_related("evidences__validations")
+        ).select_related(
+            "attention", "attention__citizen", "activity_type",
+            "author__delegation__responsible",
+        ).prefetch_related("evidences__validations", "evidences__files")
     )
+    # SGR-REGLAS-ACTIVIDADES-20261119: nunca borrar registros no puntuables.
+    # Se excluyen SOLO del numerador y las variables del cálculo de la meta.
+    from registration_validation.activity_rules import activity_qualifies_for_goal
+    activities = [
+        activity for activity in activities
+        if activity_qualifies_for_goal(activity, _evidence_is_approved)
+    ]
     approved_activity_ids = {
         activity.pk for activity in activities if _activity_is_approved(activity)
     }
     approved_activities = len(approved_activity_ids)
+    # Para Metas y Semáforo, una evidencia solo pondera cuando su actividad
+    # está completamente aprobada. Las aprobaciones parciales se conservan
+    # en Validaciones, pero no adelantan el cumplimiento del objetivo.
     raw_approved_evidences = sum(
-        1 for a in activities for e in a.evidences.all() if _evidence_is_approved(e)
+        1 for activity in activities if activity.pk in approved_activity_ids
+        for evidence in activity.evidences.all()
+        if _evidence_is_approved(evidence)
     )
-    expected = Decimal(goal.objective_value)
+    # SGR-AUSENCIAS-RESULTADOS-20261121: el objetivo original en Goal no se modifica.
+    from .absence_rules import effective_goal_values
+    expected, _absence_evidence_count, absence_expected_progress, _absence_days = effective_goal_values(goal, today)
     if expected <= 0:
         raise ValueError("El valor objetivo de la meta debe ser mayor que cero.")
 
@@ -279,7 +312,7 @@ def recalculate_indicator_for_goal(goal, create_if_missing=True):
     compliance = min(actual / expected * Decimal("100"), cap).quantize(
         Decimal("0.01"), ROUND_HALF_UP,
     )
-    expected_progress = _expected_progress(goal.period)
+    expected_progress = absence_expected_progress
     adjustment = Decimal(existing_indicator.adjustment) if existing_indicator else Decimal("0")
     adjusted_compliance = max(Decimal("0"), min(compliance + adjustment, cap))
     weighted_result = (

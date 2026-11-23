@@ -35,11 +35,24 @@ class CitizenTest(TestCase):
         u.user_permissions.add(Permission.objects.get(content_type__app_label="citizen_registry", codename="view_citizen"))
         self.assertEqual(self.client.get(url, {"rut": "12.345.678-5"}).status_code, 200)
 
+    def test_create_citizen_without_email_is_rejected(self):
+        user = User.objects.create_user(username="sin-correo", password="demo12345")
+        user.user_permissions.add(Permission.objects.get(
+            content_type__app_label="citizen_registry", codename="add_citizen"
+        ))
+        self.client.force_login(user)
+        response = self.client.post(reverse("citizen_registry:create"), {
+            "rut": "12.345.678-5", "full_name": "Vecina", "address": "Domicilio",
+        }, HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("email", response.json()["errors"])
+        self.assertFalse(Citizen.objects.filter(rut="123456785").exists())
+
     def test_new_record_returns_limited_fields(self):
         u = User.objects.create_user(username="usuario", password="demo12345")
         u.user_permissions.set(Permission.objects.filter(content_type__app_label="citizen_registry", codename__in=["add_citizen","view_citizen"]))
         self.client.force_login(u)
-        response = self.client.post(reverse("citizen_registry:create"), {"rut": "12.345.678-5", "full_name": "Vecina", "address": "Domicilio", "rsh_folio":"PRIVADO"}, HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+        response = self.client.post(reverse("citizen_registry:create"), {"rut": "12.345.678-5", "full_name": "Vecina", "email": "vecina@example.com", "address": "Domicilio", "rsh_folio":"PRIVADO"}, HTTP_X_REQUESTED_WITH="XMLHttpRequest")
         self.assertEqual(response.status_code, 201)
         d = self.client.get(reverse("citizen_registry:lookup"), {"rut": "12.345.678-5"}).json()
         self.assertTrue(d["found"])

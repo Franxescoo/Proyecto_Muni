@@ -26,6 +26,61 @@ def _recalculate_goal(goal_id):
             )
 
 
+# SGR-CLASIFICACION-PREPARATORIAS-20261121: al cambiar la clasificación de un tipo, actualizar
+# las metas activas ya existentes; nunca recalcular períodos cerrados.
+from registration_validation.models import ActivityType as SGRPreparatoryActivityType
+
+
+@receiver(pre_save, sender=SGRPreparatoryActivityType)
+def sgr_before_preparatory_type_change(sender, instance, **kwargs):
+    if instance.pk:
+        instance._sgr_old_preparatory_classification = (
+            sender.objects.filter(pk=instance.pk)
+            .values_list("is_preparatory_coordination", flat=True).first()
+        )
+    else:
+        instance._sgr_old_preparatory_classification = None
+
+
+@receiver(post_save, sender=SGRPreparatoryActivityType)
+def sgr_after_preparatory_type_change(sender, instance, created, **kwargs):
+    previous = getattr(instance, "_sgr_old_preparatory_classification", None)
+    if created or previous is None or previous == instance.is_preparatory_coordination:
+        return
+    goal_ids = Activity.objects.filter(
+        activity_type_id=instance.pk,
+        deleted_at__isnull=True,
+        goal__period__status__iexact="Active",
+    ).values_list("goal_id", flat=True).distinct()
+    for goal_id in goal_ids:
+        _recalculate_goal(goal_id)
+
+
+# SGR-RESPALDO-FELICITACIONES-20261121: solo recálculo de metas de períodos activos si cambia el tipo.
+from registration_validation.models import ActivityType as SGRCongratulationsActivityType
+
+
+@receiver(pre_save, sender=SGRCongratulationsActivityType)
+def sgr_before_congratulation_type_change(sender, instance, **kwargs):
+    instance._sgr_old_congratulation_flag = (
+        sender.objects.filter(pk=instance.pk).values_list("is_congratulation", flat=True).first()
+        if instance.pk else None
+    )
+
+
+@receiver(post_save, sender=SGRCongratulationsActivityType)
+def sgr_after_congratulation_type_change(sender, instance, created, **kwargs):
+    previous = getattr(instance, "_sgr_old_congratulation_flag", None)
+    if created or previous is None or previous == instance.is_congratulation:
+        return
+    goal_ids = Activity.objects.filter(
+        activity_type_id=instance.pk, deleted_at__isnull=True,
+        goal__period__status__iexact="Active",
+    ).values_list("goal_id", flat=True).distinct()
+    for goal_id in goal_ids:
+        _recalculate_goal(goal_id)
+
+
 @receiver([post_save, post_delete], sender=Evidence)
 def evidence_changed(sender, instance, **kwargs):
     goal_id = instance.activity.goal_id if instance.activity_id else None

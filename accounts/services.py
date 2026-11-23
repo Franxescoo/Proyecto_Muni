@@ -91,6 +91,7 @@ def create_user_account(form):
     profile = UserProfile.objects.create(
         user=user, employee=employee,
         employee_code=form.cleaned_data["employee_code"],
+        must_change_password=True,
         delegation=delegation,
         profile_photo=form.cleaned_data.get("profile_photo"),
     )

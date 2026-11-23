@@ -300,6 +300,19 @@ class ActivityForm(BootstrapMixin, forms.ModelForm):
                     "una actividad asociada a un período "
                     "cerrado."
                 )
+        # SGR-REGLAS-ACTIVIDADES-20261119: todas las metas comparten el cupo.
+        from .activity_rules import daily_capacity_exceeded
+        employee = cleaned_data.get("author")
+        day = cleaned_data.get("date")
+        if employee is not None and day is not None:
+            if daily_capacity_exceeded(
+                employee.pk, day, activity_pk=self.instance.pk,
+            ):
+                self.add_error(
+                    "date",
+                    "El funcionario ya tiene siete actividades registradas "
+                    "en este día, incluyendo las de otras metas.",
+                )
         return cleaned_data
 
 # ---------------------------------------------------------
@@ -640,6 +653,22 @@ class ValidationForm(BootstrapMixin, forms.ModelForm):
         ),
     )
 
+    # SGR-AUSENCIAS-RESULTADOS-20261121: valores internos estables.
+    # "Approved" es el valor que exige el cómputo actual de evidencias.
+    result = forms.ChoiceField(
+        label="Resultado",
+        required=True,
+        choices=[
+            ("", "Seleccione un resultado"),
+            ("Approved", "Aprobada"),
+            ("Observed", "Con observaciones"),
+            ("Rejected", "Rechazada"),
+            ("MoreInfo", "Solicitar más antecedentes"),
+            ("Conforme", "Conforme (sinónimo de aprobada)"),
+        ],
+        widget=forms.Select,
+    )
+
     class Meta:
         model = Validation
         fields = [
@@ -648,6 +677,7 @@ class ValidationForm(BootstrapMixin, forms.ModelForm):
             "decision",
             "date",
             "observation",
+            "formal_delegate_endorsement",
             "result",
             "version",
         ]
@@ -680,6 +710,16 @@ class ValidationForm(BootstrapMixin, forms.ModelForm):
 
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
+        # SGR-RESPALDO-FELICITACIONES-20261121: identidad del autenticado, jamás el nombre del selector.
+        self._sgr_endorsement_user = user
+        if self.instance.pk:
+            # Aval formal ya emitido: no puede revocarse editando el registro.
+            self.fields["formal_delegate_endorsement"].disabled = True
+        self.fields["formal_delegate_endorsement"].help_text = (
+            "Solo para felicitaciones: requiere carta o documento, una observación "
+            "fundada y la cuenta del delegado responsable autenticada. "
+            "La decisión y el resultado deben ser Approved."
+        )
         # La fecha de validación refleja cuándo se tomó la decisión.
         # No aceptamos fechas enviadas por el navegador, tampoco al editar.
         self.fields["date"].disabled = True
@@ -763,6 +803,13 @@ class ValidationForm(BootstrapMixin, forms.ModelForm):
                 ("result", 100, "El resultado"),
             ),
         )
+        # Un resultado histórico no catalogado puede consultarse/editarse sin
+        # alterar silenciosamente su valor anterior. No aparece en altas nuevas.
+        if self.instance.pk and self.instance.result:
+            choices = list(self.fields["result"].choices)
+            if self.instance.result not in {value for value, _ in choices}:
+                choices.append((self.instance.result, f"{self.instance.result} (histórico)"))
+                self.fields["result"].choices = choices
         self._apply_bootstrap()
 
     def clean_decision(self):
@@ -781,6 +828,10 @@ class ValidationForm(BootstrapMixin, forms.ModelForm):
             )
         return decision
 
+    def clean_result(self):
+        value = self.cleaned_data["result"]
+        return "Approved" if value == "Conforme" else value
+
     def clean(self):
         cleaned_data = super().clean()
         evidence = cleaned_data.get("evidence")
@@ -798,6 +849,46 @@ class ValidationForm(BootstrapMixin, forms.ModelForm):
                     "una validación asociada a un período "
                     "cerrado."
                 )
+        # SGR-RESPALDO-FELICITACIONES-20261121: autorización formal independiente de la revisión común.
+        if cleaned_data.get("formal_delegate_endorsement") and not self.instance.pk:
+            from .congratulation_endorsement import (
+                actual_delegate_employee, supporting_document_exists,
+            )
+            user = self._sgr_endorsement_user
+            evidence = cleaned_data.get("evidence")
+            verifier = cleaned_data.get("verifier")
+            if evidence is not None and verifier is not None:
+                kind = evidence.activity.activity_type
+                if kind is None or not kind.is_congratulation:
+                    self.add_error("formal_delegate_endorsement",
+                                   "El aval formal solo corresponde a tipos clasificados como felicitación.")
+                delegate = actual_delegate_employee(user, evidence)
+                if delegate is None or delegate.pk != verifier.pk:
+                    self.add_error("formal_delegate_endorsement",
+                                   "Solo el delegado responsable autenticado puede respaldar, "
+                                   "y debe figurar como verificador.")
+                if not supporting_document_exists(evidence):
+                    self.add_error("formal_delegate_endorsement",
+                                   "Debe existir una carta o documento de respaldo en Evidencias.")
+                if cleaned_data.get("decision") != "Approved":
+                    self.add_error("formal_delegate_endorsement",
+                                   "El aval exige una decisión Aprobada.")
+                result = (cleaned_data.get("result") or "").strip()
+                if result.casefold() in ("approved", "aprobado", "aprobada"):
+                    cleaned_data["result"] = "Approved"
+                else:
+                    self.add_error("result", "El resultado del aval debe ser Approved.")
+                if not (cleaned_data.get("observation") or "").strip():
+                    self.add_error("observation", "El delegado debe fundamentar formalmente el aval.")
+                if not self.errors:
+                    # La firma procede de la sesión autenticada, NO del POST.
+                    self.instance.delegate_endorsed_by = user
+                    self.instance.delegate_endorsed_at = timezone.now()
+                    self.instance._sgr_endorsement_actor = user
+        if cleaned_data.get("formal_delegate_endorsement") and self.instance.pk:
+            if not self.instance.formal_delegate_endorsement:
+                self.add_error("formal_delegate_endorsement",
+                               "Para emitir un aval nuevo, registra una validación nueva.")
         return cleaned_data
 
 # ---------------------------------------------------------
@@ -826,6 +917,8 @@ class ActivityTypeForm(BootstrapMixin, forms.ModelForm):
             "code",
             "name",
             "description",
+            "is_preparatory_coordination",
+            "is_congratulation",
             "status",
         ]
 
@@ -1298,6 +1391,16 @@ class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
             ),
         )
         existing = bool(self.instance.pk)
+        # SGR: para crear una atención se debe identificar un ciudadano
+        # registrado y activo; las atenciones antiguas conservan su edición.
+        if not existing:
+            self.fields["citizen_rut"].required = True
+            self.fields["citizen_rut"].error_messages["required"] = (
+                "Debes ingresar el RUT de un ciudadano registrado."
+            )
+            self.fields["citizen_rut"].help_text = (
+                "El ciudadano debe estar activo en el mantenedor Ciudadanos."
+            )
         if existing:
             self.fields["status"].required = False  # Formularios anteriores siguen siendo válidos.
             self.fields["status"].label = "Estado de la atención"
@@ -1433,9 +1536,19 @@ class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
 
     def clean_citizen_rut(self):
         from citizen_registry.rut import normalize_rut, validate_rut
+
         rut = normalize_rut(self.cleaned_data.get("citizen_rut"))
         if rut:
             validate_rut(rut)
+            # No basta con que el RUT tenga dígito verificador válido:
+            # al ingresar una atención debe existir en Ciudadanos y estar activo.
+            if not self.instance.pk and not Citizen.objects.filter(
+                rut=rut, is_active=True
+            ).exists():
+                raise forms.ValidationError(
+                    "El RUT no está registrado como ciudadano activo. "
+                    "Regístralo o reactívalo en Ciudadanos."
+                )
         return rut
 
     def clean_requester(self):
@@ -1475,6 +1588,33 @@ class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
             # el caso, no sus datos personales almacenados como referencia.
             for key in ("requester", "requester_email", "requester_phone", "address"):
                 cleaned_data[key] = getattr(self.instance, key)
+
+        # La atención se crea solo cuando el ciudadano tiene correo y dirección
+        # en el mantenedor. Esos campos son de solo lectura en este formulario,
+        # por lo que NO se aceptan valores del POST como sustituto del catálogo.
+        if not self.instance.pk and citizen is not None:
+            email = (citizen.email or "").strip()
+            if not email:
+                self.add_error(
+                    "requester_email",
+                    "El ciudadano no tiene correo registrado. "
+                    "Completa su ficha en Ciudadanos antes de crear la atención.",
+                )
+            else:
+                try:
+                    forms.EmailField().clean(email)
+                except forms.ValidationError:
+                    self.add_error(
+                        "requester_email",
+                        "El correo registrado en Ciudadanos no es válido. "
+                        "Corrígelo en el mantenedor.",
+                    )
+            if not (citizen.address or "").strip():
+                self.add_error(
+                    "address",
+                    "El ciudadano no tiene dirección registrada. "
+                    "Completa su ficha en Ciudadanos antes de crear la atención.",
+                )
         attention_type = cleaned_data.get("attention_type")
         sub_attention = cleaned_data.get("sub_attention")
         delegation = cleaned_data.get("delegation")

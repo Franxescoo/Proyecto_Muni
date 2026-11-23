@@ -65,6 +65,11 @@
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
             <div><h2 class="h5 mb-1 fw-bold">Registro de indicadores <button type="button" class="sgr-help-hint" title="El cumplimiento se calcula con el avance aprobado respecto del valor objetivo." aria-label="Ayuda sobre el cálculo del cumplimiento">?</button></h2><p class="text-muted small mb-0">Avance y cumplimiento calculado por fórmula. La acreditación exige el número de evidencias independientes aprobado en la meta.</p></div>
             <a class="btn btn-outline-secondary btn-sm" data-help="Descarga los indicadores visibles con los filtros y parámetros del período." href="{% url 'monitoring:indicator_export' %}?{{ request.GET.urlencode }}"><i class="bi bi-download me-1"></i>Exportar</a>
+            {% if can_manage_absences %}
+            <button type="button" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#absenceManagementModal">
+              <i class="bi bi-calendar2-check me-1" aria-hidden="true"></i> Ausencias
+            </button>
+            {% endif %}
         </div>
         {% if selected_period %}
         <div class="alert alert-info py-2 small" role="status">
@@ -89,7 +94,11 @@
                 <tr>
                     <td class="fw-semibold">{{ indicator.goal.item|visual_es|default:"Sin meta" }}</td>
                     <td>{{ indicator.employee|default:"Sin responsable" }}</td>
-                    <td class="text-end">{{ indicator.goal.required_evidence_count|default_if_none:"—" }}</td>
+                    <td class="text-end">{{ indicator.effective_evidence_requirement }}
+                        {% if indicator.absent_computable_days %}
+                        <div class="small text-muted">{{ indicator.absent_computable_days }} día(s) de ausencia</div>
+                        <div class="small text-muted" title="La meta original no se modifica.">Objetivo efectivo: {{ indicator.expected_value }} (original {{ indicator.goal.objective_value }})</div>
+                        {% endif %}</td>
                     <td class="text-end">{{ indicator.approved_evidences|default:"0" }}</td>
                     <td class="text-end">{{ indicator.actual_progress|floatformat:"0"|default_if_none:"—" }}</td>
                     <td class="text-end">{{ indicator.difference|floatformat:"0"|default_if_none:"—" }}</td>
@@ -146,6 +155,7 @@
     {% endif %}
     {% endfor %}
 </div>
+    {% include "monitoringfronen/_absence_modal.html" %}
 {% endblock %}
 
 {% block scripts %}

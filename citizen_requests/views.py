@@ -37,10 +37,17 @@ from .models import (
     CitizenRequest,
     CitizenRequestAction,
     CitizenRequestActionAttachment,
+    CitizenRequestActionProgress,
     RequestEvent,
 )
 from .storage import action_attachment_upload_to, safe_action_attachment_name
+# SGR_CIERRE_SEMANAL_V1
+from .weekly_models import CitizenRequestActionWeek, CitizenRequestActionWeekEvent
+from .weekly_rules import start_of_week, manage_week
+from django.utils import timezone
+from datetime import date, timedelta
 from .tracking import tracking_stages
+from .action_notifications import queue_action_notification
 from .notifications import (
     LOCAL_PUBLIC_PORTAL_URL,
     portal_link_text,
@@ -431,6 +438,7 @@ def _attention_delegation_access(request, delegation_id, permission):
 ACTION_VIEW_PERMISSION = "citizen_requests.view_citizenrequestaction"
 ACTION_ADD_PERMISSION = "citizen_requests.add_citizenrequestaction"
 ACTION_CHANGE_PERMISSION = "citizen_requests.change_citizenrequestaction"
+WEEK_PERMISSION = "citizen_requests.manage_citizenrequestaction_week"  # SGR_CIERRE_SEMANAL_V1
 
 
 def _action_request_for_permission(request, request_id, permission):
@@ -463,6 +471,14 @@ def _actions_in_user_scope(user, queryset, permission):
     if allowed_ids is not None:
         queryset = queryset.filter(delegation_id__in=allowed_ids)
     return queryset
+
+
+def _enforce_action_owner(request, action):
+    """Cada gestión solo se modifica desde la cuenta que la registró."""
+    if action.registered_by_id != request.user.pk:
+        raise PermissionDenied(
+            "Solo el funcionario que registró esta gestión puede modificarla."
+        )
 
 
 def _save_action_attachments(action, user, uploaded_files):
@@ -666,6 +682,23 @@ def _serialize_action_timeline_item(action, request):
         "responsible": action.responsible.name,
         "description": action.description,
         "outcome": action.outcome,
+        "executor": action.executor_name,
+        "executor_type": action.get_executor_type_display() if action.executor_type else "",
+        "execution_status": action.get_execution_status_display() if action.execution_status else "",
+        "expected_execution_date": (
+            action.expected_execution_date.isoformat()
+            if action.expected_execution_date else None
+        ),
+        "progress_history": [
+            {
+                "previous_status": p.previous_status,
+                "new_status": p.new_status,
+                "note": p.note,
+                "recorded_at": p.recorded_at.isoformat(),
+                "recorded_by": p.recorded_by.get_username(),
+            }
+            for p in action.progress_events.select_related("recorded_by").all()
+        ],
         "attachments": attachments,
         "can_edit": can_edit,
         "edit_url": (
@@ -1126,19 +1159,46 @@ def request_action_list(request, request_id):
             "responsible",
             "delegation",
             "registered_by",
-        ).prefetch_related("attachments"),
+        ).prefetch_related("attachments", "progress_events__recorded_by"),
         ACTION_VIEW_PERMISSION,
     )
+    closed_starts = set(
+        CitizenRequestActionWeek.objects.filter(
+            delegation_id=citizen_request.delegation_id,
+            is_closed=True,
+        ).values_list("week_start", flat=True)
+    )
     for action in actions:
-        action.can_edit = _attention_delegation_access(
-            request,
-            action.delegation_id,
-            ACTION_CHANGE_PERMISSION,
+        action.can_edit = (
+            _attention_delegation_access(
+                request,
+                action.delegation_id,
+                ACTION_CHANGE_PERMISSION,
+            )
+            and action.registered_by_id == request.user.pk
+            and start_of_week(action.performed_at) not in closed_starts
         )
-    can_add = _attention_delegation_access(
-        request,
-        citizen_request.delegation_id,
-        ACTION_ADD_PERMISSION,
+        transitions = {
+            "PENDING": [("COORDINATED", "Marcar coordinado"), ("IN_PROGRESS", "Iniciar ejecución")],
+            "COORDINATED": [("IN_PROGRESS", "Iniciar ejecución"), ("FINISHED", "Finalizar trabajo")],
+            "IN_PROGRESS": [("FINISHED", "Finalizar trabajo")],
+            "FINISHED": [("PENDING", "Reabrir gestión")],
+        }
+        attention = citizen_request.attention_entry
+        is_closed = bool(
+            citizen_request.status == "CLOSED"
+            or (attention and attention.status in {"RESOLVED", "CLOSED", "REJECTED"})
+        )
+        action.next_states = transitions.get(action.execution_status, []) if not is_closed else []
+        action.can_edit_form = bool(
+            action.can_edit and not is_closed
+            and action.execution_status != "FINISHED"
+        )
+    can_add = (
+        _attention_delegation_access(
+            request, citizen_request.delegation_id, ACTION_ADD_PERMISSION,
+        )
+        and not _action_attention_is_finalized(citizen_request)
     )
     return render(
         request,
@@ -1147,8 +1207,94 @@ def request_action_list(request, request_id):
             "citizen_request": citizen_request,
             "actions": actions,
             "can_add": can_add,
+            "can_manage_week": _attention_delegation_access(
+                request, citizen_request.delegation_id, WEEK_PERMISSION,
+            ),
+            "weekly_closures": (
+                CitizenRequestActionWeek.objects.filter(
+                    delegation_id=citizen_request.delegation_id,
+                ).select_related("closed_by")[:15]
+            ),
+            "weekly_events": (
+                CitizenRequestActionWeekEvent.objects.filter(
+                    week__delegation_id=citizen_request.delegation_id,
+                ).select_related("actor", "week")[:15]
+            ),
+            "last_week_start": (
+                start_of_week(timezone.localdate()) - timedelta(days=7)
+            ).isoformat(),
         },
     )
+
+
+def _action_attention_is_finalized(citizen_request):
+    attention = citizen_request.attention_entry
+    return citizen_request.status == "CLOSED" or bool(
+        attention and attention.status in {"RESOLVED", "CLOSED", "REJECTED"}
+    )
+
+
+@login_required
+@require_POST
+def update_request_action_progress(request, request_id, action_id):
+    """Estados separados de los de atención. Reutiliza change_citizenrequestaction."""
+    citizen_request = _action_request_for_permission(
+        request, request_id, ACTION_CHANGE_PERMISSION,
+    )
+    allowed = {
+        "PENDING": {"COORDINATED", "IN_PROGRESS"},
+        "COORDINATED": {"IN_PROGRESS", "FINISHED"},
+        "IN_PROGRESS": {"FINISHED"},
+        "FINISHED": {"PENDING"},
+    }
+    with transaction.atomic():
+        action = get_object_or_404(
+            _actions_in_user_scope(
+                request.user,
+                CitizenRequestAction.objects.filter(request=citizen_request),
+                ACTION_CHANGE_PERMISSION,
+            ).select_for_update(),
+            pk=action_id,
+        )
+        _enforce_action_owner(request, action)
+        if not _attention_delegation_access(
+            request, action.delegation_id, ACTION_CHANGE_PERMISSION,
+        ):
+            raise PermissionDenied("No tienes permiso para actualizar esta gestión.")
+        # Nunca se modifica una atención resuelta o cerrada a través de su gestión.
+        if _action_attention_is_finalized(citizen_request):
+            messages.error(request, "Primero debes reabrir la atención para actualizar esta gestión.")
+            return redirect("citizen_requests:request_action_list", request_id=request_id)
+
+        new_status = (request.POST.get("new_status") or "").strip()
+        original_status = action.execution_status
+        expected = (request.POST.get("expected_status") or "").strip()
+        note = (request.POST.get("note") or "").strip()
+        if not action.executor_type or not action.executor_name:
+            messages.error(request, "Esta gestión no tiene un encargo registrado.")
+        elif expected != original_status:
+            messages.error(request, "El estado cambió. Actualiza el listado e inténtalo nuevamente.")
+        elif new_status not in allowed.get(original_status, set()):
+            messages.error(request, "Transición de estado no permitida.")
+        elif not note or len(note) > 1000:
+            messages.error(request, "Escribe una observación de 1 a 1000 caracteres.")
+        else:
+            action.execution_status = new_status
+            action.save(update_fields=["execution_status", "updated_at"])
+            CitizenRequestActionProgress.objects.create(
+                action=action,
+                previous_status=original_status,
+                new_status=new_status,
+                note=note,
+                recorded_by=request.user,
+            )
+            # Eventos relevantes de avance; no se avisa por COORDINATED.
+            if new_status in {"IN_PROGRESS", "FINISHED"}:
+                queue_action_notification(action.pk, new_status)
+            elif original_status == "FINISHED" and new_status == "PENDING":
+                queue_action_notification(action.pk, "REOPENED")
+            messages.success(request, "Seguimiento de la gestión actualizado.")
+    return redirect("citizen_requests:request_action_list", request_id=request_id)
 
 
 @login_required
@@ -1159,6 +1305,9 @@ def create_request_action(request, request_id):
         request_id,
         ACTION_ADD_PERMISSION,
     )
+    if _action_attention_is_finalized(citizen_request):
+        messages.error(request, "Primero debes reabrir la atención para registrar o modificar gestiones.")
+        return redirect("citizen_requests:request_action_list", request_id=citizen_request.pk)
     form = CitizenRequestActionForm(
         data=request.POST if request.method == "POST" else None,
         files=request.FILES if request.method == "POST" else None,
@@ -1173,12 +1322,17 @@ def create_request_action(request, request_id):
     if request.method == "POST" and form.is_valid():
         try:
             with transaction.atomic():
+                # SGR_CIERRE_SEMANAL_V1: evita carreras con cierre semanal.
+                Delegation.objects.select_for_update().get(
+                    pk=citizen_request.delegation_id,
+                )
                 action = form.save()
                 _save_action_attachments(
                     action,
                     request.user,
                     form.cleaned_data.get("attachments", []),
                 )
+                queue_action_notification(action.pk, "ASSIGNED")
         except (
             DatabaseError,
             OSError,
@@ -1246,6 +1400,12 @@ def edit_request_action(request, request_id, action_id):
         actions.select_related("responsible", "delegation", "registered_by"),
         pk=action_id,
     )
+    _enforce_action_owner(request, action)
+    # SGR_BLOQUEO_FINALIZADA_SERVIDOR_V1: control del servidor, incluso por URL directa.
+    if action.execution_status == "FINISHED":
+        raise PermissionDenied(
+            "La gestion esta finalizada. Debes reabrirla antes de modificarla."
+        )
     if not _attention_delegation_access(
         request,
         action.delegation_id,
@@ -1254,7 +1414,17 @@ def edit_request_action(request, request_id, action_id):
         raise PermissionDenied(
             "La gestión no pertenece a tu delegación activa autorizada."
         )
+    # SGR_CIERRE_SEMANAL_V1: la semana cerrada es solo lectura.
+    if CitizenRequestActionWeek.objects.filter(
+        delegation_id=action.delegation_id,
+        week_start=start_of_week(action.performed_at),
+        is_closed=True,
+    ).exists():
+        raise PermissionDenied("La semana de esta gestión está cerrada.")
 
+    if _action_attention_is_finalized(citizen_request):
+        messages.error(request, "Primero debes reabrir la atención para registrar o modificar gestiones.")
+        return redirect("citizen_requests:request_action_list", request_id=citizen_request.pk)
     form = CitizenRequestActionForm(
         data=request.POST if request.method == "POST" else None,
         files=request.FILES if request.method == "POST" else None,
@@ -1268,14 +1438,70 @@ def edit_request_action(request, request_id, action_id):
         ACTION_VIEW_PERMISSION,
     )
     if request.method == "POST" and form.is_valid():
+        # Se calcula antes de form.save(), porque guardar actualiza la instancia.
+        # La casilla no forma parte del modelo ni requiere una migración.
+        # MultipleFileInput devuelve [] si nadie adjuntó archivos; Django
+        # puede considerar ese [] un cambio aunque no haya ninguna subida.
+        # Evitar correos al marcar la casilla y guardar sin modificaciones.
+        changed_fields = tuple(
+            field for field in form.changed_data
+            if field != "attachments" or bool(form.cleaned_data.get("attachments"))
+        )
+        notify_citizen = request.POST.get("notify_citizen") == "on"
         try:
             with transaction.atomic():
+                # Comprobar el estado actual con bloqueo para evitar carreras.
+                db_status = (
+                    CitizenRequestAction.objects.select_for_update()
+                    .filter(pk=action.pk)
+                    .values_list("execution_status", flat=True)
+                    .first()
+                )
+                if db_status == "FINISHED":
+                    raise PermissionDenied(
+                        "La gestion fue finalizada. Debes reabrirla antes de modificarla."
+                    )
+                # Consultar la BD: ModelForm.is_valid() ya mutó la instancia.
+                previous_executor = (
+                    CitizenRequestAction.objects.filter(pk=action.pk)
+                    .values("executor_type", "executor_name")
+                    .first()
+                )
                 action = form.save()
                 _save_action_attachments(
                     action,
                     request.user,
                     form.cleaned_data.get("attachments", []),
                 )
+                # Solo avisar por cambio real de tipo o nombre del ejecutor.
+                # Cambiar contacto, fecha u observaciones NO envía otro correo.
+                # Los cambios de ejecutor EXTERNO ya envían un correo automático.
+                # La casilla no debe generar un segundo aviso por el mismo guardado.
+                auto_executor_notice = bool(
+                    previous_executor
+                    and (
+                        previous_executor["executor_type"] != action.executor_type
+                        or previous_executor["executor_name"] != action.executor_name
+                    )
+                    and action.executor_type in {"COMPANY", "TECHNICIAN"}
+                    and (action.executor_name or "").strip()
+                )
+                if auto_executor_notice:
+                    event = (
+                        "ASSIGNED" if not previous_executor["executor_type"]
+                        else "REASSIGNED"
+                    )
+                    # Si el funcionario marcó la casilla, incluir también
+                    # fechas u otros campos públicos en ESTE mismo correo.
+                    queue_action_notification(
+                        action.pk, event,
+                        changed_fields=changed_fields if notify_citizen else (),
+                    )
+                elif notify_citizen and changed_fields:
+                    # No se envían descripciones, observaciones ni contactos.
+                    queue_action_notification(
+                        action.pk, "UPDATED", changed_fields=changed_fields,
+                    )
         except (
             DatabaseError,
             OSError,
@@ -1498,4 +1724,35 @@ def view_attention_from_request(request, request_id):
             "citizen_request": citizen_request,
             "attention_entry": citizen_request.attention_entry,
         },
+    )
+
+# SGR_CIERRE_SEMANAL_V1: cerrar/reabrir por delegación, con un solo permiso.
+@login_required
+@require_POST
+def manage_request_action_week(request, request_id):
+    citizen_request = _action_request_for_permission(
+        request, request_id, WEEK_PERMISSION,
+    )
+    operation = request.POST.get("operation", "")
+    raw_date = request.POST.get("week_start", "")
+    reason = request.POST.get("reason", "")
+    try:
+        monday = date.fromisoformat(raw_date)
+        manage_week(
+            delegation_id=citizen_request.delegation_id,
+            monday=monday,
+            action=operation,
+            actor=request.user,
+            reason=reason,
+        )
+    except (ValueError, ValidationError) as exc:
+        description = " ".join(exc.messages) if isinstance(exc, ValidationError) else "Selecciona una fecha válida."
+        messages.error(request, description)
+    else:
+        messages.success(
+            request, "Semana cerrada correctamente." if operation == "close"
+            else "Semana reabierta correctamente. Motivo registrado en historial."
+        )
+    return redirect(
+        "citizen_requests:request_action_list", request_id=citizen_request.pk,
     )

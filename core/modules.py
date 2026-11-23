@@ -125,6 +125,19 @@ MODULES = [
                 "url": "registration:attention_entry_list",
                 "perm": "registration_validation.view_attentionentry",
             },
+            # SGR-CARDS-TUBOS-TEST-RUT-20261123: igual que los accesos de la barra lateral.
+            {
+                "title": "Tubo de seguimiento",
+                "icon": "bi-diagram-3",
+                "url": "citizen_requests:tubo_seguimiento",
+                "perm": "citizen_requests.view_citizenrequestaction",
+            },
+            {
+                "title": "Tubo de cartas",
+                "icon": "bi-envelope-paper",
+                "url": "citizen_requests:tubo_cartas",
+                "perm": "citizen_requests.view_citizenrequestaction",
+            },
         ],
     },
 

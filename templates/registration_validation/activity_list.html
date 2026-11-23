@@ -236,6 +236,7 @@
                         <th>Tipo de actividad</th>
                         <th>Fecha</th>
                         <th>Estado</th>
+                        <th>Validación de evidencias</th>
                         <th>Período</th>
                         <th class="text-end">Acciones</th>
                     </tr>
@@ -300,6 +301,15 @@
 
                         </td>
 
+                        <td>
+                            {% if activity.sgr_approval_is_complete %}
+                            <span class="status status-green">{{ activity.sgr_approval_label }}</span>
+                            {% elif activity.sgr_approval_label == "Sin evidencias" %}
+                            <span class="status status-muted">Sin evidencias</span>
+                            {% else %}
+                            <span class="status status-yellow">{{ activity.sgr_approval_label }}</span>
+                            {% endif %}
+                        </td>
 
                         <td class="small">
 
@@ -326,7 +336,7 @@
 
                         <td class="text-end">
 
-                            {% if activity.goal.period.status == "Closed" %}
+                            {% if activity.goal.period.status == "Closed" or activity.sgr_approved_lock %}
 
                             <span class="status status-muted">
                                 Solo lectura

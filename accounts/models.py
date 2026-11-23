@@ -13,6 +13,10 @@ class UserProfile(BaseModel):
     )
 
     employee_code = models.CharField(max_length=30, unique=True)
+    # Cuentas existentes conservan acceso; nuevas reciben contrasena temporal.
+    must_change_password = models.BooleanField(
+        default=False, verbose_name="Debe cambiar contraseña inicial",
+    )
     phone = models.CharField(max_length=20, blank=True)
     profile_photo = models.ImageField(
         upload_to="profile_photos/",

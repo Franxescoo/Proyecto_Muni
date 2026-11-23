@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block titulo %}Seguimiento de carta · SGR{% endblock %}
+{% block contenido %}
+<div class="container py-4" style="max-width:1150px">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+        <div>
+            <div class="text-uppercase text-danger small fw-semibold">Registro y validación · Correspondencia</div>
+            <h1 class="h3 mt-1">{{ letter.get_kind_display }} · Seguimiento</h1>
+            <p class="text-muted mb-0">Solicitud #{{ citizen_request.pk }} · Código <strong>{{ citizen_request.tracking_code }}</strong></p>
+        </div>
+        <a class="btn btn-outline-secondary" href="{% url 'citizen_requests:tubo_cartas' %}">Volver al Tubo de cartas</a>
+    </div>
+    <div class="alert alert-light border mb-3">Esta carta está vinculada a <strong>una única solicitud</strong>. La atención y las gestiones se administran desde ese mismo expediente, sin crear registros duplicados.</div>
+    <div class="card mb-3"><div class="card-body">
+        <h2 class="h5">Datos del expediente</h2>
+        <div class="row g-3">
+            <div class="col-md-4"><strong>Tipo:</strong> {{ letter.get_kind_display }}</div>
+            <div class="col-md-4"><strong>Folio:</strong> {{ letter.external_folio|default:"Sin folio externo" }}</div>
+            <div class="col-md-4"><strong>Recepción:</strong> {{ letter.received_at|date:"d/m/Y H:i" }}</div>
+            {% if letter.sender_institution %}<div class="col-md-6"><strong>Remitente institucional:</strong> {{ letter.sender_institution }}</div>{% endif %}
+            <div class="col-md-6"><strong>Solicitante:</strong> {{ citizen_request.requester_name }}</div>
+            <div class="col-md-6"><strong>Estado:</strong> {{ citizen_request.get_status_display }}</div>
+            <div class="col-12"><strong>Asunto:</strong> {{ citizen_request.subject }}</div>
+            <div class="col-12"><strong>Descripción:</strong><div>{{ citizen_request.description|linebreaksbr }}</div></div>
+        </div>
+    </div></div>
+    <div class="card mb-3"><div class="card-body">
+        <h2 class="h5 mb-3">Acciones de seguimiento</h2>
+        <div class="d-flex flex-wrap gap-2">
+            <a class="btn btn-danger" href="{% url 'citizen_requests:request_action_list' citizen_request.pk %}">Ver gestiones de esta solicitud</a>
+            {% if can_view_attention %}
+            <a class="btn btn-outline-danger" href="{% url 'citizen_requests:view_attention_from_request' citizen_request.pk %}">Abrir atención vinculada</a>
+            {% elif can_create_attention %}
+            <a class="btn btn-outline-danger" href="{% url 'citizen_requests:create_attention_from_request' citizen_request.pk %}">Crear atención desde esta solicitud</a>
+            {% else %}
+            <span class="text-muted align-self-center">Sin acción de atención habilitada para este usuario o estado.</span>
+            {% endif %}
+        </div>
+    </div></div>
+    <div class="card"><div class="card-body">
+        <h2 class="h5 mb-3">Historial de la solicitud</h2>
+        {% for event in events %}
+        <div class="border-bottom py-2">
+            <div class="small text-muted">{{ event.created_at|date:"d/m/Y H:i" }}{% if event.actor %} · {{ event.actor.get_username }}{% endif %}</div>
+            <div>{{ event.observation|linebreaksbr }}</div>
+        </div>
+        {% empty %}
+        <p class="text-muted mb-0">Aún no hay movimientos en el historial.</p>
+        {% endfor %}
+    </div></div>
+</div>
+{% endblock %}

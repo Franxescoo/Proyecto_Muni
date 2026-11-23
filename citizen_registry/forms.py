@@ -28,6 +28,12 @@ class CitizenForm(forms.ModelForm):
             else:
                 field.widget.attrs["class"] = "form-control"
         self.fields["address"].required = True
+        # Correo obligatorio en crear/editar Ciudadanos. La columna de BD
+        # sigue admitiendo vacíos para preservar registros históricos.
+        self.fields["email"].required = True
+        self.fields["email"].error_messages["required"] = (
+            "El correo electrónico es obligatorio para registrar o modificar un ciudadano."
+        )
         self.fields["organization_role"].required = False
 
     def clean_rut(self):

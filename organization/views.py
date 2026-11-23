@@ -329,6 +329,12 @@ def _sync_employee_account(employee, form):
         },
     )
     profile.authorized_delegations.set(delegations or [primary])
+    # La clave asignada desde Empleados es temporal, tanto para cuentas
+    # nuevas como para restablecimientos administrativos de cuentas existentes.
+    # Editar otros datos sin cambiar la clave conserva el estado previo.
+    if password:
+        profile.must_change_password = True
+        profile.save(update_fields=["must_change_password", "updated_at"])
     # El formulario de Empleados es el origen principal de la fotografía.
     # Los dos campos ImageField apuntan al mismo archivo (sin duplicarlo).
     # Recuperar una foto histórica de la cuenta si el empleado aún no tiene.
@@ -515,14 +521,20 @@ def _handle_mutations(
                     )
 
             elif isinstance(form, PositionForm):
-                # Impedir modificar los roles del cargo propio.
+                # Bloquear la autoasignación de roles nuevos. Excepción segura:
+                # reparar la relación Cargo -> Roles cuando la cuenta YA posee
+                # exactamente esos roles (herencia antigua desincronizada).
                 actor_employee = getattr(getattr(request.user, "profile", None), "employee", None)
                 if (instance is not None and actor_employee is not None
                     and actor_employee.position_id == instance.pk):
                     old_ids = set(instance.role_groups.values_list("pk", flat=True))
                     new_ids = set(form.cleaned_data["role_groups"].values_list("pk", flat=True))
-                    if old_ids != new_ids:
-                        raise PermissionDenied("No puedes modificar los roles de tu propio cargo.")
+                    account_ids = set(request.user.groups.values_list("pk", flat=True))
+                    if old_ids != new_ids and new_ids != account_ids:
+                        raise PermissionDenied(
+                            "No puedes modificar los roles de tu propio cargo "
+                            "salvo para sincronizar los roles que ya tienes."
+                        )
                 if not request.user.is_superuser:
                     granted = request.user.get_all_permissions()
                     for group in form.cleaned_data["role_groups"].prefetch_related("permissions__content_type"):

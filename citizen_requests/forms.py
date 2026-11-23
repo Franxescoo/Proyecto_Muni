@@ -10,6 +10,7 @@ from .models import (
     CitizenRequest,
     CitizenRequestAction,
     CitizenRequestActionAttachment,
+    CitizenRequestActionProgress,
 )
 from .storage import (
     MAX_ACTION_ATTACHMENT_SIZE,
@@ -135,15 +136,27 @@ class CitizenRequestActionForm(forms.ModelForm):
             "performed_at",
             "description",
             "outcome",
+            "executor_type",
+            "executor_name",
+            "executor_contact",
+            "expected_execution_date",
         ]
         labels = {
             "responsible": "Funcionario responsable",
             "action_type": "Tipo de actuación",
             "description": "Descripción de la actuación",
             "outcome": "Resultado u observaciones",
+            "executor_type": "Tipo de ejecutor",
+            "executor_name": "Nombre de empresa o encargado",
+            "executor_contact": "Contacto de coordinación",
+            "expected_execution_date": "Fecha prevista de intervención",
         }
         widgets = {
             "responsible": forms.Select(attrs={"class": "form-select"}),
+            "executor_type": forms.Select(attrs={"class": "form-select"}),
+            "executor_name": forms.TextInput(attrs={"class": "form-control", "placeholder": "Ej. CGE"}),
+            "executor_contact": forms.TextInput(attrs={"class": "form-control", "placeholder": "Teléfono o correo"}),
+            "expected_execution_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "action_type": forms.Select(attrs={"class": "form-select"}),
             "description": forms.Textarea(
                 attrs={"class": "form-control", "rows": 4},
@@ -333,6 +346,35 @@ class CitizenRequestActionForm(forms.ModelForm):
                 "superar 50 MB.",
             )
 
+        executor_type = cleaned_data.get("executor_type")
+        executor_name = (cleaned_data.get("executor_name") or "").strip()
+        if executor_type and not executor_name:
+            self.add_error("executor_name", "Indica quién realizará el trabajo.")
+        if not executor_type and (
+            executor_name or cleaned_data.get("executor_contact")
+            or cleaned_data.get("expected_execution_date")
+        ):
+            self.add_error("executor_type", "Selecciona el tipo de ejecutor.")
+        if self.is_editing and self.instance.execution_status == "FINISHED":
+            raise forms.ValidationError(
+                "Esta gestión finalizó. Primero utiliza Reabrir gestión para modificarla."
+            )
+        # SGR_CIERRE_SEMANAL_V1: mensaje inmediato en el formulario.
+        performed_at = cleaned_data.get("performed_at")
+        if performed_at is not None and self.action_delegation_id:
+            from .weekly_rules import assert_week_open
+            try:
+                assert_week_open(self.action_delegation_id, performed_at)
+                if self.is_editing:
+                    old_time = (
+                        CitizenRequestAction.objects.filter(pk=self.instance.pk)
+                        .values_list("performed_at", flat=True).first()
+                    )
+                    if old_time is not None:
+                        assert_week_open(self.action_delegation_id, old_time)
+            except ValidationError as error:
+                self.add_error("performed_at", error)
+
         return cleaned_data
 
     def save(self, commit=True):
@@ -350,9 +392,43 @@ class CitizenRequestActionForm(forms.ModelForm):
             instance.delegation_id = self.action_delegation_id
             instance.registered_by = self.user
 
+        # La creación de un encargo no cambia el estado de la atención.
+        original_executor = None
+        if self.is_editing:
+            original_executor = CitizenRequestAction.objects.filter(pk=instance.pk).values(
+                "executor_type", "executor_name", "executor_contact",
+                "expected_execution_date",
+            ).first()
+        changed_executor = bool(
+            original_executor is not None and any(
+                original_executor[field] != getattr(instance, field)
+                for field in ("executor_type", "executor_name", "executor_contact", "expected_execution_date")
+            )
+        )
+        first_assignment = bool(instance.executor_type and not instance.execution_status)
+        if first_assignment:
+            instance.execution_status = "PENDING"
         if commit:
             instance.save()
             self.save_m2m()
+            if first_assignment:
+                CitizenRequestActionProgress.objects.create(
+                    action=instance,
+                    previous_status="",
+                    new_status="PENDING",
+                    note=f"Encargo registrado. Ejecutor: {instance.executor_name}.",
+                    recorded_by=self.user,
+                )
+            elif changed_executor:
+                CitizenRequestActionProgress.objects.create(
+                    action=instance,
+                    previous_status=instance.execution_status,
+                    new_status=instance.execution_status,
+                    note=("Datos del ejecutor modificados. Antes: "
+                          f"{original_executor['executor_name'] or 'Sin ejecutor'}; "
+                          f"ahora: {instance.executor_name or 'Sin ejecutor'}."),
+                    recorded_by=self.user,
+                )
         return instance
 
 

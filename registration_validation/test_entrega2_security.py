@@ -8,6 +8,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from accounts.models import UserProfile
+from citizen_registry.models import Citizen
 from organization.models import Delegation, Employee, OrganizationRole, PositionFunction
 from citizen_requests.models import CitizenRequest
 from .models import AttentionEntry, AttentionType, SubAttention
@@ -164,7 +165,16 @@ class Entrega2SecurityTests(TestCase):
         self.assertEqual(res.status_code, 403)
 
     def test_create_attention_auto_sets_account_employee_and_delegation(self):
+        citizen = Citizen.objects.create(
+            rut="76.543.210-3", full_name="Sol Norte", email="vecino@example.com",
+            phone="+56 9 1111 2222", address="Dirección Norte",
+        )
+        self.user.user_permissions.add(Permission.objects.get(
+            content_type__app_label="citizen_registry", codename="view_citizen",
+        ))
+        self.client.force_login(self.user)
         response = self.client.post(reverse("registration:attention_entry_create"), {
+            "citizen_rut": citizen.rut,
             "requester": "Sol Norte", "attention_type": self.type.pk,
             "sub_attention": self.sub.pk, "description": "Solicita orientación",
             "delegation": self.south.pk,  # forged value is ignored

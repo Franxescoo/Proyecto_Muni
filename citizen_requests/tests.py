@@ -14,6 +14,7 @@ from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
 from accounts.models import UserProfile
+from citizen_registry.models import Citizen
 from organization.models import (
     Delegation,
     Employee,
@@ -777,6 +778,13 @@ class RequestInboxTests(TestCase):
                 codename="derivar_solicitud",
             )
         )
+        # El formulario exige buscar la ficha central del ciudadano.
+        cls.group.permissions.add(
+            Permission.objects.get(
+                content_type__app_label="citizen_registry",
+                codename="view_citizen",
+            )
+        )
         cls.user.groups.add(cls.group)
 
     def setUp(self):
@@ -796,6 +804,16 @@ class RequestInboxTests(TestCase):
             description=f"Descripción {suffix}",
             delegation=delegation,
             status=status,
+        )
+
+    def make_registered_citizen(self, citizen_request):
+        """Ficha activa de prueba: nunca omitir el RUT ni el correo al crear atención."""
+        return Citizen.objects.create(
+            rut="12.345.678-5",  # RUT sintético con dígito verificador válido.
+            full_name=citizen_request.requester_name,
+            email=citizen_request.requester_email,
+            phone=citizen_request.requester_phone,
+            address=citizen_request.address,
         )
 
     def attention_url(self, request):
@@ -919,13 +937,33 @@ class RequestInboxTests(TestCase):
         self.assertIsNotNone(citizen_request.attention_entry_id)
         self.assertEqual(citizen_request.events.count(), 0)
 
+    def test_create_attention_without_registered_rut_stays_uncreated(self):
+        citizen_request = self.make_request("sin-rut", self.north)
+        response = self.client.post(
+            self.attention_url(citizen_request),
+            {
+                "requester": citizen_request.requester_name,
+                "attention_type": self.attention_type.pk,
+                "sub_attention": self.sub_attention.pk,
+                "description": citizen_request.description,
+                "delegation": self.north.pk,
+                "responsible_employee": self.employee.pk,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "RUT")
+        citizen_request.refresh_from_db()
+        self.assertIsNone(citizen_request.attention_entry_id)
+
     def test_create_attention_from_derived_request_copies_citizen_data(self):
         citizen_request = self.make_request("crear", self.north)
+        citizen = self.make_registered_citizen(citizen_request)
 
         response = self.client.post(
             self.attention_url(citizen_request),
             {
                 "requester": citizen_request.requester_name,
+                "citizen_rut": citizen.rut,
                 "attention_type": self.attention_type.pk,
                 "sub_attention": self.sub_attention.pk,
                 "description": citizen_request.description,
@@ -955,11 +993,13 @@ class RequestInboxTests(TestCase):
 
     def test_create_attention_accepts_linked_employee_from_original_modal(self):
         citizen_request = self.make_request("funcionario-vinculado", self.north)
+        citizen = self.make_registered_citizen(citizen_request)
 
         response = self.client.post(
             self.attention_url(citizen_request),
             {
                 "requester": citizen_request.requester_name,
+                "citizen_rut": citizen.rut,
                 "attention_type": self.attention_type.pk,
                 "sub_attention": self.sub_attention.pk,
                 "description": citizen_request.description,
@@ -1022,8 +1062,10 @@ class RequestInboxTests(TestCase):
 
     def test_linked_attention_cannot_be_created_twice_and_can_be_viewed(self):
         citizen_request = self.make_request("duplicada", self.north)
+        citizen = self.make_registered_citizen(citizen_request)
         data = {
             "requester": citizen_request.requester_name,
+            "citizen_rut": citizen.rut,
             "attention_type": self.attention_type.pk,
             "sub_attention": self.sub_attention.pk,
             "description": citizen_request.description,
@@ -1087,6 +1129,7 @@ class RequestInboxTests(TestCase):
 
     def test_creating_attention_does_not_change_citizen_request_data(self):
         citizen_request = self.make_request("inmutable", self.north)
+        citizen = self.make_registered_citizen(citizen_request)
         original = {
             "email": citizen_request.requester_email,
             "phone": citizen_request.requester_phone,
@@ -1099,6 +1142,7 @@ class RequestInboxTests(TestCase):
             self.attention_url(citizen_request),
             {
                 "requester": "Otro nombre enviado",
+                "citizen_rut": citizen.rut,
                 "requester_email": "otro@example.com",
                 "requester_phone": "000",
                 "address": "Otra dirección",

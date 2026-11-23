@@ -6,6 +6,11 @@ from .delegation_context import change_active_delegation
 app_name = "accounts"
 
 urlpatterns = [
+    path(
+        "primer-ingreso/cambiar-contrasena/",
+        views.first_login_password_change,
+        name="first_login_password_change",
+    ),
     path("profile/", views.profile_view, name="profile"),
     path(
         "profile/photo/",
