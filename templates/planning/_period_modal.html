@@ -105,8 +105,8 @@
                                     <th>Funcionario</th>
                                     <th>Cargo</th>
                                     <th>Ítem</th>
-                                    <th>Valor objetivo</th>
-                                    <th>Evidencias requeridas</th>
+                                    <th>Objetivo / atenciones requeridas</th>
+                                    <th>Evidencias (histórico, no aplica)</th>
                                     <th>Unidad</th>
                                     <th>Ponderador</th>
                                 </tr>
@@ -396,3 +396,49 @@
 </div>
 {% endif %}
 {% endif %}
+
+{# Modal del período: el campo histórico de evidencias permanece en BD; #}
+{# no se solicita visualmente cuando la meta mide atenciones. #}
+<script>
+(function () {
+  const normalizar = v => (v || '').normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  function actualizar(fila) {
+    const item = fila.querySelector('select[name$="-measurement_item"]');
+    const objetivo = fila.querySelector('input[name$="-objective_value"]');
+    const evidencia = fila.querySelector('input[name$="-required_evidence_count"]');
+    if (!item || !objetivo || !evidencia) return;
+    let datos = {};
+    try { datos = JSON.parse(item.dataset.itemDetails || '{}'); } catch (_) { return; }
+    const seleccionado = datos[item.value] || null;
+    const esAtenciones = Boolean(seleccionado &&
+      seleccionado.tipo === 'Cuantitativo');
+    const celda = evidencia.closest('td');
+    if (celda) {
+      evidencia.style.display = esAtenciones ? 'none' : '';
+      let aviso = celda.querySelector('.sgr-atenciones-no-aplica');
+      if (esAtenciones && !aviso) {
+        aviso = document.createElement('span');
+        aviso.className = 'sgr-atenciones-no-aplica small text-muted';
+        aviso.textContent = 'No aplica';
+        celda.appendChild(aviso);
+      }
+      if (aviso) aviso.hidden = !esAtenciones;
+    }
+    objetivo.setAttribute('aria-label', esAtenciones ?
+      'Atenciones requeridas' : 'Valor objetivo');
+  }
+  function sincronizar() {
+    document.querySelectorAll('#goals-body tr, #empty-row tr').forEach(actualizar);
+  }
+  document.addEventListener('DOMContentLoaded', sincronizar);
+  document.addEventListener('change', function(e) {
+    if (e.target.matches('select[name$="-measurement_item"]')) {
+      actualizar(e.target.closest('tr'));
+    }
+  });
+  document.addEventListener('click', function(e) {
+    if (e.target.closest('#add-goal')) requestAnimationFrame(sincronizar);
+  });
+})();
+</script>

@@ -123,16 +123,36 @@ class Indicator(BaseModel):
         return max(0, required - (self.approved_evidences or 0))
 
     @property
+    def measures_attentions(self):
+        from planning_measurements.attention_measure import goal_uses_resolved_attentions
+        return goal_uses_resolved_attentions(self.goal)
+
+    @property
+    def related_activities(self):
+        """Actividades y su atención, para consulta desde Indicadores."""
+        return self.goal.activities.filter(
+            deleted_at__isnull=True,
+            date__gte=self.goal.period.start_date,
+            date__lte=min(self.calculation_date, self.goal.period.end_date),
+        ).select_related('attention').prefetch_related('assigned_attentions').order_by('-date', '-activity_id')
+
+    @property
     def evidence_accreditation_met(self):
-        """Acreditación documental independiente del avance calculado."""
+        """Acreditación documental independiente del avance automático.
+
+        Un indicador puede avanzar al resolver una atención y mantener la
+        documentación pendiente. No cambia el tratamiento histórico de los
+        períodos cerrados.
+        """
+        if self.goal.period.status.casefold() == "closed":
+            from planning_measurements.attention_measure import goal_is_attention
+            return goal_is_attention(self.goal) or self.evidence_remaining == 0
         return self.evidence_remaining == 0
 
     @property
     def accreditation_label(self):
-        return (
-            "Acreditada" if self.evidence_accreditation_met
-            else "Pendiente de evidencias"
-        )
+        return ("Por atenciones resueltas" if self.measures_attentions
+                else "Por fórmula porcentual")
 
     @property
     def effective_traffic_light(self):

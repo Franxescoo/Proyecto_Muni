@@ -29,6 +29,10 @@ def _person_from_activity(activity):
     Los campos contact/phone se aceptan como respaldo de datos históricos.
     """
     attention = getattr(activity, "attention", None)
+    if attention is None and activity.pk:
+        attention = activity.assigned_attentions.filter(
+            deleted_at__isnull=True
+        ).order_by("pk").first()
     citizen = getattr(attention, "citizen", None) if attention else None
     request = getattr(attention, "citizen_request", None) if attention else None
     request_citizen = getattr(request, "citizen", None) if request else None

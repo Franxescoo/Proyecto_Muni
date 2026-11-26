@@ -13,6 +13,7 @@ from planning_measurements.models import Goal, Period
 from registration_validation.models import Activity, Evidence, Validation
 from registration_validation.views import ActivityCreateView
 from monitoring_traceability.services import recalculate_indicator_for_goal
+from registration_validation.test_resolved_attention_support import link_resolved_attention
 
 
 class CreatorDelegateSGRTests(TestCase):
@@ -61,12 +62,14 @@ class CreatorDelegateSGRTests(TestCase):
         return user
 
     def _activity(self, creator_employee=None, name="Pablo Cortés"):
-        return Activity.objects.create(
+        activity = Activity.objects.create(
             goal=self.goal, author=self.worker, date=self.today,
             contact=name, phone="999999999", action="Atención vecinal",
             request_problem="Solicitud de vecino",
             created_by_employee=creator_employee,
         )
+        link_resolved_attention(activity)
+        return activity
 
     def _approve(self, activity, verifier=None):
         e = Evidence.objects.create(
@@ -107,6 +110,7 @@ class CreatorDelegateSGRTests(TestCase):
         class FormStub:
             def __init__(self, instance):
                 self.instance = instance
+                self.cleaned_data = {"attentions": []}
             def save(self):
                 self.instance.save()
                 return self.instance

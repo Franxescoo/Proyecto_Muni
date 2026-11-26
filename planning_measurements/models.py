@@ -156,6 +156,11 @@ class Goal(BaseModel):
         verbose_name = "Goal"
         verbose_name_plural = "Goals"
 
+    @property
+    def measures_attentions(self):
+        from .attention_measure import goal_uses_resolved_attentions
+        return goal_uses_resolved_attentions(self)
+
     def clean(self):
         super().clean()
         errors = {}

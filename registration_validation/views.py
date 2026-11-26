@@ -41,6 +41,10 @@ from .forms import (
     ActivityTypeForm,
     ServiceForm,
 )
+from .live_consultations import (
+    consultation_activities, consultation_resolutions, consultation_is_historical,
+    enrich_resolution_rows,
+)
 from .models import (
     Activity,
     AttentionEntry,
@@ -400,9 +404,14 @@ def filtered_evidences(request):
             )
         )
     if review_status:
+        evidences = evidences.filter(review_status=review_status)
+    if request.GET.get("activity", "").isdigit():
+        evidences = evidences.filter(activity_id=int(request.GET["activity"]))
+    if request.GET.get("attention", "").isdigit():
         evidences = evidences.filter(
-            review_status=review_status,
-        )
+            Q(activity__attention_id=int(request.GET["attention"])) |
+            Q(activity__assigned_attentions__pk=int(request.GET["attention"]))
+        ).distinct()
     return evidences.order_by(
         "-date",
         "evidence_id",
@@ -628,6 +637,13 @@ def filtered_validations(request):
                 observation__icontains=query
             )
         )
+    if request.GET.get("activity", "").isdigit():
+        validations = validations.filter(evidence__activity_id=int(request.GET["activity"]))
+    if request.GET.get("attention", "").isdigit():
+        validations = validations.filter(
+            Q(evidence__activity__attention_id=int(request.GET["attention"])) |
+            Q(evidence__activity__assigned_attentions__pk=int(request.GET["attention"]))
+        ).distinct()
     return validations.order_by(
         "-date",
         "-version",
@@ -709,13 +725,15 @@ class ActivityScopeMixin:
 
 
 class ActivityFormMixin:
-    """
-    Entrega request.user al ActivityForm.
-    """
+    """Entrega request.user y preselecciona la atención indicada en GET."""
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs["user"] = self.request.user
+        if self.request.method == 'GET' and not getattr(self, 'object', None):
+            attention_id = self.request.GET.get('attention', '')
+            if attention_id.isdigit():
+                kwargs.setdefault('initial', {})['attentions'] = [int(attention_id)]
         return kwargs
 
 
@@ -1068,6 +1086,28 @@ class ActivityListView(
         return context
 
 
+def sync_activity_attentions(activity, selected):
+    """Asocia una o varias atenciones; ninguna puede pertenecer a otra actividad.
+
+    Se usan .save() y una transacción para conservar recálculos por señales.
+    """
+    selected_ids = {attention.pk for attention in selected}
+    existing = list(AttentionEntry.objects.select_for_update().filter(activity=activity))
+    for attention in existing:
+        if attention.pk not in selected_ids:
+            attention.activity = None
+            attention.save(update_fields=["activity", "updated_at"])
+    for pk in selected_ids:
+        attention = AttentionEntry.objects.select_for_update().get(pk=pk)
+        if attention.activity_id not in (None, activity.pk):
+            raise PermissionDenied("La atención ya está asociada a otra actividad.")
+        if attention.delegation_id != activity.author.delegation_id:
+            raise PermissionDenied("No puedes vincular otra delegación.")
+        if attention.activity_id != activity.pk:
+            attention.activity = activity
+            attention.save(update_fields=["activity", "updated_at"])
+
+
 class ActivityCreateView(
     ActivityPermissionMixin,
     ActivityFormMixin,
@@ -1096,9 +1136,13 @@ class ActivityCreateView(
         form.instance.created_by_user = self.request.user
         profile = getattr(self.request.user, "profile", None)
         form.instance.created_by_employee_id = getattr(profile, "employee_id", None)
-        response = super().form_valid(
-            form,
-        )
+        # Guardar selección múltiple de forma atómica; evita asignar a una
+        # atención una actividad de otra delegación o capturar medias relaciones.
+        with transaction.atomic():
+            selected = list(form.cleaned_data.get("attentions") or [])
+            form.instance.attention = selected[0] if selected else None
+            response = super().form_valid(form)
+            sync_activity_attentions(self.object, selected)
         messages.success(
             self.request,
             "Actividad creada correctamente.",
@@ -1143,9 +1187,11 @@ class ActivityUpdateView(
         self,
         form,
     ):
-        response = super().form_valid(
-            form,
-        )
+        with transaction.atomic():
+            selected = list(form.cleaned_data.get("attentions") or [])
+            form.instance.attention = selected[0] if selected else None
+            response = super().form_valid(form)
+            sync_activity_attentions(self.object, selected)
         messages.success(
             self.request,
             "Actividad actualizada correctamente.",
@@ -1210,6 +1256,8 @@ class ActivityDeleteView(
 # ---------------------------------------------------------
 
 
+
+
 class EvidenceListView(
     EvidencePermissionMixin,
     RegistrationPaginationMixin,
@@ -1227,9 +1275,9 @@ class EvidenceListView(
     paginate_by = 25
 
     def get_queryset(self):
-        return filtered_evidences(
-            self.request,
-        )
+        if consultation_is_historical(self.request):
+            return filtered_evidences(self.request)
+        return consultation_activities(self.request, scoped_activities)
 
     def get_context_data(
         self,
@@ -1238,6 +1286,14 @@ class EvidenceListView(
         context = super().get_context_data(
             **kwargs,
         )
+        if not consultation_is_historical(self.request):
+            context["historical_view"] = False
+            context["activity_rows"] = context["evidences"]
+            context["historical_total"] = scoped_evidences(self.request.user).count()
+            context["query"] = self.request.GET.get("q", "").strip()[:150]
+            context["selected_status"] = self.request.GET.get("status", "").strip()
+            return context
+        context["historical_view"] = True
         _mark_evidence_approval(context["evidences"])
         context["query"] = (
             self.request.GET.get(
@@ -1282,6 +1338,9 @@ class EvidenceCreateView(
     success_url = reverse_lazy(
         "registration:evidence_list"
     )
+
+    def get_success_url(self):
+        return reverse("registration:evidence_list") + "?historico=1"
 
     def form_valid(self, form):
         # No permitir anexar nuevas evidencias a una actividad ya acreditada.
@@ -1328,6 +1387,9 @@ class EvidenceUpdateView(
         "registration:evidence_list"
     )
 
+    def get_success_url(self):
+        return reverse("registration:evidence_list") + "?historico=1"
+
     def get_object(
         self,
         queryset=None,
@@ -1365,6 +1427,9 @@ class EvidenceDeleteView(
     success_url = reverse_lazy(
         "registration:evidence_list"
     )
+
+    def get_success_url(self):
+        return reverse("registration:evidence_list") + "?historico=1"
     http_method_names = [
         "post",
     ]
@@ -1426,9 +1491,9 @@ class ValidationListView(
     paginate_by = 25
 
     def get_queryset(self):
-        return filtered_validations(
-            self.request,
-        )
+        if consultation_is_historical(self.request):
+            return filtered_validations(self.request)
+        return consultation_resolutions(self.request, scoped_attention_entries)
 
     def get_context_data(
         self,
@@ -1437,6 +1502,15 @@ class ValidationListView(
         context = super().get_context_data(
             **kwargs,
         )
+        if not consultation_is_historical(self.request):
+            context["historical_view"] = False
+            context["resolution_rows"] = context["validations"]
+            enrich_resolution_rows(context["resolution_rows"])
+            context["historical_total"] = scoped_validations(self.request.user).count()
+            context["query"] = self.request.GET.get("q", "").strip()[:150]
+            context["selected_status"] = self.request.GET.get("status", "").strip().upper()
+            return context
+        context["historical_view"] = True
         context["query"] = (
             self.request.GET.get(
                 "q",
@@ -1469,6 +1543,9 @@ class ValidationCreateView(
     success_url = reverse_lazy(
         "registration:validation_list"
     )
+
+    def get_success_url(self):
+        return reverse("registration:validation_list") + "?historico=1"
 
     def form_valid(
         self,
@@ -1506,6 +1583,9 @@ class ValidationUpdateView(
     success_url = reverse_lazy(
         "registration:validation_list"
     )
+
+    def get_success_url(self):
+        return reverse("registration:validation_list") + "?historico=1"
 
     def get_object(
         self,
@@ -1546,6 +1626,9 @@ class ValidationDeleteView(
     success_url = reverse_lazy(
         "registration:validation_list"
     )
+
+    def get_success_url(self):
+        return reverse("registration:validation_list") + "?historico=1"
     http_method_names = [
         "post",
     ]

@@ -403,10 +403,11 @@
 
                             <td>
                                 {{ goal.objective_value }}
+                                {% if goal.measures_attentions %}<div class="small text-muted">Atenciones requeridas</div>{% endif %}
                             </td>
 
                             <td>
-                                {{ goal.required_evidence_count }}
+                                {% if goal.measures_attentions %}<span class="text-muted">No aplica</span>{% else %}{{ goal.required_evidence_count }}{% endif %}
                             </td>
 
                             <td>

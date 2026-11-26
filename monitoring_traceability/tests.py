@@ -414,11 +414,11 @@ class TraceabilityModelsTest(TestCase):
 			if status == "RESOLVED":
 				resolved_activity = activity
 
-		# RN-009: una atención resuelta sin evidencia aprobada no aporta avance.
+		# La atención resuelta aporta avance; la evidencia documenta su revisión.
 		indicator = recalculate_indicator_for_goal(self.north_goal)
-		self.assertEqual(indicator.actual_progress, Decimal("0.00"))
+		self.assertEqual(indicator.actual_progress, Decimal("50.00"))
 
-		# Con una validación aprobada, 1 de las 2 atenciones aporta avance.
+		# La validación añade evidencia aprobada, sin duplicar la atención.
 		evidence = Evidence.objects.create(
 			code="EVID-PCT-ATTENTION-001",
 			activity=resolved_activity,

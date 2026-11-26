@@ -173,6 +173,44 @@ def pending_evidence_queryset(queryset):
     )
 
 
+def goal_measures_resolved_attentions(goal):
+    """Compatibilidad: ahora toda meta cuantitativa usa atenciones."""
+    from planning_measurements.attention_measure import goal_uses_resolved_attentions
+    return goal_uses_resolved_attentions(goal)
+
+
+def activity_attention_ids(activity):
+    """Atenciones nuevas + relación histórica, cada ID una vez."""
+    ids = {a.pk for a in activity.assigned_attentions.all()
+           if a.deleted_at is None}
+    if activity.attention_id and getattr(activity.attention, 'deleted_at', None) is None:
+        if activity.attention.activity_id in (None, activity.pk):
+            ids.add(activity.attention_id)
+    return ids
+
+
+def resolved_attention_ids_for_goal(goal, today=None):
+    """Atenciones únicas resueltas, vinculadas a actividades computables."""
+    from registration_validation.activity_rules import activity_qualifies_for_goal
+    from registration_validation.models import AttentionEntry
+    until = min(today or timezone.localdate(), goal.period.end_date)
+    activities = list(goal.activities.filter(
+        deleted_at__isnull=True,
+        date__gte=goal.period.start_date,
+        date__lte=until,
+        attention__deleted_at__isnull=True,
+    ).select_related('attention', 'attention__citizen', 'activity_type',
+                     'author__delegation__responsible')
+     .prefetch_related('evidences__validations', 'evidences__files'))
+    eligible = {pk for activity in activities
+                if activity_qualifies_for_goal(activity, _evidence_is_approved)
+                for pk in activity_attention_ids(activity)}
+    return set(AttentionEntry.objects.filter(
+        pk__in=eligible, status__in=('RESOLVED', 'CLOSED'),
+        deleted_at__isnull=True,
+    ).values_list('pk', flat=True))
+
+
 def _goal_formula_values(goal, activities, approved_activity_ids, approved_evidences, today):
     """Valores del mismo funcionario/ítem/período: sin sumar duplicados.
 
@@ -182,21 +220,19 @@ def _goal_formula_values(goal, activities, approved_activity_ids, approved_evide
     from citizen_requests.models import CitizenRequest
 
     attention_ids = {
-        activity.attention_id for activity in activities if activity.attention_id
+        pk for activity in activities for pk in activity_attention_ids(activity)
     }
-    # RF-014/RN-009: una atención resuelta no otorga avance del ítem si
-    # ninguna actividad asociada a esa meta tiene evidencia aprobada.
-    # Una atención con varias actividades válidas se contabiliza una vez.
+    # Una atención resuelta se cuenta sin exigir evidencias aprobadas.
+    # Varias actividades válidas de la misma meta no duplican el conteo.
     approved_attention_ids = {
-        activity.attention_id for activity in activities
-        if activity.pk in approved_activity_ids and activity.attention_id
+        pk for activity in activities if activity.pk in approved_activity_ids
+        for pk in activity_attention_ids(activity)
     }
     from registration_validation.models import AttentionEntry
     attentions = AttentionEntry.objects.filter(
         pk__in=attention_ids, deleted_at__isnull=True,
     )
-    approved_attentions = attentions.filter(pk__in=approved_attention_ids)
-    completed_attentions = approved_attentions.filter(
+    completed_attentions = attentions.filter(
         status__in=["RESOLVED", "CLOSED"],
     ).count()
     requests = CitizenRequest.objects.filter(
@@ -206,17 +242,43 @@ def _goal_formula_values(goal, activities, approved_activity_ids, approved_evide
         activity_id__in=[activity.pk for activity in activities],
         deleted_at__isnull=True,
     )
+    # SGR-FORMULA-ACTIVIDADES-RESUELTAS-20261125
+    # Conservar la fórmula guardada y su denominador de ACTIVIDADES.
+    # Solo para el porcentaje "actividades aprobadas / registradas" de
+    # períodos no cerrados, «aprobada» equivale a actividad computable
+    # con una o más atenciones distintas resueltas/cerradas.
+    # No intervienen los respaldos/validaciones históricos.
+    item = goal.measurement_item
+    uses_attention_activity_ratio = bool(
+        item is not None
+        and item.item_type == "percentage"
+        and "".join((item.formula or "").casefold().split())
+            == "(actividades_aprobadas/actividades_registradas)*100"
+        and goal.period.status.casefold() != "closed"
+    )
+    resolved_ids = (
+        set(attentions.filter(
+            status__in=("RESOLVED", "CLOSED")
+        ).values_list("pk", flat=True))
+        if uses_attention_activity_ratio else set()
+    )
+    activities_with_resolved_attention = (
+        sum(
+            1 for activity in activities
+            if activity_attention_ids(activity) & resolved_ids
+        ) if uses_attention_activity_ratio else len(approved_activity_ids)
+    )
     # Un compromiso cuenta como máximo una vez, aunque tenga varias
     # actualizaciones de estado o evidencias vinculadas a su actividad.
     return {
         "actividades_registradas": len(activities),
-        "actividades_aprobadas": len(approved_activity_ids),
+        "actividades_aprobadas": activities_with_resolved_attention,
         "evidencias_aprobadas": approved_evidences,
         "atenciones_registradas": attentions.count(),
         "atenciones_completadas": completed_attentions,
         "solicitudes_registradas": requests.count(),
         "solicitudes_resueltas": requests.filter(
-            status="CLOSED", attention_entry_id__in=approved_attention_ids,
+            status="CLOSED", attention_entry_id__in=attention_ids,
         ).count(),
         "compromisos_registrados": commitments.count(),
         "compromisos_realizados": commitments.filter(
@@ -257,7 +319,7 @@ def recalculate_indicator_for_goal(goal, create_if_missing=True):
         ).select_related(
             "attention", "attention__citizen", "activity_type",
             "author__delegation__responsible",
-        ).prefetch_related("evidences__validations", "evidences__files")
+        ).prefetch_related("evidences__validations", "evidences__files", "assigned_attentions")
     )
     # SGR-REGLAS-ACTIVIDADES-20261119: nunca borrar registros no puntuables.
     # Se excluyen SOLO del numerador y las variables del cálculo de la meta.
@@ -296,7 +358,17 @@ def recalculate_indicator_for_goal(goal, create_if_missing=True):
     if item and item.item_type == "percentage" and not formula:
         raise FormulaError("El ítem porcentual no tiene una fórmula definida.")
 
-    if formula:
+    if goal_measures_resolved_attentions(goal):
+        # Cuenta atenciones distintas, no actividades ni documentos.
+        # Las actividades no computables se filtraron anteriormente.
+        from registration_validation.models import AttentionEntry
+        ids = {pk for activity in activities
+               for pk in activity_attention_ids(activity)}
+        actual = Decimal(AttentionEntry.objects.filter(
+            pk__in=ids, deleted_at__isnull=True,
+            status__in=("RESOLVED", "CLOSED"),
+        ).count())
+    elif formula:
         values = _goal_formula_values(
             goal, activities, approved_activity_ids, raw_approved_evidences, today,
         )

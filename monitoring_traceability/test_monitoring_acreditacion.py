@@ -53,9 +53,9 @@ class AccreditationMonitoringTests(TestCase):
         )
         return evidence
 
-    def test_atencion_resuelta_sin_evidencia_no_otorga_avance(self):
+    def test_atencion_resuelta_sin_evidencia_avanza_pero_no_acredita(self):
         indicator = recalculate_indicator_for_goal(self.goal)
-        self.assertEqual(indicator.actual_progress, Decimal("0"))
+        self.assertEqual(indicator.actual_progress, Decimal("100"))
         self.assertFalse(indicator.evidence_accreditation_met)
         self.assertEqual(indicator.effective_traffic_light, "Pending")
 
@@ -69,12 +69,12 @@ class AccreditationMonitoringTests(TestCase):
         self.assertEqual(indicator.traffic_light, "Green")
         self.assertEqual(indicator.effective_traffic_light, "Pending")
 
-    def test_ultima_validacion_rechazada_retira_avance_y_alerta(self):
+    def test_ultima_validacion_rechazada_resta_acreditacion_no_avance(self):
         evidence = self._validate("EVI-REVERTIR")
         self.assertEqual(recalculate_indicator_for_goal(self.goal).actual_progress, Decimal("100"))
         self._validate("EVI-REVERTIR", decision="rejected", result="rejected", evidence=evidence)
         indicator = recalculate_indicator_for_goal(self.goal)
-        self.assertEqual(indicator.actual_progress, Decimal("0"))
+        self.assertEqual(indicator.actual_progress, Decimal("100"))
         self.assertEqual(indicator.approved_evidences, 0)
         self.assertEqual(pending_evidence_queryset(Evidence.objects.filter(pk=evidence.pk)).count(), 1)
         self.assertEqual(monitoring_alerts(employees=[self.owner], period=self.period)["pending_evidences"], 1)
@@ -103,7 +103,7 @@ class AccreditationMonitoringTests(TestCase):
         indicator = recalculate_indicator_for_goal(self.goal)
         self.assertEqual(indicator.approved_activities, 0)
         self.assertEqual(indicator.approved_evidences, 0)
-        self.assertEqual(indicator.actual_progress, Decimal("0"))
+        self.assertEqual(indicator.actual_progress, Decimal("100"))
 
         self._validate("EVI-PARCIAL-PEND", evidence=pendiente)
         indicator = recalculate_indicator_for_goal(self.goal)
@@ -119,7 +119,7 @@ class AccreditationMonitoringTests(TestCase):
         indicator = recalculate_indicator_for_goal(self.goal)
         self.assertEqual(indicator.approved_activities, 0)
         self.assertEqual(indicator.approved_evidences, 0)
-        self.assertEqual(indicator.actual_progress, Decimal("0"))
+        self.assertEqual(indicator.actual_progress, Decimal("100"))
 
     def test_evidencia_archivada_no_impide_aprobacion_de_vigentes(self):
         self._validate("EVI-ACTIVA")

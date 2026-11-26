@@ -11,6 +11,7 @@ from organization.models import (
 from planning_measurements.models import Goal, Period
 from registration_validation.models import Activity, Evidence, Validation
 from monitoring_traceability.services import recalculate_indicator_for_goal
+from registration_validation.test_resolved_attention_support import link_resolved_attention
 
 
 class DelegateHistoricalAttributionTests(TestCase):
@@ -56,12 +57,14 @@ class DelegateHistoricalAttributionTests(TestCase):
 
     def activity(self, *, day=None, contact=None, action="Atencion vecinal",
                  registered_by=None):
-        return Activity.objects.create(
+        activity = Activity.objects.create(
             goal=self.goal, author=self.worker, date=day or self.today,
             contact=contact or self.delegate.name, phone="999999999",
             action=action, request_problem="Consulta registrada",
             created_by_employee=registered_by,
         )
+        link_resolved_attention(activity)
+        return activity
 
     def approve(self, activity, *, verifier=None, formal=False):
         evidence = Evidence.objects.create(
@@ -152,6 +155,7 @@ class DelegateHistoricalAttributionTests(TestCase):
             contact="Vecina de prueba", phone="999999999", activity_type=kind,
             action="Reconocimiento vecinal", request_problem="Carta de felicitación",
         )
+        link_resolved_attention(activity)
         evidence = Evidence.objects.create(
             activity=activity, author=self.worker, date=timezone.now(),
             review_status="Pending", file_link="https://example.test/respaldo.pdf",

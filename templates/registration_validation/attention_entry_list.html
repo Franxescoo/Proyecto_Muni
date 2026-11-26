@@ -295,6 +295,12 @@
                                 </button>
                                 {% endif %}
 
+                                {% if perms.registration_validation.add_activity and entry.status != 'CLOSED' and entry.status != 'REJECTED' %}
+                                <a href="{% url 'registration:activity_create' %}?attention={{ entry.attention_entry_id }}" class="btn btn-sm btn-outline-success" title="Vincular una actividad a esta atención"><i class="bi bi-plus-circle me-1"></i>Actividad</a>
+                                {% endif %}
+                                {% if perms.registration_validation.view_evidence %}<a class="btn btn-sm btn-outline-secondary" href="{% url 'registration:evidence_list' %}?attention={{ entry.attention_entry_id }}">Evidencias</a>{% endif %}
+                                {% if perms.registration_validation.view_validation %}<a class="btn btn-sm btn-outline-secondary" href="{% url 'registration:validation_list' %}?attention={{ entry.attention_entry_id }}">Validaciones</a>{% endif %}
+
                                 {% if entry.can_view_request_actions %}
                                 <a
                                     href="{% url 'citizen_requests:request_action_list' entry.citizen_request.pk %}"
@@ -660,6 +666,15 @@
                                 {{ error }}
                             </div>
                             {% endfor %}
+                        </div>
+                        <!-- ACTIVIDAD VINCULADA -->
+                        <div class="col-12 mb-3">
+                            <label for="{{ form.activity.id_for_label }}" class="form-label fw-semibold">
+                                Actividad asociada {% if not form.instance.pk %}<span class="text-danger">*</span>{% endif %}
+                            </label>
+                            {{ form.activity }}
+                            {% if form.activity.help_text %}<div class="form-text">{{ form.activity.help_text }}</div>{% endif %}
+                            {% for error in form.activity.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
                         </div>
                     </div>
 

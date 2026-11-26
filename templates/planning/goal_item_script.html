@@ -33,6 +33,24 @@
 
         function actualizarItem() {
             const seleccionado = items[itemSelect.value];
+            // Solo los ítems cuantitativos de atenciones usan el objetivo
+            // como cantidad de atenciones requeridas. Las metas de otras
+            // unidades conservan el campo histórico de evidencias.
+            const normalizar = v => (v || "").normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "").toLowerCase();
+            const esAtenciones = Boolean(seleccionado &&
+                seleccionado.tipo === "Cuantitativo");
+            const objetivo = modal.querySelector('[name="objective_value"]');
+            const evidencias = modal.querySelector('[name="required_evidence_count"]');
+            if (objetivo) {
+                const etiqueta = modal.querySelector('label[for="' + objetivo.id + '"]');
+                if (etiqueta) etiqueta.textContent = esAtenciones ?
+                    "Atenciones requeridas" : "Valor objetivo";
+            }
+            if (evidencias) {
+                const grupo = evidencias.closest('.col-md-4');
+                if (grupo) grupo.style.display = esAtenciones ? "none" : "";
+            }
 
             if (!seleccionado) {
                 detailsBox.classList.add("d-none");

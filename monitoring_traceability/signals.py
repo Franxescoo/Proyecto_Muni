@@ -115,11 +115,28 @@ from registration_validation.models import AttentionEntry
 from citizen_requests.models import CitizenRequest
 
 
+@receiver(pre_save, sender=AttentionEntry)
+def attention_previous_activity(sender, instance, **kwargs):
+    if instance.pk:
+        instance._previous_activity_id = (
+            AttentionEntry.objects.filter(pk=instance.pk)
+            .values_list("activity_id", flat=True).first()
+        )
+
+
 @receiver([post_save, post_delete], sender=AttentionEntry)
 def attention_changed_for_monitoring(sender, instance, **kwargs):
-    goal_ids = instance.activities.filter(
+    # Recalcular meta nueva y anterior si se reasignó una atención.
+    goal_ids = set(instance.activities.filter(
         deleted_at__isnull=True,
-    ).values_list("goal_id", flat=True).distinct()
+    ).values_list("goal_id", flat=True).distinct())
+    if instance.activity_id:
+        goal_ids.add(instance.activity.goal_id)
+    old_id = getattr(instance, "_previous_activity_id", None)
+    if old_id and old_id != instance.activity_id:
+        prev_goal = Activity.objects.filter(pk=old_id).values_list("goal_id", flat=True).first()
+        if prev_goal:
+            goal_ids.add(prev_goal)
     for goal_id in goal_ids:
         _recalculate_goal(goal_id)
 
@@ -128,10 +145,12 @@ def attention_changed_for_monitoring(sender, instance, **kwargs):
 def citizen_request_changed_for_monitoring(sender, instance, **kwargs):
     if not instance.attention_entry_id:
         return
-    goal_ids = Activity.objects.filter(
+    goal_ids = set(Activity.objects.filter(
         attention_id=instance.attention_entry_id,
         deleted_at__isnull=True,
-    ).values_list("goal_id", flat=True).distinct()
+    ).values_list("goal_id", flat=True).distinct())
+    if instance.attention_entry.activity_id:
+        goal_ids.add(instance.attention_entry.activity.goal_id)
     for goal_id in goal_ids:
         _recalculate_goal(goal_id)
 

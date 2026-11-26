@@ -3,6 +3,8 @@
 {% block titulo %}Validaciones · Registro y validación{% endblock %}
 
 {% block contenido %}
+{% if historical_view or form %}
+<div class="container-fluid py-3"><div class="alert alert-secondary d-flex flex-wrap align-items-center justify-content-between gap-2"><span>Gestión de validaciones: Se mantienen las decisiones, validaciones autorizadas y su historial.</span><a class="btn btn-sm btn-outline-dark" href="{% url 'registration:validation_list' %}?consulta=1">Ver atenciones resueltas</a></div></div>
 
 <div class="registration-shell pb-4" id="validaciones">
 
@@ -397,8 +399,95 @@
 
 {% include "registration_validation/_validation_modal.html" %}
 
+{% else %}
+<div class="registration-shell pb-4" id="consultaResoluciones">
+    <section class="registration-hero mb-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
+        <div><div class="small text-uppercase fw-semibold opacity-75 mb-2">Registro y validación</div>
+            <h1 class="mb-2 fw-bold">Validaciones · Consulta de resoluciones</h1>
+            <p class="mb-0">Atenciones resueltas o cerradas, responsables e historial de cambios. Solo lectura.</p>
+        </div><i class="bi bi-clipboard2-check display-5 opacity-75" aria-hidden="true"></i>
+    </section>
+    <div class="row g-3 mb-4">
+        <div class="col-md-6"><div class="section-card metric h-100">
+            <div class="value">{{ page_obj.paginator.count|default:"0" }}</div>
+            <div class="label">Atenciones resueltas o cerradas encontradas</div>
+        </div></div>
+        <div class="col-md-6"><div class="section-card p-3 h-100 d-flex flex-column justify-content-center align-items-start gap-2">
+            <strong>Validaciones de evidencias</strong>
+            <span class="small text-muted">Abre la gestión original para registrar y consultar validaciones.</span>
+            <a href="{% url 'registration:validation_list' %}?historico=1" class="btn btn-outline-secondary btn-sm">Gestionar validaciones ({{ historical_total }})</a>
+        </div></div>
+    </div>
+    <section class="section-card p-3 p-lg-4 sgr-catalog">
+        <div class="catalog-toolbar mb-3"><div>
+            <h2 class="h5 fw-bold mb-1">Seguimiento de resoluciones</h2>
+            <p class="text-muted small mb-0">El estado proviene de Ingreso de Atención; el historial, de los eventos de la solicitud vinculada.</p>
+        </div></div>
+        <form method="get" class="row g-3 align-items-end mb-3">
+<input type="hidden" name="consulta" value="1">
+            <div class="col-12 col-md-5"><label for="consulta-resolucion-buscar" class="filter-label">Buscar atención</label>
+                <input id="consulta-resolucion-buscar" name="q" type="search" value="{{ query }}" class="form-control" placeholder="Solicitante, asunto, responsable, meta...">
+            </div>
+            <div class="col-6 col-md-3"><label for="consulta-resolucion-estado" class="filter-label">Estado</label>
+                <select id="consulta-resolucion-estado" name="status" class="form-select">
+                    <option value="">Resueltas y cerradas</option>
+                    <option value="RESOLVED" {% if selected_status == 'RESOLVED' %}selected{% endif %}>Resueltas</option>
+                    <option value="CLOSED" {% if selected_status == 'CLOSED' %}selected{% endif %}>Cerradas</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-2"><button type="submit" class="btn btn-dark w-100">Filtrar</button></div>
+            <div class="col-12 col-md-2"><a href="{% url 'registration:validation_list' %}?consulta=1" class="btn btn-outline-secondary w-100">Limpiar</a></div>
+        </form>
+        <div class="table-responsive"><table class="table table-hover align-middle mb-0">
+            <thead><tr><th>Atención</th><th>Asunto / resultado</th><th>Actividad y meta</th><th>Responsable / resolución registrada por</th><th>Estado</th><th>Fecha de registro / cierre</th><th>Historial</th></tr></thead>
+            <tbody>
+            {% for attention in resolution_rows %}
+            <tr>
+                <td class="fw-semibold">#{{ attention.pk }}<div class="small text-muted">{{ attention.requester }}</div></td>
+                <td style="max-width:260px"><strong>{{ attention.subject|default:"Sin asunto" }}</strong>
+                    <details class="small mt-1"><summary class="text-primary" style="cursor:pointer">Ver descripción</summary><p class="mt-1 mb-0">{{ attention.description }}</p></details>
+                </td>
+                <td class="small">
+                    {% if attention.activity_id %}<strong>Actividad #{{ attention.activity_id }}</strong>
+                        <div>{{ attention.activity.goal.item }}</div>
+                    {% else %}<span class="text-muted">Sin actividad asociada</span>{% endif %}
+                </td>
+                <td>
+                    <div>{{ attention.responsible_employee.name|default:"Sin responsable asignado" }}</div>
+                    <div class="small text-muted mt-1">Resolución: {{ attention.sgr_resolution_actor_name|default:"Sin autor registrado" }}</div>
+                </td>
+                <td><span class="status {% if attention.status == 'CLOSED' %}status-muted{% else %}status-green{% endif %}">{{ attention.get_status_display }}</span></td>
+                <td class="small">{{ attention.registration_date|date:"d/m/Y H:i" }}
+                    {% if attention.closed_at %}<div class="text-muted">Cierre: {{ attention.closed_at|date:"d/m/Y H:i" }}</div>{% endif %}</td>
+                <td>
+                    {% if attention.citizen_request %}
+                      {% with events=attention.citizen_request.events.all %}
+                      {% if events %}<details><summary class="btn btn-sm btn-light border">Ver {{ events|length }} cambio(s)</summary>
+                      <div class="mt-2" style="min-width:210px; max-width:340px">
+                      {% for event in events %}
+                        <div class="border-bottom py-2 small">
+                            <strong>{{ event.created_at|date:"d/m/Y H:i" }}</strong>
+                            <div>{{ event.sgr_previous_label|default:"—" }} → {{ event.sgr_new_label|default:"—" }}</div>
+                            <div class="text-muted">{{ event.actor.get_username|default:"Sistema" }}</div>
+                            {% if event.observation %}<p class="mt-1 mb-0">{{ event.observation }}</p>{% endif %}
+                        </div>
+                      {% endfor %}
+                      </div></details>
+                      {% else %}<span class="text-muted small">Sin eventos registrados</span>{% endif %}
+                      {% endwith %}
+                    {% else %}<span class="text-muted small">Sin historial de solicitud</span>{% endif %}
+                </td>
+            </tr>
+            {% empty %}
+                <tr><td colspan="7" class="text-center text-muted py-5">No hay atenciones resueltas o cerradas para los filtros seleccionados.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table></div>
+        {% include "shared/catalog_pagination.html" with page_data=page_obj page_querystring=request.GET.urlencode item_label="atenciones" %}
+    </section>
+</div>
+{% endif %}
 {% endblock %}
-
 
 {% block scripts %}
 

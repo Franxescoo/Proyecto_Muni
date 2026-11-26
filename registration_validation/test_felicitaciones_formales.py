@@ -9,6 +9,7 @@ from django.utils import timezone
 
 from accounts.models import UserProfile
 from monitoring_traceability.services import _evidence_is_approved, recalculate_indicator_for_goal
+from registration_validation.test_resolved_attention_support import link_resolved_attention
 from organization.models import Delegation, Employee, PositionFunction
 from planning_measurements.models import Goal, Period
 from registration_validation.activity_rules import activity_qualifies_for_goal
@@ -76,6 +77,7 @@ class FelicitacionesFormalesTests(TestCase):
             date=now, contact="Ciudadano solicitante", phone="912345678",
             request_problem="Felicitación", action="Reconocimiento al funcionario",
         )
+        link_resolved_attention(self.activity)
         self.evidence = Evidence.objects.create(
             activity=self.activity, author=self.author,
             date=timezone.now(), review_status="Pending",

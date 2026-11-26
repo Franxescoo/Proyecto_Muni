@@ -12,6 +12,7 @@ from registration_validation.models import (
     Activity, ActivityType, Evidence, Validation,
 )
 from monitoring_traceability.services import recalculate_indicator_for_goal
+from registration_validation.test_resolved_attention_support import link_resolved_attention
 
 
 class ActivityRulesSGRTests(TestCase):
@@ -57,11 +58,13 @@ class ActivityRulesSGRTests(TestCase):
 
     def activity(self, *, contact="Vecino Solicitante", phone="123456789",
                  goal=None, day=None, activity_type=None, action="Atención"):
-        return Activity.objects.create(
+        activity = Activity.objects.create(
             goal=goal or self.goal, author=self.employee, date=day or self.day,
             contact=contact, phone=phone, action=action,
             request_problem="Solicitud de prueba", activity_type=activity_type,
         )
+        link_resolved_attention(activity)
+        return activity
 
     def approve(self, activity, *, verifier=None, document=False):
         evidence = Evidence.objects.create(

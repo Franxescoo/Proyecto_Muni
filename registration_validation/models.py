@@ -241,6 +241,20 @@ class Activity(BaseModel):
         verbose_name="Atención asociada",
     )
 
+    @property
+    def linked_attentions(self):
+        """Atenciones vinculadas a esta actividad para consultas.
+
+        Los vínculos antiguos Activity.attention se muestran sin duplicarse.
+        """
+        items = [a for a in self.assigned_attentions.all()
+                 if a.deleted_at is None]
+        if self.attention_id and all(item.pk != self.attention_id for item in items):
+            if (getattr(self.attention, "deleted_at", None) is None
+                    and self.attention.activity_id in (None, self.pk)):
+                items.append(self.attention)
+        return items
+
     date = models.DateField(
         verbose_name="Fecha",
     )
@@ -1160,6 +1174,14 @@ class AttentionEntry(BaseModel):
         blank=True,
         related_name="attention_entries_responsible",
         verbose_name="Funcionario responsable",
+    )
+
+    activity = models.ForeignKey(
+        "registration_validation.Activity",
+        on_delete=models.PROTECT,
+        related_name="assigned_attentions",
+        null=True, blank=True,
+        verbose_name="Actividad asociada",
     )
 
     registered_by = models.ForeignKey(
