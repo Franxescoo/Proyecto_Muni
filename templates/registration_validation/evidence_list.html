@@ -4,6 +4,8 @@
 {% block titulo %}Evidencias · Registro y validación{% endblock %}
 
 {% block contenido %}
+{% if historical_view or form %}
+<div class="container-fluid py-3"><div class="alert alert-secondary d-flex flex-wrap align-items-center justify-content-between gap-2"><span>Gestión de evidencias: Se mantienen los respaldos, las modificaciones autorizadas y el historial.</span><a class="btn btn-sm btn-outline-dark" href="{% url 'registration:evidence_list' %}?consulta=1">Ver actividades y atenciones</a></div></div>
 
 <div class="registration-shell pb-4" id="evidencias">
 
@@ -280,7 +282,7 @@
 
 
                         <td class="text-muted small">
-                            {{ evidence.date|date:"d/m/Y H:i" }}
+                            {{ evidence.date|date:"d/m/Y" }}
                         </td>
 
 
@@ -554,8 +556,97 @@
 <!-- Modal de evidencias -->
 {% include "registration_validation/_evidence_modal.html" %}
 
-{% endblock %}
+{% else %}
+<div class="registration-shell pb-4" id="consultaActividades">
+    <section class="registration-hero mb-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
+        <div>
+            <div class="small text-uppercase fw-semibold opacity-75 mb-2">Registro y validación</div>
+            <h1 class="mb-2 fw-bold">Evidencias · Consulta de actividades</h1>
+            <p class="mb-0">Información actual de actividades, acciones y atenciones asociadas. Solo lectura.</p>
+        </div>
+        <i class="bi bi-journal-text display-5 opacity-75" aria-hidden="true"></i>
+    </section>
 
+    <div class="row g-3 mb-4">
+        <div class="col-md-6"><div class="section-card metric h-100">
+            <div class="value">{{ page_obj.paginator.count|default:"0" }}</div>
+            <div class="label">Actividades encontradas</div>
+        </div></div>
+        <div class="col-md-6"><div class="section-card p-3 h-100 d-flex flex-column justify-content-center align-items-start gap-2">
+            <strong>Evidencias y respaldos</strong>
+            <span class="small text-muted">Abre la gestión original para crear, modificar o revisar respaldos.</span>
+            <a class="btn btn-outline-secondary btn-sm" href="{% url 'registration:evidence_list' %}?historico=1">Gestionar evidencias ({{ historical_total }})</a>
+        </div></div>
+    </div>
+
+    <section class="section-card p-3 p-lg-4 sgr-catalog">
+        <div class="catalog-toolbar mb-3">
+            <div><h2 class="h5 fw-bold mb-1">Actividades y atenciones vinculadas</h2>
+                <p class="text-muted small mb-0">La información se obtiene del registro actual de Actividades e Ingreso de Atención.</p>
+            </div>
+        </div>
+        <form method="get" class="row g-3 align-items-end mb-3">
+<input type="hidden" name="consulta" value="1">
+            <div class="col-12 col-md-5">
+                <label for="consulta-actividad-buscar" class="filter-label">Buscar actividad</label>
+                <input id="consulta-actividad-buscar" name="q" value="{{ query }}" type="search" class="form-control" placeholder="Meta, acción, funcionario, solicitante...">
+            </div>
+            <div class="col-6 col-md-3">
+                <label for="consulta-actividad-estado" class="filter-label">Estado</label>
+                <select id="consulta-actividad-estado" name="status" class="form-select">
+                    <option value="">Todos</option>
+                    <option value="Pending" {% if selected_status == 'Pending' %}selected{% endif %}>Pendiente</option>
+                    <option value="In progress" {% if selected_status == 'In progress' %}selected{% endif %}>En progreso</option>
+                    <option value="Completed" {% if selected_status == 'Completed' %}selected{% endif %}>Completada</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-2"><button class="btn btn-dark w-100" type="submit">Filtrar</button></div>
+            <div class="col-12 col-md-2"><a href="{% url 'registration:evidence_list' %}?consulta=1" class="btn btn-outline-secondary w-100">Limpiar</a></div>
+        </form>
+        <div class="table-responsive"><table class="table table-hover align-middle mb-0">
+            <thead><tr><th>Actividad</th><th>Meta y período</th><th>Acción realizada</th><th>Funcionario</th><th>Fecha y estado</th><th>Atenciones asociadas</th></tr></thead>
+            <tbody>
+            {% for activity in activity_rows %}
+                <tr>
+                    <td class="fw-semibold">#{{ activity.activity_id }}</td>
+                    <td>
+                        <strong>{{ activity.goal.item }}</strong>
+                        <div class="small text-muted">{{ activity.goal.period.start_date|date:"d/m/Y" }} al {{ activity.goal.period.end_date|date:"d/m/Y" }}</div>
+                    </td>
+                    <td style="max-width:290px">
+                        <span>{{ activity.action|default:"Sin acción registrada"|truncatechars:140 }}</span>
+                        {% if activity.request_problem %}<details class="small mt-1"><summary class="text-primary" style="cursor:pointer">Ver solicitud / problema</summary><p class="mt-1 mb-0">{{ activity.request_problem }}</p></details>{% endif %}
+                    </td>
+                    <td>{{ activity.author.name }}</td>
+                    <td class="small">{{ activity.date|date:"d/m/Y" }}<div class="text-muted">{{ activity.status }}</div></td>
+                    <td>
+                        {% with attentions=activity.linked_attentions %}
+                        {% if attentions %}
+                        <details><summary class="btn btn-sm btn-light border">Ver {{ attentions|length }} atención(es)</summary>
+                            <div class="mt-2" style="min-width:200px">
+                                {% for attention in attentions %}
+                                <div class="border-bottom py-2 small">
+                                    <strong>#{{ attention.pk }} · {{ attention.subject|default:"Sin asunto" }}</strong>
+                                    <div>{{ attention.requester }} · {{ attention.get_status_display }}</div>
+                                    <div class="text-muted">{{ attention.responsible_employee.name|default:"Sin funcionario asignado" }}</div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </details>
+                        {% else %}<span class="text-muted small">Sin atenciones asociadas</span>{% endif %}
+                        {% endwith %}
+                    </td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="6" class="text-center text-muted py-5">No hay actividades para los filtros seleccionados.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table></div>
+        {% include "shared/catalog_pagination.html" with page_data=page_obj page_querystring=request.GET.urlencode item_label="actividades" %}
+    </section>
+</div>
+{% endif %}
+{% endblock %}
 
 {% block scripts %}
 

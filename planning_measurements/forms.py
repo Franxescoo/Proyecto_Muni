@@ -442,6 +442,7 @@ class GoalScopeMixin(BootstrapMixin):
         for item in items:
             detalles[str(item.pk)] = {
                 "codigo": item.code,
+                "nombre": item.name,
                 "descripcion": item.description,
                 "tipo": item.get_item_type_display(),
                 "unidad": item.unit,

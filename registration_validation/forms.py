@@ -122,6 +122,15 @@ class ActivityForm(BootstrapMixin, forms.ModelForm):
         label="Estado",
         choices=STATUS_CHOICES,
     )
+    # Una actividad puede gestionar varias atenciones. La relación persistida
+    # está en AttentionEntry.activity (una atención tiene una actividad).
+    attentions = forms.ModelMultipleChoiceField(
+        label="Atenciones asociadas",
+        queryset=AttentionEntry.objects.none(),
+        widget=forms.CheckboxSelectMultiple(),
+        required=False,
+        help_text="Marca una o varias atenciones existentes. También puedes vincular nuevas desde Ingreso de Atención.",
+    )
 
     class Meta:
         model = Activity
@@ -129,7 +138,7 @@ class ActivityForm(BootstrapMixin, forms.ModelForm):
             "goal",
             "author",
             "activity_type",
-            "attention",
+            "attentions",
             "date",
             "request_problem",
             "action",
@@ -147,7 +156,7 @@ class ActivityForm(BootstrapMixin, forms.ModelForm):
             "phone": "Teléfono",
             "status": "Estado",
             "activity_type": "Tipo de actividad",
-            "attention": "Atención asociada",
+            "attentions": "Atenciones asociadas",
         }
         widgets = {
             "date": forms.DateInput(
@@ -219,14 +228,28 @@ class ActivityForm(BootstrapMixin, forms.ModelForm):
                 else "registration_validation.add_activity",
             )
             attentions = attentions.filter(delegation_id__in=permitted)
-        self.fields["attention"].queryset = attentions
-        self.fields["attention"].required = True
-        self.fields["attention"].label_from_instance = (
+        # Evitar transferencias implícitas entre actividades. Si la atención
+        # ya tiene actividad, únicamente puede marcarla esa misma actividad.
+        attentions = attentions.filter(
+            Q(activity__isnull=True) | Q(activity_id=self.instance.pk)
+        ).distinct()
+        self.fields["attentions"].queryset = attentions
+        self.fields["attentions"].label_from_instance = (
             lambda attention: (
-                f"{attention.requester} - "
-                f"{attention.subject.strip() if attention.subject else 'Sin asunto'}"
+                f"#{attention.pk} · {attention.requester} - "
+                f"{attention.subject.strip() if attention.subject else 'Sin asunto'} "
+                f"({attention.get_status_display()})"
             )
         )
+        if self.instance.pk:
+            self.fields["attentions"].initial = list(
+                AttentionEntry.objects.filter(
+                    activity=self.instance, deleted_at__isnull=True
+                ).values_list("pk", flat=True)
+            )
+            # Compatibilidad con vínculos anteriores a este cambio.
+            if self.instance.attention_id and not self.fields["attentions"].initial:
+                self.fields["attentions"].initial = [self.instance.attention_id]
 
         # Mostrar solamente tipos de actividad activos
         # y que no estén archivados.
@@ -263,29 +286,34 @@ class ActivityForm(BootstrapMixin, forms.ModelForm):
             ),
         )
         self._apply_bootstrap()
+        # SGR-CASILLAS-VISIBLES-20261125
+        # El BootstrapMixin original asigna 'form-control' al CONTENEDOR
+        # de CheckboxSelectMultiple, en vez de tratarlo como una lista.
+        # Este cambio solo modifica el estilo; no los permisos ni el queryset.
+        self.fields["attentions"].widget.attrs["class"] = (
+            "sgr-attention-checkbox-options"
+        )
 
     def clean(self):
         cleaned_data = super().clean()
         goal = cleaned_data.get("goal")
-        attention = cleaned_data.get("attention")
-        if attention is None:
-            self.add_error(
-                "attention",
-                "Debes seleccionar una atención existente.",
-            )
-        elif attention.deleted_at is not None:
-            self.add_error(
-                "attention",
-                "La atención seleccionada ya no está disponible.",
-            )
+        selected = cleaned_data.get("attentions")
         author = cleaned_data.get("author")
-        if attention is not None and author is not None:
-            if attention.delegation_id != author.delegation_id:
-                self.add_error(
-                    "attention",
-                    "La atención debe pertenecer a la misma delegación "
-                    "del funcionario autor.",
-                )
+        # La actividad puede crearse antes de su primera atención. Así no se
+        # produce un bloqueo circular al registrar una atención nueva.
+        if selected is not None and author is not None:
+            for attention in selected:
+                if attention.deleted_at is not None:
+                    self.add_error("attentions", "Hay una atención archivada.")
+                    break
+                if attention.delegation_id != author.delegation_id:
+                    self.add_error(
+                        "attentions", "Las atenciones deben pertenecer a la "
+                        "delegación del funcionario autor.")
+                    break
+                if attention.activity_id not in (None, self.instance.pk):
+                    self.add_error("attentions", "Una atención ya pertenece a otra actividad.")
+                    break
         if goal is not None:
             period = goal.period
             if period.deleted_at is not None:
@@ -1341,6 +1369,7 @@ class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
             "description",
             "delegation",
             "responsible_employee",
+            "activity",
             "status",
         ]
         labels = {
@@ -1354,6 +1383,7 @@ class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
             "description": "Descripción de la solicitud",
             "delegation": "Delegación responsable",
             "responsible_employee": "Funcionario responsable",
+            "activity": "Actividad asociada",
         }
         widgets = {
             "requester": forms.TextInput(attrs={
@@ -1483,6 +1513,39 @@ class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
         self.fields["responsible_employee"].queryset = employees.select_related(
             "delegation"
         ).order_by("name")
+        # Solo actividades vigentes del área autorizada y sus metas activas.
+        activity_choices = Activity.objects.filter(
+            deleted_at__isnull=True,
+            goal__deleted_at__isnull=True,
+            goal__period__deleted_at__isnull=True,
+            goal__period__status=Period.Status.ACTIVE,
+        ).select_related("goal", "author").order_by("-date", "-activity_id")
+        if user is not None and not user.is_superuser:
+            action = "change" if existing else "add"
+            ids = allowed_delegation_ids(user, f"registration_validation.{action}_attentionentry")
+            activity_choices = activity_choices.filter(author__delegation_id__in=ids)
+        if existing and self.instance.activity_id:
+            activity_choices = (
+                activity_choices | Activity.objects.filter(pk=self.instance.activity_id)
+            ).distinct().order_by("-date", "-activity_id")
+        self.fields["activity"].queryset = activity_choices
+        self.fields["activity"].empty_label = "Seleccione una actividad"
+        # SGR-ATENCION-ACTIVIDAD-OPCIONAL-20261125
+        # La solicitud puede convertirse en atención antes de crear la actividad.
+        # Después se vincula desde Actividades (casillas múltiples).
+        self.fields["activity"].required = False
+        # El enlace principal se fija al crear. Un cambio posterior requiere
+        # un proceso de reasignación auditado, no editarlo silenciosamente.
+        self.fields["activity"].disabled = existing
+        self.fields["activity"].help_text = (
+            "Opcional: puedes vincular una actividad ahora o hacerlo después "
+            "desde Actividades, usando las casillas de atenciones. "
+            "La atención siempre debe originarse en una solicitud previa. "
+            "Una vez creada, este campo es de solo lectura."
+        )
+        self.fields["activity"].label_from_instance = (
+            lambda obj: f"#{obj.pk} · {obj.goal.item} · {obj.action[:70]}"
+        )
         self.fields["attention_type"].empty_label = "Seleccione un tipo de atención"
         self.fields["sub_attention"].empty_label = "Seleccione una subatención"
         self.fields["delegation"].empty_label = "Seleccione una delegación"
@@ -1619,6 +1682,16 @@ class AttentionEntryForm(BootstrapMixin, forms.ModelForm):
         sub_attention = cleaned_data.get("sub_attention")
         delegation = cleaned_data.get("delegation")
         employee = cleaned_data.get("responsible_employee")
+        activity = cleaned_data.get("activity")
+        if activity is not None and delegation is not None:
+            if activity.author.delegation_id != delegation.pk:
+                self.add_error(
+                    "activity", "La actividad debe corresponder a la misma delegación."
+                )
+            if activity.goal.period.status == Period.Status.CLOSED and (
+                not self.instance.pk or activity.pk != self.instance.activity_id
+            ):
+                self.add_error("activity", "No se puede vincular una actividad de período cerrado.")
         # Permitir conservar una relación histórica solo si no cambió.
         if attention_type is not None:
             old_type_id = self.instance.attention_type_id if self.instance.pk else None

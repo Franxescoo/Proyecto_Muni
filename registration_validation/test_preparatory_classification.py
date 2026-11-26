@@ -6,6 +6,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from monitoring_traceability.services import recalculate_indicator_for_goal
+from registration_validation.test_resolved_attention_support import link_resolved_attention
 from organization.models import Delegation, Employee, PositionFunction
 from planning_measurements.models import Goal, Period
 from registration_validation.activity_rules import activity_qualifies_for_goal
@@ -50,6 +51,7 @@ class PreparatoryClassificationTests(TestCase):
             action="Atención realizada", request_problem="Prueba",
             activity_type=activity_type,
         )
+        link_resolved_attention(activity)
         evidence = Evidence.objects.create(
             activity=activity, author=self.employee, date=timezone.now(),
             review_status="Pending",

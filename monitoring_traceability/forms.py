@@ -163,6 +163,10 @@ class CommitmentForm(forms.ModelForm):
             if activity is None:
                 continue
             attention = activity.attention
+            if attention is None:
+                attention = activity.assigned_attentions.filter(
+                    deleted_at__isnull=True
+                ).order_by("pk").first()
             widget.activity_metadata[str(activity.pk)] = {
                 "delegation-id": str(
                     activity.author.delegation_id
@@ -222,6 +226,10 @@ class CommitmentForm(forms.ModelForm):
             )
             cleaned["origin"] = activity.goal.item
             attention = activity.attention
+            if attention is None:
+                attention = activity.assigned_attentions.filter(
+                    deleted_at__isnull=True
+                ).order_by("pk").first()
             cleaned["requester"] = (
                 attention.requester if attention and attention.requester
                 else activity.contact

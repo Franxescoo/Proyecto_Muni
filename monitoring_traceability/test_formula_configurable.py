@@ -159,8 +159,9 @@ class FormulaAndCommitmentIntegrationTests(TestCase):
                 date=date(2026, 6, n + 8), request_problem="Gestión",
                 action="Acción", contact="Vecino", phone="123",
             )
-        # La atención resuelta por sí sola no otorga avance sin evidencia validada.
-        self.assertEqual(recalculate_indicator_for_goal(self.goal).actual_progress, Decimal("0"))
+        # La misma atención cuenta una vez, aunque tenga dos actividades.
+        # Su avance NO depende de la evidencia, que se revisa por separado.
+        self.assertEqual(recalculate_indicator_for_goal(self.goal).actual_progress, Decimal("100"))
         activity = Activity.objects.filter(goal=self.goal, attention=attention).first()
         evidence = Evidence.objects.create(
             code="FORM-ATT-VALIDATED", activity=activity, author=self.owner,
@@ -194,7 +195,8 @@ class FormulaAndCommitmentIntegrationTests(TestCase):
         self.assertEqual(recalculate_indicator_for_goal(self.goal).actual_progress, Decimal("0"))
         request.status = "CLOSED"
         request.save(update_fields=["status", "updated_at"])
-        self.assertEqual(Indicator.objects.get(goal=self.goal).actual_progress, Decimal("0"))
+        # Para solicitudes_resueltas se utiliza el estado de la solicitud.
+        self.assertEqual(Indicator.objects.get(goal=self.goal).actual_progress, Decimal("100"))
         evidence = Evidence.objects.create(
             code="FORM-REQ-VALIDATED", activity=self.activity, author=self.owner,
             date=timezone.now(), review_status="Pending",

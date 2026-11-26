@@ -9,6 +9,7 @@ from django.utils import timezone
 from organization.models import Delegation, Employee, PositionFunction
 from planning_measurements.models import Goal, Period
 from registration_validation.models import Activity, Evidence, Validation
+from registration_validation.test_resolved_attention_support import link_resolved_attention
 
 from .services import _compliance_cap, recalculate_indicator_for_goal
 
@@ -65,6 +66,7 @@ class IndicatorComplianceCapTests(TestCase):
                 request_problem="Problema", action="Acción",
                 contact="Contacto", phone="555",
             )
+            link_resolved_attention(activity)
             evidence = Evidence.objects.create(
                 code=f"LIM-120-{n}", activity=activity, author=employee,
                 file_link=f"evidencias/tope-{n}", date=timezone.now(),

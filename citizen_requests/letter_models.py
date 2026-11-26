@@ -9,6 +9,8 @@ from django.utils import timezone
 
 
 class CitizenRequestLetter(models.Model):
+    id = models.BigAutoField(primary_key=True)
+
     class Kind(models.TextChoices):
         CARTA = "CARTA", "Carta"
         OFICIO = "OFICIO", "Oficio"

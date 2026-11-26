@@ -1,4 +1,48 @@
 {% if open_modal %}
+<style>
+/* SGR-CASILLAS-VISIBLES-20261125: opciones de atención dentro del modal. */
+.sgr-attention-checkbox-group .sgr-attention-checkbox-options {
+    display: grid !important;
+    gap: .5rem;
+    width: 100%;
+}
+.sgr-attention-checkbox-group .sgr-attention-checkbox-options > div {
+    display: block;
+    margin: 0;
+}
+.sgr-attention-checkbox-group .sgr-attention-checkbox-options label {
+    display: flex;
+    align-items: flex-start;
+    gap: .65rem;
+    width: 100%;
+    padding: .65rem .75rem;
+    border: 1px solid #cbd5e1;
+    border-radius: .45rem;
+    cursor: pointer;
+    line-height: 1.4;
+    background: #fff;
+    color: #212529;
+}
+.sgr-attention-checkbox-group .sgr-attention-checkbox-options label:has(input:checked) {
+    background: #eff6ff;
+    border-color: #2563eb;
+}
+.sgr-attention-checkbox-group .sgr-attention-checkbox-options input[type="checkbox"] {
+    appearance: auto !important;
+    -webkit-appearance: checkbox !important;
+    display: inline-block !important;
+    position: static !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+    margin: .15rem 0 0 !important;
+    width: 1.15rem;
+    height: 1.15rem;
+    flex-shrink: 0;
+    cursor: pointer;
+}
+</style>
+
 
 <div class="modal fade sgr-upgraded-modal"
      id="activityModal"
@@ -67,12 +111,12 @@
                         </div>
 
                         <div class="col-md-6 mb-3">
-                            <label for="{{ form.attention.id_for_label }}" class="form-label fw-semibold">
-                                {{ form.attention.label }} <span class="text-danger">*</span>
-                            </label>
-                            {{ form.attention }}
-                            <div class="form-text">Selecciona la atención que origina esta actividad.</div>
-                            {% for error in form.attention.errors %}
+                            <label class="form-label fw-semibold">{{ form.attentions.label }}</label>
+                            <div class="border rounded p-2 sgr-attention-checkbox-group" style="max-height:230px;overflow-y:auto">
+                                {{ form.attentions }}
+                            </div>
+                            <div class="form-text">Marca una o varias atenciones. Si aún no existen, primero registra la actividad y luego selecciónala al ingresar las atenciones.</div>
+                            {% for error in form.attentions.errors %}
                             <div class="text-danger small mt-1">{{ error }}</div>
                             {% endfor %}
                         </div>
